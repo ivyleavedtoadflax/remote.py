@@ -2,6 +2,7 @@ import configparser
 import os
 
 import typer
+import wasabi
 
 CONFIG_PATH = os.path.join(
     os.path.expanduser("~"), ".config", "remote.py/", "config.ini"
@@ -10,25 +11,47 @@ CONFIG_PATH = os.path.join(
 app = typer.Typer()
 
 
-def read_config(config_path=CONFIG_PATH):
+def read_config(config_path):
     cfg = configparser.ConfigParser()
     cfg.read(CONFIG_PATH)
 
     return cfg
 
 
-def write_config(cfg, config_path=CONFIG_PATH):
+def write_config(cfg, config_path):
     with open(config_path, "w") as configfile:
         cfg.write(configfile)
 
     return cfg
 
 
-cfg = read_config()
+cfg = read_config(config_path=CONFIG_PATH)
 
 
 @app.command()
-def add(instance_name: str = typer.Argument(None, help="Instance name")):
+def show(config_path: str = typer.Option(CONFIG_PATH, "--config", "-c")):
+    """
+    List all the configuration options
+    """
+
+    # Print out the config file
+    cfg = read_config(config_path=config_path)
+    default_section = cfg["DEFAULT"]
+
+    header = ["Section", "Name", "Value"]
+    aligns = ["l", "l"]
+    data = [["DEFAULT", k, v] for k, v in default_section.items()]
+    formatter = wasabi.table(data, header=header, divider=True, aligns=aligns)
+
+    typer.secho(f"Printing config file: {config_path}", fg=typer.colors.YELLOW)
+    typer.secho(formatter, fg=typer.colors.YELLOW)
+
+
+@app.command()
+def add(
+    instance_name: str = typer.Argument(None, help="Instance name"),
+    config_path: str = typer.Option(CONFIG_PATH, "--config", "-c"),
+):
     """
     Add a new default instance to the configuration file
     """
@@ -60,7 +83,7 @@ def add(instance_name: str = typer.Argument(None, help="Instance name")):
 
     if instance_name:
         cfg.set("DEFAULT", "instance_name", instance_name)
-        write_config(cfg)
+        write_config(cfg, config_path)
         typer.secho(f"Default instance set to {instance_name}", fg=typer.colors.GREEN)
     else:
         typer.secho("No changes made", fg=typer.colors.YELLOW)
