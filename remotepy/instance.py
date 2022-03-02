@@ -38,10 +38,19 @@ def get_instance_id(instance_name):
         sys.exit(1)
 
 
-def get_instance_status(instance_id):
+def get_instance_status(instance_id: str = None):
     """Returns the status of the instance"""
 
-    return ec2_client.describe_instance_status(InstanceIds=[instance_id])
+    if instance_id:
+        return ec2_client.describe_instance_status(InstanceIds=[instance_id])
+    else:
+        return ec2_client.describe_instance_status()
+
+
+def get_instances():
+    """Returns information about all instances"""
+
+    return ec2_client.describe_instances()["Reservations"]
 
 
 def get_instance_ip(instance_id):
@@ -73,6 +82,37 @@ def is_instance_running(instance_id):
             return True
         else:
             return False
+
+
+@app.command("ls")
+@app.command("list")
+def list():
+    """
+    List all instances with id, ip and status
+    """
+
+    instances = get_instances()
+    ids = [i["Instances"][0]["InstanceId"] for i in instances]
+    names = [
+        [j["Value"] for j in i["Instances"][0]["Tags"] if j["Key"] == "Name"][0]
+        for i in instances
+    ]
+    public_ips = [i["Instances"][0].get("PublicIpAddress") for i in instances]
+    statuses = [i["Instances"][0]["State"]["Name"] for i in instances]
+
+    # Format table using wasabi
+
+    header = ["Name", "InstanceId", "PublicIpAddress", "Status"]
+    aligns = ["l", "l", "l", "l"]
+    data = [
+        (name, id, ip, status)
+        for name, id, ip, status in zip(names, ids, public_ips, statuses)
+    ]
+
+    # Return the status in a nicely formatted table
+
+    formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
+    typer.secho(formatted, fg=typer.colors.YELLOW)
 
 
 @app.command()
@@ -123,6 +163,10 @@ def status(instance_name: str = typer.Argument(None, help="Instance name")):
 
 @app.command()
 def start(instance_name: str = typer.Argument(None, help="Instance name")):
+    """
+    Start the instance
+    """
+
     if not instance_name:
         instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
@@ -143,6 +187,10 @@ def start(instance_name: str = typer.Argument(None, help="Instance name")):
 
 @app.command()
 def stop(instance_name: str = typer.Argument(None, help="Instance name")):
+    """
+    Stop the instance
+    """
+
     if not instance_name:
         instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
@@ -172,6 +220,10 @@ def connect(
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose mode"),
 ):
+    """
+    Connect to the instance with ssh
+    """
+
     if not instance_name:
         instance_name = get_instance_name()
     max_attempts = 5
