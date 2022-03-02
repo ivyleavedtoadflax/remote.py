@@ -31,7 +31,7 @@ cfg = read_config(config_path=CONFIG_PATH)
 @app.command()
 def show(config_path: str = typer.Option(CONFIG_PATH, "--config", "-c")):
     """
-    List all the configuration options
+    Print the current config file
     """
 
     # Print out the config file
@@ -53,7 +53,7 @@ def add(
     config_path: str = typer.Option(CONFIG_PATH, "--config", "-c"),
 ):
     """
-    Add a new default instance to the configuration file
+    Add a new default instance to the config file
     """
 
     # Check whether the instance_name is already set in the config
