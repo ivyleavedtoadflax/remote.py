@@ -26,3 +26,12 @@ def test_instance_status_when_not_found(test_config):
 
     assert result.exit_code == 1
     assert "Instance test not found" in result.stdout
+
+def test_list(test_config):
+    result = runner.invoke(app, ["list"])
+
+    assert result.exit_code == 0
+    assert "Name" in result.stdout
+    assert "InstanceId" in result.stdout
+    assert "PublicIpAddress" in result.stdout
+    assert "Status" in result.stdout
