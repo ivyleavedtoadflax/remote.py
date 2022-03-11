@@ -8,6 +8,7 @@ import typer
 import wasabi
 
 from remotepy.config import CONFIG_PATH
+from remotepy.utils import get_column_widths
 
 cfg = configparser.ConfigParser()
 cfg.read(CONFIG_PATH)
@@ -72,6 +73,37 @@ def get_instance_name():
         sys.exit(1)
 
 
+def get_instance_names(instances: list, filter: str = None):
+    """
+    Get all instance names for the given account from aws cli
+
+    Args:
+        instances: List of instances returned by get_instances()
+        filter: Filter to apply to the instance names. If not found in the
+            instance name, it will be excluded from the list.
+    """
+    names = []
+
+    for i in instances:
+        for j in i["Instances"][0]["Tags"]:
+            if j["Key"] == "Name":
+                if filter:
+                    if filter in j["Value"]:
+                        names.append(j["Value"])
+                else:
+                    names.append(j["Value"])
+
+    return names
+
+
+def get_instance_ids(instances):
+    """
+    Returns a list of instance ids extract from the output of get_instances()
+    """
+
+    return [i["Instances"][0]["InstanceId"] for i in instances]
+
+
 def is_instance_running(instance_id):
     """Returns True if the instance is running"""
 
@@ -92,26 +124,31 @@ def list():
     """
 
     instances = get_instances()
-    ids = [i["Instances"][0]["InstanceId"] for i in instances]
-    names = [
-        [j["Value"] for j in i["Instances"][0]["Tags"] if j["Key"] == "Name"][0]
-        for i in instances
-    ]
+    ids = get_instance_ids(instances)
+    names = get_instance_names(instances)
+
     public_ips = [i["Instances"][0].get("PublicIpAddress") for i in instances]
     statuses = [i["Instances"][0]["State"]["Name"] for i in instances]
+    instance_types = [i["Instances"][0]["InstanceType"] for i in instances]
+
+    widths = get_column_widths([names, ids, public_ips, statuses, instance_types])
 
     # Format table using wasabi
 
-    header = ["Name", "InstanceId", "PublicIpAddress", "Status"]
-    aligns = ["l", "l", "l", "l"]
+    header = ["Name", "InstanceId", "PublicIpAddress", "Status", "Type"]
+    aligns = ["l", "l", "l", "l", "l"]
     data = [
-        (name, id, ip, status)
-        for name, id, ip, status in zip(names, ids, public_ips, statuses)
+        (name, id, ip, status, it)
+        for name, id, ip, status, it in zip(
+            names, ids, public_ips, statuses, instance_types
+        )
     ]
 
     # Return the status in a nicely formatted table
 
-    formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
+    formatted = wasabi.table(
+        data, header=header, divider=True, aligns=aligns, widths=widths
+    )
     typer.secho(formatted, fg=typer.colors.YELLOW)
 
 
