@@ -54,12 +54,12 @@ def get_instances():
     return ec2_client.describe_instances()["Reservations"]
 
 
-def get_instance_ip(instance_id):
+def get_instance_dns(instance_id):
     """Returns the public IP address of the instance"""
 
     return ec2_client.describe_instances(InstanceIds=[instance_id])["Reservations"][0][
         "Instances"
-    ][0]["PublicIpAddress"]
+    ][0]["PublicDnsName"]
 
 
 def get_instance_name():
@@ -120,27 +120,27 @@ def is_instance_running(instance_id):
 @app.command("list")
 def list():
     """
-    List all instances with id, ip and status
+    List all instances with id, dns and status
     """
 
     instances = get_instances()
     ids = get_instance_ids(instances)
     names = get_instance_names(instances)
 
-    public_ips = [i["Instances"][0].get("PublicIpAddress") for i in instances]
+    public_dnss = [i["Instances"][0].get("PublicDnsName") for i in instances]
     statuses = [i["Instances"][0]["State"]["Name"] for i in instances]
     instance_types = [i["Instances"][0]["InstanceType"] for i in instances]
 
-    widths = get_column_widths([names, ids, public_ips, statuses, instance_types])
+    widths = get_column_widths([names, ids, public_dnss, statuses, instance_types])
 
     # Format table using wasabi
 
-    header = ["Name", "InstanceId", "PublicIpAddress", "Status", "Type"]
+    header = ["Name", "InstanceId", "PublicDnsName", "Status", "Type"]
     aligns = ["l", "l", "l", "l", "l"]
     data = [
-        (name, id, ip, status, it)
-        for name, id, ip, status, it in zip(
-            names, ids, public_ips, statuses, instance_types
+        (name, id, dns, status, it)
+        for name, id, dns, status, it in zip(
+            names, ids, public_dnss, statuses, instance_types
         )
     ]
 
@@ -330,7 +330,7 @@ def connect(
 
     # Connect via SSH
 
-    subprocess.run(["ssh"] + arguments + [f"ubuntu@{get_instance_ip(instance_id)}"])
+    subprocess.run(["ssh"] + arguments + [f"ubuntu@{get_instance_dns(instance_id)}"])
 
 
 if __name__ == "__main__":
