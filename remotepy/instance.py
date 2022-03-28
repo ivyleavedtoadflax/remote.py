@@ -73,7 +73,7 @@ def get_instance_name():
         sys.exit(1)
 
 
-def get_instance_names(instances: list, filter: str = None):
+def get_instance_info(instances: list, filter: str = None):
     """
     Get all instance names for the given account from aws cli
 
@@ -83,17 +83,24 @@ def get_instance_names(instances: list, filter: str = None):
             instance name, it will be excluded from the list.
     """
     names = []
+    public_dnss = []
+    statuses = []
+    instance_types = []
 
     for i in instances:
-        for j in i["Instances"][0]["Tags"]:
-            if j["Key"] == "Name":
+        for j in i["Instances"]:
+            public_dnss.append(j["PublicDnsName"])
+            statuses.append(j["State"]["Name"])
+            instance_types.append(j["InstanceType"])
+        for tag in i["Instances"][0]["Tags"]:
+            if tag["Key"] == "Name":
                 if filter:
                     if filter in j["Value"]:
-                        names.append(j["Value"])
+                        names.append(tag["Value"])
                 else:
-                    names.append(j["Value"])
+                    names.append(tag["Value"])
 
-    return names
+    return names, public_dnss, statuses, instance_types
 
 
 def get_instance_ids(instances):
@@ -125,11 +132,8 @@ def list():
 
     instances = get_instances()
     ids = get_instance_ids(instances)
-    names = get_instance_names(instances)
 
-    public_dnss = [i["Instances"][0].get("PublicDnsName") for i in instances]
-    statuses = [i["Instances"][0]["State"]["Name"] for i in instances]
-    instance_types = [i["Instances"][0]["InstanceType"] for i in instances]
+    names, public_dnss, statuses, instance_types = get_instance_info(instances)
 
     widths = get_column_widths([names, ids, public_dnss, statuses, instance_types])
 
