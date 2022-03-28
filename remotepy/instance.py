@@ -6,7 +6,6 @@ import time
 import boto3
 import typer
 import wasabi
-
 from remotepy.config import CONFIG_PATH
 from remotepy.utils import get_column_widths
 
@@ -240,8 +239,18 @@ def stop(instance_name: str = typer.Argument(None, help="Instance name")):
         return
 
     try:
-        ec2_client.stop_instances(InstanceIds=[instance_id])
-        typer.secho(f"Instance {instance_name} is stopping", fg="green")
+        confirm = typer.confirm(
+            f"Are you sure you want to stop instance {instance_name}?",
+            default=True,
+        )
+
+        if confirm:
+            ec2_client.stop_instances(InstanceIds=[instance_id])
+            typer.secho(f"Instance {instance_name} is stopping", fg=typer.colors.GREEN)
+        else:
+            typer.secho(
+                f"Instance {instance_name} is still running", fg=typer.colors.YELLOW
+            )
     except Exception as e:
         typer.secho(f"Error stopping instance: {e}", fg=typer.colors.RED)
 
