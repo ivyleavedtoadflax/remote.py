@@ -6,9 +6,11 @@ import time
 import boto3
 import typer
 import wasabi
+
 from remotepy.config import CONFIG_PATH
 from remotepy.utils import get_column_widths
 
+msg = wasabi.Printer()
 cfg = configparser.ConfigParser()
 cfg.read(CONFIG_PATH)
 
@@ -126,6 +128,26 @@ def is_instance_running(instance_id):
             return True
         else:
             return False
+
+
+def is_instance_stopped(instance_id):
+    """Returns True if the instance is stopped"""
+
+    status = get_instance_status(instance_id)
+
+    if status["InstanceStatuses"]:
+        if status["InstanceStatuses"][0]["InstanceState"]["Name"] == "stopped":
+            return True
+        else:
+            return False
+
+
+def get_instance_type(instance_id):
+    """Returns the instance type of the instance"""
+
+    return ec2_client.describe_instances(InstanceIds=[instance_id])["Reservations"][0][
+        "Instances"
+    ][0]["InstanceType"]
 
 
 @app.command("ls")
@@ -350,6 +372,96 @@ def connect(
     # Connect via SSH
 
     subprocess.run(["ssh"] + arguments + [f"ubuntu@{get_instance_dns(instance_id)}"])
+
+
+@app.command()
+def type(
+    type: str = typer.Argument(
+        None,
+        help="Type of instance to convert to. If none, will print the current instance type.",
+    )
+):
+    instance_name = get_instance_name()
+    instance_id = get_instance_id(instance_name)
+    current_type = get_instance_type(instance_id)
+
+    if type:
+
+        # If the current instance type is the same as the requested type,
+        # exit.
+
+        if current_type == type:
+            typer.secho(
+                f"Instance {instance_name} is already of type {type}",
+                fg=typer.colors.YELLOW,
+            )
+
+            return
+
+        else:
+
+            # If the instance is running prompt whether to stop it. If no,
+            # then exit.
+
+            if is_instance_running(instance_id):
+
+                typer.secho(
+                    f"You can only change the type of a stopped instances",
+                    fg=typer.colors.RED,
+                )
+
+                sys.exit(1)
+
+            # Change instance type
+
+            try:
+                ec2_client.modify_instance_attribute(
+                    InstanceId=instance_id,
+                    InstanceType={
+                        "Value": type,
+                    },
+                )
+                typer.secho(
+                    f"Changing {instance_name} to {type}",
+                    fg=typer.colors.YELLOW,
+                )
+
+                wait = 5
+
+                with msg.loading("Confirming type change..."):
+                    while wait > 0:
+                        time.sleep(5)
+                        wait -= 1
+
+                        if get_instance_type(instance_id) == type:
+                            typer.secho(
+                                "Done",
+                                fg=typer.colors.YELLOW,
+                            )
+                            typer.secho(
+                                f"Instance {instance_name} is now of type {type}",
+                                fg=typer.colors.GREEN,
+                            )
+
+                            break
+                        else:
+                            typer.secho(
+                                f"Instance {instance_name} is still of type {current_type}",
+                                fg=typer.colors.YELLOW,
+                            )
+            except Exception as e:
+                typer.secho(
+                    f"Error changing instance {instance_name} to {type}: {e}",
+                    fg=typer.colors.RED,
+                )
+
+    else:
+        type = get_instance_type(instance_id)
+
+        typer.secho(
+            f"Instance {instance_name} is currently of type {type}",
+            fg=typer.colors.YELLOW,
+        )
 
 
 if __name__ == "__main__":
