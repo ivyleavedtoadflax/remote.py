@@ -6,7 +6,6 @@ import time
 import boto3
 import typer
 import wasabi
-
 from remotepy.config import CONFIG_PATH
 from remotepy.utils import get_column_widths
 
@@ -73,27 +72,40 @@ def get_instance_name():
         sys.exit(1)
 
 
-def get_instance_names(instances: list, filter: str = None):
+def get_instance_info(
+    instances: list, name_filter: str = None, drop_nameless: bool = False
+):
     """
     Get all instance names for the given account from aws cli
 
     Args:
         instances: List of instances returned by get_instances()
-        filter: Filter to apply to the instance names. If not found in the
+        name_filter: Filter to apply to the instance names. If not found in the
             instance name, it will be excluded from the list.
     """
     names = []
+    public_dnss = []
+    statuses = []
+    instance_types = []
 
     for i in instances:
-        for j in i["Instances"][0]["Tags"]:
-            if j["Key"] == "Name":
-                if filter:
-                    if filter in j["Value"]:
-                        names.append(j["Value"])
-                else:
-                    names.append(j["Value"])
+        for j in i["Instances"]:
 
-    return names
+            # Check whether there is a Name tag, and break out of the loop
+            # if there is not. This is to avoid fetching information about
+            # instances that are part of kubernetes clusters, etc.
+
+            tags = {k["Key"]: k["Value"] for k in j["Tags"]}
+
+            if "Name" not in tags:
+                break
+            else:
+                names.append(tags["Name"])
+                public_dnss.append(j["PublicDnsName"])
+                statuses.append(j["State"]["Name"])
+                instance_types.append(j["InstanceType"])
+
+    return names, public_dnss, statuses, instance_types
 
 
 def get_instance_ids(instances):
@@ -125,11 +137,8 @@ def list():
 
     instances = get_instances()
     ids = get_instance_ids(instances)
-    names = get_instance_names(instances)
 
-    public_dnss = [i["Instances"][0].get("PublicDnsName") for i in instances]
-    statuses = [i["Instances"][0]["State"]["Name"] for i in instances]
-    instance_types = [i["Instances"][0]["InstanceType"] for i in instances]
+    names, public_dnss, statuses, instance_types = get_instance_info(instances)
 
     widths = get_column_widths([names, ids, public_dnss, statuses, instance_types])
 
