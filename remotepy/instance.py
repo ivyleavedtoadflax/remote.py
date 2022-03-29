@@ -6,7 +6,6 @@ import time
 import boto3
 import typer
 import wasabi
-
 from remotepy.config import CONFIG_PATH
 from remotepy.utils import get_column_widths
 
@@ -73,13 +72,15 @@ def get_instance_name():
         sys.exit(1)
 
 
-def get_instance_info(instances: list, filter: str = None):
+def get_instance_info(
+    instances: list, name_filter: str = None, drop_nameless: bool = False
+):
     """
     Get all instance names for the given account from aws cli
 
     Args:
         instances: List of instances returned by get_instances()
-        filter: Filter to apply to the instance names. If not found in the
+        name_filter: Filter to apply to the instance names. If not found in the
             instance name, it will be excluded from the list.
     """
     names = []
@@ -89,16 +90,20 @@ def get_instance_info(instances: list, filter: str = None):
 
     for i in instances:
         for j in i["Instances"]:
-            public_dnss.append(j["PublicDnsName"])
-            statuses.append(j["State"]["Name"])
-            instance_types.append(j["InstanceType"])
-        for tag in i["Instances"][0]["Tags"]:
-            if tag["Key"] == "Name":
-                if filter:
-                    if filter in j["Value"]:
-                        names.append(tag["Value"])
-                else:
-                    names.append(tag["Value"])
+
+            # Check whether there is a Name tag, and break out of the loop
+            # if there is not. This is to avoid fetching information about
+            # instances that are part of kubernetes clusters, etc.
+
+            tags = {k["Key"]: k["Value"] for k in j["Tags"]}
+
+            if "Name" not in tags:
+                break
+            else:
+                names.append(tags["Name"])
+                public_dnss.append(j["PublicDnsName"])
+                statuses.append(j["State"]["Name"])
+                instance_types.append(j["InstanceType"])
 
     return names, public_dnss, statuses, instance_types
 
