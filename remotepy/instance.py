@@ -145,14 +145,11 @@ def get_volume_name(volume_id):
 
     volume = ec2_client.describe_volumes(VolumeIds=[volume_id])["Volumes"][0]
 
-    try:
-        volume_name = [
-            volume["Tags"][i]["Value"]
-            for i in range(len(volume["Tags"]))
-            if volume["Tags"][i]["Key"] == "Name"
-        ][0]
-    except IndexError:
-        volume_name = ""
+    volume_name = ""
+
+    for tag in volume.get("Tags", []):
+        if tag["Key"] == "Name":
+            volume_name = tag["Value"]
 
     return volume_name
 
@@ -395,14 +392,13 @@ def list_volumes(instance_name: str = typer.Argument(None, help="Instance name")
     List the volumes and the instances they are attached to
     """
 
+    if not instance_name:
+        instance_name = get_instance_name()
     typer.secho(
         f"Listing volumes attached to instance {instance_name}", fg=typer.colors.YELLOW
     )
 
-    if not instance_name:
-        instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
-
     volumes = ec2_client.describe_volumes()
 
     # Format table using wasabi
@@ -441,7 +437,7 @@ def list_volumes(instance_name: str = typer.Argument(None, help="Instance name")
 
 
 @app.command()
-def snapshot(
+def create_snapshot(
     volume_id: str = typer.Option(None, help="Volume ID"),
     name: str = typer.Option(None, help="Snapshot name"),
     description: str = typer.Option(None, help="Description"),
