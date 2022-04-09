@@ -497,6 +497,7 @@ def type(
         )
 
 
+@app.command()
 def list_volumes(instance_name: str = typer.Argument(None, help="Instance name")):
     """
     List the volumes and the instances they are attached to
