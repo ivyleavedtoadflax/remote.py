@@ -329,6 +329,9 @@ def connect(
         "-p",
         help="Port forwarding configuration (local:remote)",
     ),
+    user: str = typer.Option(
+        "ubuntu", "--user", "-u", help="User to be used for ssh connection."
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose mode"),
 ):
     """
@@ -404,7 +407,7 @@ def connect(
 
     # Connect via SSH
 
-    subprocess.run(["ssh"] + arguments + [f"ubuntu@{get_instance_dns(instance_id)}"])
+    subprocess.run(["ssh"] + arguments + [f"{user}@{get_instance_dns(instance_id)}"])
 
 
 @app.command()
