@@ -33,5 +33,5 @@ def test_list(test_config):
     assert result.exit_code == 0
     assert "Name" in result.stdout
     assert "InstanceId" in result.stdout
-    assert "PublicIpAddress" in result.stdout
+    assert "PublicDnsName" in result.stdout
     assert "Status" in result.stdout
