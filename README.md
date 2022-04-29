@@ -7,7 +7,7 @@ A python port of the [remote](https://github.com/wellcometrust/remote) tool for 
 The package is pip installable and can be installed directly from github with:
 
 ```
-pip install git+https://github.com/ivyleavedtoadflax/remote.py.git@dev
+pip install git+https://github.com/ivyleavedtoadflax/remote.py.git
 ```
 
 # Usage
