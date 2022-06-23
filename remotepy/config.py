@@ -18,7 +18,21 @@ def read_config(config_path):
     return cfg
 
 
+def create_config_dir(config_path):
+
+    # check whether the config path exists, and create if not.
+
+    if not os.path.exists(os.path.dirname(config_path)):
+        os.makedirs(os.path.dirname(config_path))
+        typer.secho(
+            f"Created config directory: {os.path.dirname(config_path)}", fg="green"
+        )
+
+
 def write_config(cfg, config_path):
+
+    create_config_dir(config_path)
+
     with open(config_path, "w") as configfile:
         cfg.write(configfile)
 
