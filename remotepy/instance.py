@@ -617,5 +617,61 @@ def list_snapshots(instance_name: str = typer.Argument(None, help="Instance name
     typer.secho(formatted, fg=typer.colors.YELLOW)
 
 
+@app.command()
+def create_ami(
+    instance_name: str = typer.Option(None, help="Instance name"),
+    name: str = typer.Option(None, help="AMI name"),
+    description: str = typer.Option(None, help="Description"),
+):
+    """
+    Create AMI from Instance
+    """
+
+    if not instance_name:
+        instance_name = get_instance_name()
+    instance_id = get_instance_id(instance_name)
+
+    ami = ec2_client.create_image(
+        InstanceId=instance_id,
+        Name=name,
+        Description=description,
+        NoReboot=True,
+    )
+
+    typer.secho(f"AMI {ami['ImageId']} created", fg=typer.colors.GREEN)
+
+
+@app.command()
+def list_amis():
+    """
+    List AMIs
+    """
+
+    amis = ec2_client.describe_images(
+        ExecutableUsers=[
+            "self",
+        ],
+    )
+
+    header = ["ImageId", "Name", "State", "CreationDate"]
+    aligns = ["l", "l", "l", "l"]
+    data = []
+
+    for ami in amis["Images"]:
+        data.append(
+            [
+                ami["ImageId"],
+                ami["Name"],
+                ami["State"],
+                ami["CreationDate"],
+            ]
+        )
+
+    # Format table using wasabi
+
+    formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
+    typer.secho(formatted, fg=typer.colors.YELLOW)
+
+
 if __name__ == "__main__":
     app()
