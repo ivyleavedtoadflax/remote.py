@@ -19,6 +19,12 @@ app = typer.Typer()
 ec2_client = boto3.client("ec2")
 
 
+def get_account_id():
+    """Returns the caller id, this is the AWS account id not the AWS user id"""
+
+    return boto3.client("sts").get_caller_identity()["Account"]
+
+
 def get_instance_id(instance_name):
     """Returns the id of the instance"""
 
@@ -646,11 +652,10 @@ def list_amis():
     """
     List AMIs
     """
+    account_id = get_account_id()
 
     amis = ec2_client.describe_images(
-        ExecutableUsers=[
-            "self",
-        ],
+        Owners=[account_id],
     )
 
     header = ["ImageId", "Name", "State", "CreationDate"]
