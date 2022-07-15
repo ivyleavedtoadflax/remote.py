@@ -601,9 +601,9 @@ def list_snapshots(instance_name: str = typer.Argument(None, help="Instance name
     data = []
 
     for volume_id in volume_ids:
-        volume_name = get_volume_name(volume_id)
+
         snapshots = ec2_client.describe_snapshots(
-            Filters=[{"Name": "tag:Name", "Values": [volume_name]}]
+            Filters=[{"Name": "volume-id", "Values": [volume_id]}]
         )
 
         for snapshot in snapshots["Snapshots"]:
