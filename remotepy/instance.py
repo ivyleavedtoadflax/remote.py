@@ -29,7 +29,13 @@ def get_instance_id(instance_name):
     """Returns the id of the instance"""
 
     instances = ec2_client.describe_instances(
-        Filters=[{"Name": "tag:Name", "Values": [instance_name]}]
+        Filters=[
+            {"Name": "tag:Name", "Values": [instance_name]},
+            {
+                "Name": "instance-state-name",
+                "Values": ["pending", "stopping", "stopped", "running"],
+            },
+        ]
     )
 
     if instances["Reservations"]:
