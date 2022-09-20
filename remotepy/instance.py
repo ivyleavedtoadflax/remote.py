@@ -2,6 +2,7 @@ import configparser
 import subprocess
 import sys
 import time
+from datetime import datetime
 
 import boto3
 import typer
@@ -101,6 +102,7 @@ def get_instance_info(
     public_dnss = []
     statuses = []
     instance_types = []
+    launch_times = []
 
     for i in instances:
         for j in i["Instances"]:
@@ -116,10 +118,19 @@ def get_instance_info(
             else:
                 names.append(tags["Name"])
                 public_dnss.append(j["PublicDnsName"])
-                statuses.append(j["State"]["Name"])
+
+                if (status := j["State"]["Name"]) == "running":
+                    launch_time = j["LaunchTime"].timestamp()
+                    launch_time = datetime.utcfromtimestamp(launch_time)
+                    launch_time = launch_time.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+                else:
+                    launch_time = None
+                launch_times.append(launch_time)
+                statuses.append(status)
                 instance_types.append(j["InstanceType"])
 
-    return names, public_dnss, statuses, instance_types
+    return names, public_dnss, statuses, instance_types, launch_times
 
 
 def get_instance_ids(instances):
@@ -201,22 +212,25 @@ def list():
     """
     List all instances with id, dns and status
     """
-
     instances = get_instances()
     ids = get_instance_ids(instances)
 
-    names, public_dnss, statuses, instance_types = get_instance_info(instances)
+    names, public_dnss, statuses, instance_types, launch_times = get_instance_info(
+        instances
+    )
 
-    widths = get_column_widths([names, ids, public_dnss, statuses, instance_types])
+    widths = get_column_widths(
+        [names, ids, public_dnss, statuses, instance_types, launch_times]
+    )
 
     # Format table using wasabi
 
-    header = ["Name", "InstanceId", "PublicDnsName", "Status", "Type"]
-    aligns = ["l", "l", "l", "l", "l"]
+    header = ["Name", "InstanceId", "PublicDnsName", "Status", "Type", "Launch Time"]
+    aligns = ["l", "l", "l", "l", "l", "l"]
     data = [
-        (name, id, dns, status, it)
-        for name, id, dns, status, it in zip(
-            names, ids, public_dnss, statuses, instance_types
+        (name, id, dns, status, it, lt)
+        for name, id, dns, status, it, lt in zip(
+            names, ids, public_dnss, statuses, instance_types, launch_times
         )
     ]
 
