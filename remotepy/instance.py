@@ -695,5 +695,97 @@ def list_amis():
     typer.secho(formatted, fg=typer.colors.YELLOW)
 
 
+def get_launch_template_id(launch_template_name: str):
+    """
+    Get the launch template ID
+    """
+
+    launch_templates = ec2_client.describe_launch_templates(
+        Filters=[{"Name": "tag:Name", "Values": [launch_template_name]}]
+    )
+
+    launch_template_id = launch_templates["LaunchTemplates"][0]["LaunchTemplateId"]
+
+    return launch_template_id
+
+
+@app.command()
+def list_launch_templates():
+    """
+    List launch templates
+    """
+
+    launch_templates = ec2_client.describe_launch_templates()
+
+    header = ["Number", "LaunchTemplateId", "LaunchTemplateName", "Version"]
+    aligns = ["l"] * len(header)
+    data = []
+
+    for i, launch_template in enumerate(launch_templates["LaunchTemplates"], 1):
+        data.append(
+            (
+                i,
+                launch_template["LaunchTemplateId"],
+                launch_template["LaunchTemplateName"],
+                launch_template["LatestVersionNumber"],
+            )
+        )
+
+    # Format table using wasabi
+
+    formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
+    typer.secho(formatted, fg=typer.colors.YELLOW)
+
+    return launch_templates
+
+
+@app.command()
+def launch(
+    launch_template: str = typer.Option(None, help="Launch template name"),
+    version: str = typer.Option("$Latest", help="Launch template version"),
+):
+    """
+    Launch an instance based on a launch template
+    """
+
+    # if no launch template is specified, list all the launch templates
+
+    if not launch_template:
+        typer.secho("Please specify a launch template", fg=typer.colors.RED)
+        typer.secho("Available launch templates:", fg=typer.colors.YELLOW)
+        launch_templates = list_launch_templates()["LaunchTemplates"]
+        typer.secho(
+            "Select a launch template by number",
+            fg=typer.colors.YELLOW,
+        )
+
+        launch_template_number = typer.prompt("Launch template", type=str)
+        launch_template = launch_templates[int(launch_template_number) - 1]
+        launch_template_name = launch_template["LaunchTemplateName"]
+        launch_template_id = launch_template["LaunchTemplateId"]
+
+        typer.secho(
+            f"Launch template {launch_template_name} selected", fg=typer.colors.YELLOW
+        )
+        typer.secho(
+            f"Defaulting to latest version: {launch_template['LatestVersionNumber']}",
+            fg=typer.colors.YELLOW,
+        )
+
+        typer.secho(
+            f"Launching instance based on launch template {launch_template_name}"
+        )
+
+    instance = ec2_client.run_instances(
+        LaunchTemplate={"LaunchTemplateId": launch_template_id, "Version": version},
+        MaxCount=1,
+        MinCount=1,
+    )
+    typer.secho(
+        f"Instance {instance['Instances'][0]['InstanceId']} launched",
+        fg=typer.colors.GREEN,
+    )
+
+
 if __name__ == "__main__":
     app()
