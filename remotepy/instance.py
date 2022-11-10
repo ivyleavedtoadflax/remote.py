@@ -441,9 +441,11 @@ def type(
     type: str = typer.Argument(
         None,
         help="Type of instance to convert to. If none, will print the current instance type.",
-    )
+    ),
+    instance_name: str = typer.Argument(None, help="Instance name")
 ):
-    instance_name = get_instance_name()
+    if not instance_name:
+        instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
     current_type = get_instance_type(instance_id)
 
