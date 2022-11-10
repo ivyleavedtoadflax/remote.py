@@ -68,7 +68,7 @@ Create a virtual environment and install the package
 ```
 virtualenv - -python 3.8 venv
 source venv/bin/activate
-pip install ".[tests]"
+pip install ".[dev]"
 ```
 
 # Run tests
@@ -77,3 +77,12 @@ pip install ".[tests]"
 ```
 pytest
 ```
+
+# PyPi
+
+```
+python -m build
+twine upload dist/
+```
+
+Note that you need to setup up authentication to PyPi for this work work.
