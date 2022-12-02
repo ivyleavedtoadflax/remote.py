@@ -9,7 +9,6 @@ import typer
 import wasabi
 
 from remotepy.config import CONFIG_PATH
-from remotepy.utils import get_column_widths
 
 msg = wasabi.Printer()
 cfg = configparser.ConfigParser()
@@ -219,10 +218,6 @@ def list():
         instances
     )
 
-    widths = get_column_widths(
-        [names, ids, public_dnss, statuses, instance_types, launch_times]
-    )
-
     # Format table using wasabi
 
     header = ["Name", "InstanceId", "PublicDnsName", "Status", "Type", "Launch Time"]
@@ -237,7 +232,7 @@ def list():
     # Return the status in a nicely formatted table
 
     formatted = wasabi.table(
-        data, header=header, divider=True, aligns=aligns, widths=widths
+        data, header=header, divider=True, aligns=aligns
     )
     typer.secho(formatted, fg=typer.colors.YELLOW)
 
