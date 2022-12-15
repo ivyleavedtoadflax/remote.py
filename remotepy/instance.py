@@ -105,22 +105,22 @@ def get_instance_info(
     launch_times = []
 
     for i in instances:
-        for j in i["Instances"]:
+        for instance in i["Instances"]:
 
             # Check whether there is a Name tag, and break out of the loop
             # if there is not. This is to avoid fetching information about
             # instances that are part of kubernetes clusters, etc.
 
-            tags = {k["Key"]: k["Value"] for k in j["Tags"]}
+            tags = {k["Key"]: k["Value"] for k in instance.get("Tags", [])}
 
-            if "Name" not in tags:
+            if not tags or "Name" not in tags:
                 break
             else:
                 names.append(tags["Name"])
-                public_dnss.append(j["PublicDnsName"])
+                public_dnss.append(instance["PublicDnsName"])
 
-                if (status := j["State"]["Name"]) == "running":
-                    launch_time = j["LaunchTime"].timestamp()
+                if (status := instance["State"]["Name"]) == "running":
+                    launch_time = instance["LaunchTime"].timestamp()
                     launch_time = datetime.utcfromtimestamp(launch_time)
                     launch_time = launch_time.strftime("%Y-%m-%d %H:%M:%S UTC")
 
@@ -128,7 +128,7 @@ def get_instance_info(
                     launch_time = None
                 launch_times.append(launch_time)
                 statuses.append(status)
-                instance_types.append(j["InstanceType"])
+                instance_types.append(instance["InstanceType"])
 
     return names, public_dnss, statuses, instance_types, launch_times
 
