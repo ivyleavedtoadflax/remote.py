@@ -1,4 +1,6 @@
 import configparser
+import random
+import string
 import subprocess
 import sys
 import time
@@ -231,9 +233,7 @@ def list():
 
     # Return the status in a nicely formatted table
 
-    formatted = wasabi.table(
-        data, header=header, divider=True, aligns=aligns
-    )
+    formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
     typer.secho(formatted, fg=typer.colors.YELLOW)
 
 
@@ -437,7 +437,7 @@ def type(
         None,
         help="Type of instance to convert to. If none, will print the current instance type.",
     ),
-    instance_name: str = typer.Argument(None, help="Instance name")
+    instance_name: str = typer.Argument(None, help="Instance name"),
 ):
     if not instance_name:
         instance_name = get_instance_name()
@@ -741,11 +741,28 @@ def list_launch_templates():
 
 @app.command()
 def launch(
+    name: str = typer.Option(None, help="Name of the instance to be launched"),
     launch_template: str = typer.Option(None, help="Launch template name"),
     version: str = typer.Option("$Latest", help="Launch template version"),
 ):
     """
-    Launch an instance based on a launch template
+    Launch an AWS EC2 instance based on a launch template.
+
+    This function will launch an instance using the specified launch template and version.
+    If no launch template is provided, the function will list all available launch templates and
+    prompt the user to select one.
+
+    The name of the instance can be specified with the --name option. If not provided,
+    the function will prompt the user for the name and provide a suggested name based on
+    the launch template name appended with a random alphanumeric string.
+
+    Example usage:
+    python remotepy/instance.py launch --launch_template my-launch-template --version 2
+
+    Parameters:
+    name: The name of the instance to be launched. This will be used as a tag for the instance.
+    launch_template: The name of the launch template to use.
+    version: The version of the launch template to use. Default is the latest version.
     """
 
     # if no launch template is specified, list all the launch templates
@@ -754,11 +771,7 @@ def launch(
         typer.secho("Please specify a launch template", fg=typer.colors.RED)
         typer.secho("Available launch templates:", fg=typer.colors.YELLOW)
         launch_templates = list_launch_templates()["LaunchTemplates"]
-        typer.secho(
-            "Select a launch template by number",
-            fg=typer.colors.YELLOW,
-        )
-
+        typer.secho("Select a launch template by number", fg=typer.colors.YELLOW)
         launch_template_number = typer.prompt("Launch template", type=str)
         launch_template = launch_templates[int(launch_template_number) - 1]
         launch_template_name = launch_template["LaunchTemplateName"]
@@ -771,18 +784,38 @@ def launch(
             f"Defaulting to latest version: {launch_template['LatestVersionNumber']}",
             fg=typer.colors.YELLOW,
         )
-
         typer.secho(
             f"Launching instance based on launch template {launch_template_name}"
         )
 
+    # if no name is specified, ask the user for the name
+
+    if not name:
+        random_string = "".join(
+            random.choices(string.ascii_letters + string.digits, k=6)
+        )
+        name_suggestion = launch_template_name + "-" + random_string
+        name = typer.prompt(
+            "Please enter a name for the instance", type=str, default=name_suggestion
+        )
+
+    # Launch the instance with the specified launch template, version, and name
     instance = ec2_client.run_instances(
         LaunchTemplate={"LaunchTemplateId": launch_template_id, "Version": version},
         MaxCount=1,
         MinCount=1,
+        TagSpecifications=[
+            {
+                "ResourceType": "instance",
+                "Tags": [
+                    {"Key": "Name", "Value": name},
+                ],
+            },
+        ],
     )
+
     typer.secho(
-        f"Instance {instance['Instances'][0]['InstanceId']} launched",
+        f"Instance {instance['Instances'][0]['InstanceId']} with name '{name}' launched",
         fg=typer.colors.GREEN,
     )
 
