@@ -647,7 +647,29 @@ def create_ami(
     description: str = typer.Option(None, help="Description"),
 ):
     """
-    Create AMI from Instance
+    Create an Amazon Machine Image (AMI) from a specified EC2 instance.
+
+    The function takes as input the name of an EC2 instance, the desired name for the AMI, and a description.
+    It sends a request to the AWS EC2 service to create an AMI from the specified instance.
+    If the AMI creation is successful, it returns the ID of the created AMI.
+
+    Parameters:
+    instance_name: str, optional
+        The name of the EC2 instance from which to create the AMI.
+        If not specified, the name of the current instance is used.
+
+    name: str, optional
+        The desired name for the AMI.
+
+    description: str, optional
+        A description for the AMI.
+
+    Returns:
+    None
+
+    Example usage:
+        python remotepy/instance.py create_ami --instance_name my-instance --name my-ami --description "My first AMI"
+
     """
 
     if not instance_name:
@@ -667,7 +689,14 @@ def create_ami(
 @app.command()
 def list_amis():
     """
-    List AMIs
+    List all Amazon Machine Images (AMIs) owned by the current account.
+
+    This function queries AWS EC2 to get details of all AMIs that are owned by the current AWS account.
+    It formats the response data into a tabular form and displays it in the console.
+    The returned table includes the following columns: ImageId, Name, State, and CreationDate.
+
+    Example usage:
+        python remotepy/instance.py list_amis
     """
     account_id = get_account_id()
 
@@ -690,16 +719,26 @@ def list_amis():
         )
 
     # Format table using wasabi
-
     formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
     typer.secho(formatted, fg=typer.colors.YELLOW)
 
 
 def get_launch_template_id(launch_template_name: str):
     """
-    Get the launch template ID
-    """
+    Get the launch template ID corresponding to a given launch template name.
 
+    This function queries AWS EC2 to get details of all launch templates with the specified name.
+    It then retrieves and returns the ID of the first matching launch template.
+
+    Args:
+        launch_template_name (str): The name of the launch template.
+
+    Returns:
+        str: The ID of the launch template.
+
+    Example usage:
+        template_id = get_launch_template_id("my-template-name")
+    """
     launch_templates = ec2_client.describe_launch_templates(
         Filters=[{"Name": "tag:Name", "Values": [launch_template_name]}]
     )
@@ -712,9 +751,18 @@ def get_launch_template_id(launch_template_name: str):
 @app.command()
 def list_launch_templates():
     """
-    List launch templates
-    """
+    List all launch templates available in the AWS EC2.
 
+    This function queries AWS EC2 to get details of all available launch templates.
+    It formats the response data into a tabular form and displays it in the console.
+    The returned table includes the following columns: Number, LaunchTemplateId, LaunchTemplateName, and Version.
+
+    Returns:
+        dict: The full response from the AWS EC2 describe_launch_templates call.
+
+    Example usage:
+        python remotepy/instance.py list_launch_templates
+    """
     launch_templates = ec2_client.describe_launch_templates()
 
     header = ["Number", "LaunchTemplateId", "LaunchTemplateName", "Version"]
@@ -732,7 +780,6 @@ def list_launch_templates():
         )
 
     # Format table using wasabi
-
     formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
     typer.secho(formatted, fg=typer.colors.YELLOW)
 
