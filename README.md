@@ -4,10 +4,10 @@ A python port of the [remote](https://github.com/wellcometrust/remote) tool for 
 
 # Getting started
 
-The package is pip installable and can be installed directly from github with:
+The package is pip installable and can be installed directly from github. We recommend using pipx:
 
 ```
-pip install git+https://github.com/ivyleavedtoadflax/remote.py.git
+pipx install git+https://github.com/ivyleavedtoadflax/remote.py.git
 ```
 
 # Usage
