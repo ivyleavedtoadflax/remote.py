@@ -1,210 +1,29 @@
-import configparser
 import random
 import string
 import subprocess
 import sys
 import time
-from datetime import datetime
 
-import boto3
 import typer
 import wasabi
 
-from remotepy.config import CONFIG_PATH
-
-msg = wasabi.Printer()
-cfg = configparser.ConfigParser()
-cfg.read(CONFIG_PATH)
+from remotepy.config import cfg
+from remotepy.utils import (
+    ec2_client,
+    get_instance_dns,
+    get_instance_id,
+    get_instance_ids,
+    get_instance_info,
+    get_instance_name,
+    get_instance_status,
+    get_instance_type,
+    get_instances,
+    get_launch_template_id,
+    is_instance_running,
+    msg,
+)
 
 app = typer.Typer()
-
-ec2_client = boto3.client("ec2")
-
-
-def get_account_id():
-    """Returns the caller id, this is the AWS account id not the AWS user id"""
-
-    return boto3.client("sts").get_caller_identity()["Account"]
-
-
-def get_instance_id(instance_name):
-    """Returns the id of the instance"""
-
-    instances = ec2_client.describe_instances(
-        Filters=[
-            {"Name": "tag:Name", "Values": [instance_name]},
-            {
-                "Name": "instance-state-name",
-                "Values": ["pending", "stopping", "stopped", "running"],
-            },
-        ]
-    )
-
-    if instances["Reservations"]:
-        if len(instances["Reservations"]) == 1:
-            return instances["Reservations"][0]["Instances"][0]["InstanceId"]
-        else:
-            typer.secho(
-                f"Multiple instances found with name {instance_name}",
-                fg=typer.colors.RED,
-            )
-            sys.exit(1)
-    else:
-        typer.secho(f"Instance {instance_name} not found", fg=typer.colors.RED)
-        sys.exit(1)
-
-
-def get_instance_status(instance_id: str = None):
-    """Returns the status of the instance"""
-
-    if instance_id:
-        return ec2_client.describe_instance_status(InstanceIds=[instance_id])
-    else:
-        return ec2_client.describe_instance_status()
-
-
-def get_instances():
-    """Returns information about all instances"""
-
-    return ec2_client.describe_instances()["Reservations"]
-
-
-def get_instance_dns(instance_id):
-    """Returns the public IP address of the instance"""
-
-    return ec2_client.describe_instances(InstanceIds=[instance_id])["Reservations"][0][
-        "Instances"
-    ][0]["PublicDnsName"]
-
-
-def get_instance_name():
-    """Returns the name of the instance as defined in the config file"""
-
-    if instance_name := cfg["DEFAULT"].get("instance_name"):
-        return instance_name
-    else:
-        typer.secho("Instance name not found in config file", fg=typer.colors.RED)
-        typer.secho("Run `remotepy config add` to add it", fg=typer.colors.RED)
-        sys.exit(1)
-
-
-def get_instance_info(
-    instances: list, name_filter: str = None, drop_nameless: bool = False
-):
-    """
-    Get all instance names for the given account from aws cli
-
-    Args:
-        instances: List of instances returned by get_instances()
-        name_filter: Filter to apply to the instance names. If not found in the
-            instance name, it will be excluded from the list.
-    """
-    names = []
-    public_dnss = []
-    statuses = []
-    instance_types = []
-    launch_times = []
-
-    for i in instances:
-        for instance in i["Instances"]:
-
-            # Check whether there is a Name tag, and break out of the loop
-            # if there is not. This is to avoid fetching information about
-            # instances that are part of kubernetes clusters, etc.
-
-            tags = {k["Key"]: k["Value"] for k in instance.get("Tags", [])}
-
-            if not tags or "Name" not in tags:
-                break
-            else:
-                names.append(tags["Name"])
-                public_dnss.append(instance["PublicDnsName"])
-
-                if (status := instance["State"]["Name"]) == "running":
-                    launch_time = instance["LaunchTime"].timestamp()
-                    launch_time = datetime.utcfromtimestamp(launch_time)
-                    launch_time = launch_time.strftime("%Y-%m-%d %H:%M:%S UTC")
-
-                else:
-                    launch_time = None
-                launch_times.append(launch_time)
-                statuses.append(status)
-                instance_types.append(instance["InstanceType"])
-
-    return names, public_dnss, statuses, instance_types, launch_times
-
-
-def get_instance_ids(instances):
-    """
-    Returns a list of instance ids extract from the output of get_instances()
-    """
-
-    return [i["Instances"][0]["InstanceId"] for i in instances]
-
-
-def is_instance_running(instance_id):
-    """Returns True if the instance is running"""
-
-    status = get_instance_status(instance_id)
-
-    if status["InstanceStatuses"]:
-        if status["InstanceStatuses"][0]["InstanceState"]["Name"] == "running":
-            return True
-        else:
-            return False
-
-
-def is_instance_stopped(instance_id):
-    """Returns True if the instance is stopped"""
-
-    status = get_instance_status(instance_id)
-
-    if status["InstanceStatuses"]:
-        if status["InstanceStatuses"][0]["InstanceState"]["Name"] == "stopped":
-            return True
-        else:
-            return False
-
-
-def get_instance_type(instance_id):
-    """Returns the instance type of the instance"""
-
-    return ec2_client.describe_instances(InstanceIds=[instance_id])["Reservations"][0][
-        "Instances"
-    ][0]["InstanceType"]
-
-
-def get_volume_ids(instance_id):
-    """Returns a list of volume ids attached to the instance"""
-
-    return [
-        i["VolumeId"]
-        for i in ec2_client.describe_volumes(
-            Filters=[{"Name": "attachment.instance-id", "Values": [instance_id]}]
-        )["Volumes"]
-    ]
-
-
-def get_volume_name(volume_id):
-    """Returns the name of the volume"""
-
-    volume = ec2_client.describe_volumes(VolumeIds=[volume_id])["Volumes"][0]
-
-    volume_name = ""
-
-    for tag in volume.get("Tags", []):
-        if tag["Key"] == "Name":
-            volume_name = tag["Value"]
-
-    return volume_name
-
-
-def get_snapshot_status(snapshot_id):
-    """Returns the status of the snapshot"""
-
-    return ec2_client.describe_snapshots(SnapshotIds=[snapshot_id])["Snapshots"][0][
-        "State"
-    ]
 
 
 @app.command("ls")
@@ -244,7 +63,7 @@ def status(instance_name: str = typer.Argument(None, help="Instance name")):
     """
 
     if not instance_name:
-        instance_name = get_instance_name()
+        instance_name = get_instance_name(cfg)
     instance_id = get_instance_id(instance_name)
     typer.secho(
         f"Getting status of {instance_name} ({instance_id})", fg=typer.colors.YELLOW
@@ -290,7 +109,7 @@ def start(instance_name: str = typer.Argument(None, help="Instance name")):
     """
 
     if not instance_name:
-        instance_name = get_instance_name()
+        instance_name = get_instance_name(cfg)
     instance_id = get_instance_id(instance_name)
 
     if is_instance_running(instance_id):
@@ -314,7 +133,7 @@ def stop(instance_name: str = typer.Argument(None, help="Instance name")):
     """
 
     if not instance_name:
-        instance_name = get_instance_name()
+        instance_name = get_instance_name(cfg)
     instance_id = get_instance_id(instance_name)
 
     if not is_instance_running(instance_id):
@@ -360,7 +179,7 @@ def connect(
     """
 
     if not instance_name:
-        instance_name = get_instance_name()
+        instance_name = get_instance_name(cfg)
     max_attempts = 5
     sleep_duration = 20
     instance_id = get_instance_id(instance_name)
@@ -428,7 +247,9 @@ def connect(
 
     # Connect via SSH
 
-    subprocess.run(["ssh"] + arguments + [f"{user}@{get_instance_dns(instance_id)}"])
+    dns = get_instance_dns(instance_id)
+
+    subprocess.run(["ssh"] + arguments + [f"{user}@{dns}"])
 
 
 @app.command()
@@ -440,7 +261,7 @@ def type(
     instance_name: str = typer.Argument(None, help="Instance name"),
 ):
     if not instance_name:
-        instance_name = get_instance_name()
+        instance_name = get_instance_name(cfg)
     instance_id = get_instance_id(instance_name)
     current_type = get_instance_type(instance_id)
 
@@ -465,7 +286,7 @@ def type(
             if is_instance_running(instance_id):
 
                 typer.secho(
-                    f"You can only change the type of a stopped instances",
+                    "You can only change the type of a stopped instances",
                     fg=typer.colors.RED,
                 )
 
@@ -521,206 +342,6 @@ def type(
             f"Instance {instance_name} is currently of type {type}",
             fg=typer.colors.YELLOW,
         )
-
-
-@app.command()
-def list_volumes(instance_name: str = typer.Argument(None, help="Instance name")):
-    """
-    List the volumes and the instances they are attached to
-    """
-
-    if not instance_name:
-        instance_name = get_instance_name()
-    typer.secho(
-        f"Listing volumes attached to instance {instance_name}", fg=typer.colors.YELLOW
-    )
-
-    instance_id = get_instance_id(instance_name)
-    volumes = ec2_client.describe_volumes()
-
-    # Format table using wasabi
-
-    header = [
-        "Instance Name",
-        "Instance",
-        "Volume Name",
-        "VolumeId",
-        "Size",
-        "State",
-        "AvailabilityZone",
-    ]
-    aligns = ["l", "l", "l", "l", "l", "l", "l"]
-    data = []
-
-    # Get the volumes attached to instance
-
-    for volume in volumes["Volumes"]:
-        for attachment in volume["Attachments"]:
-            if attachment["InstanceId"] == instance_id:
-                data.append(
-                    [
-                        instance_name,
-                        instance_id,
-                        get_volume_name(volume["VolumeId"]),
-                        volume["VolumeId"],
-                        volume["Size"],
-                        volume["State"],
-                        volume["AvailabilityZone"],
-                    ]
-                )
-
-    formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
-    typer.secho(formatted, fg=typer.colors.YELLOW)
-
-
-@app.command()
-def create_snapshot(
-    volume_id: str = typer.Option(None, help="Volume ID"),
-    name: str = typer.Option(None, help="Snapshot name"),
-    description: str = typer.Option(None, help="Description"),
-):
-    """
-    Snapshot a volume
-    """
-
-    snapshot = ec2_client.create_snapshot(
-        VolumeId=volume_id,
-        Description=description,
-        TagSpecifications=[
-            {
-                "ResourceType": "snapshot",
-                "Tags": [{"Key": "Name", "Value": name}],
-            }
-        ],
-    )
-
-    typer.secho(f"Snapshot {snapshot['SnapshotId']} created", fg=typer.colors.GREEN)
-
-
-@app.command()
-def list_snapshots(instance_name: str = typer.Argument(None, help="Instance name")):
-    """
-    List the snapshots
-    """
-
-    if not instance_name:
-        instance_name = get_instance_name()
-
-    typer.secho(
-        f"Listing snapshots for instance {instance_name}", fg=typer.colors.YELLOW
-    )
-
-    instance_id = get_instance_id(instance_name)
-    volume_ids = get_volume_ids(instance_id)
-
-    header = ["SnapshotId", "VolumeId", "State", "StartTime", "Description"]
-    aligns = ["l", "l", "l", "l", "l"]
-    data = []
-
-    for volume_id in volume_ids:
-
-        snapshots = ec2_client.describe_snapshots(
-            Filters=[{"Name": "volume-id", "Values": [volume_id]}]
-        )
-
-        for snapshot in snapshots["Snapshots"]:
-            data.append(
-                [
-                    snapshot["SnapshotId"],
-                    snapshot["VolumeId"],
-                    snapshot["State"],
-                    snapshot["StartTime"],
-                    snapshot["Description"],
-                ]
-            )
-
-    # Format table using wasabi
-
-    formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
-    typer.secho(formatted, fg=typer.colors.YELLOW)
-
-
-@app.command()
-def create_ami(
-    instance_name: str = typer.Option(None, help="Instance name"),
-    name: str = typer.Option(None, help="AMI name"),
-    description: str = typer.Option(None, help="Description"),
-):
-    """
-    Create an Amazon Machine Image (AMI) from a specified EC2 instance.
-
-    The function takes as input the name of an EC2 instance, the desired name for the AMI, and a description.
-    It sends a request to the AWS EC2 service to create an AMI from the specified instance.
-    If the AMI creation is successful, it returns the ID of the created AMI.
-
-    Parameters:
-    instance_name: str, optional
-        The name of the EC2 instance from which to create the AMI.
-        If not specified, the name of the current instance is used.
-
-    name: str, optional
-        The desired name for the AMI.
-
-    description: str, optional
-        A description for the AMI.
-
-    Returns:
-    None
-
-    Example usage:
-        python remotepy/instance.py create_ami --instance_name my-instance --name my-ami --description "My first AMI"
-
-    """
-
-    if not instance_name:
-        instance_name = get_instance_name()
-    instance_id = get_instance_id(instance_name)
-
-    ami = ec2_client.create_image(
-        InstanceId=instance_id,
-        Name=name,
-        Description=description,
-        NoReboot=True,
-    )
-
-    typer.secho(f"AMI {ami['ImageId']} created", fg=typer.colors.GREEN)
-
-
-@app.command()
-def list_amis():
-    """
-    List all Amazon Machine Images (AMIs) owned by the current account.
-
-    This function queries AWS EC2 to get details of all AMIs that are owned by the current AWS account.
-    It formats the response data into a tabular form and displays it in the console.
-    The returned table includes the following columns: ImageId, Name, State, and CreationDate.
-
-    Example usage:
-        python remotepy/instance.py list_amis
-    """
-    account_id = get_account_id()
-
-    amis = ec2_client.describe_images(
-        Owners=[account_id],
-    )
-
-    header = ["ImageId", "Name", "State", "CreationDate"]
-    aligns = ["l", "l", "l", "l"]
-    data = []
-
-    for ami in amis["Images"]:
-        data.append(
-            [
-                ami["ImageId"],
-                ami["Name"],
-                ami["State"],
-                ami["CreationDate"],
-            ]
-        )
-
-    # Format table using wasabi
-    formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
-    typer.secho(formatted, fg=typer.colors.YELLOW)
 
 
 def get_launch_template_id(launch_template_name: str):
@@ -782,6 +403,89 @@ def list_launch_templates():
     # Format table using wasabi
     formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
     typer.secho(formatted, fg=typer.colors.YELLOW)
+
+    return launch_templates
+
+
+@app.command()
+def launch(
+    name: str = typer.Option(None, help="Name of the instance to be launched"),
+    launch_template: str = typer.Option(None, help="Launch template name"),
+    version: str = typer.Option("$Latest", help="Launch template version"),
+):
+    """
+    Launch an AWS EC2 instance based on a launch template.
+
+    This function will launch an instance using the specified launch template and version.
+    If no launch template is provided, the function will list all available launch templates and
+    prompt the user to select one.
+
+    The name of the instance can be specified with the --name option. If not provided,
+    the function will prompt the user for the name and provide a suggested name based on
+    the launch template name appended with a random alphanumeric string.
+
+    Example usage:
+    python remotepy/instance.py launch --launch_template my-launch-template --version 2
+
+    Parameters:
+    name: The name of the instance to be launched. This will be used as a tag for the instance.
+    launch_template: The name of the launch template to use.
+    version: The version of the launch template to use. Default is the latest version.
+    """
+
+    # if no launch template is specified, list all the launch templates
+
+    if not launch_template:
+        typer.secho("Please specify a launch template", fg=typer.colors.RED)
+        typer.secho("Available launch templates:", fg=typer.colors.YELLOW)
+        launch_templates = list_launch_templates()["LaunchTemplates"]
+        typer.secho("Select a launch template by number", fg=typer.colors.YELLOW)
+        launch_template_number = typer.prompt("Launch template", type=str)
+        launch_template = launch_templates[int(launch_template_number) - 1]
+        launch_template_name = launch_template["LaunchTemplateName"]
+        launch_template_id = launch_template["LaunchTemplateId"]
+
+        typer.secho(
+            f"Launch template {launch_template_name} selected", fg=typer.colors.YELLOW
+        )
+        typer.secho(
+            f"Defaulting to latest version: {launch_template['LatestVersionNumber']}",
+            fg=typer.colors.YELLOW,
+        )
+        typer.secho(
+            f"Launching instance based on launch template {launch_template_name}"
+        )
+
+    # if no name is specified, ask the user for the name
+
+    if not name:
+        random_string = "".join(
+            random.choices(string.ascii_letters + string.digits, k=6)
+        )
+        name_suggestion = launch_template_name + "-" + random_string
+        name = typer.prompt(
+            "Please enter a name for the instance", type=str, default=name_suggestion
+        )
+
+    # Launch the instance with the specified launch template, version, and name
+    instance = ec2_client.run_instances(
+        LaunchTemplate={"LaunchTemplateId": launch_template_id, "Version": version},
+        MaxCount=1,
+        MinCount=1,
+        TagSpecifications=[
+            {
+                "ResourceType": "instance",
+                "Tags": [
+                    {"Key": "Name", "Value": name},
+                ],
+            },
+        ],
+    )
+
+    typer.secho(
+        f"Instance {instance['Instances'][0]['InstanceId']} with name '{name}' launched",
+        fg=typer.colors.GREEN,
+    )
 
     return launch_templates
 
