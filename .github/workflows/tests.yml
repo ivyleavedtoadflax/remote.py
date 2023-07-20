@@ -1,0 +1,27 @@
+name: Python CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  Run-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
+      - name: Cache dependencies
+        uses: actions/cache@v2
+        with:
+          path: ${{ env.HOME }}/.cache/pypoetry
+          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+      - name: Install library
+        run: |
+          pip install poetry
+          poetry install
+      - name: Run tests and coverage
+        run: |
+          poetry run pytest
