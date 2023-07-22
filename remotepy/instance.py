@@ -571,5 +571,72 @@ def launch(
     )
 
 
+@app.command()
+def terminate(instance_name: str = typer.Argument(None, help="Instance name")):
+    """
+    Terminate the instance
+    """
+
+    if not instance_name:
+        instance_name = get_instance_name(cfg)
+    instance_id = get_instance_id(instance_name)
+
+    # Check if instance is managed by Terraform
+    instance_info = ec2_client.describe_instances(InstanceIds=[instance_id])
+    tags = instance_info["Reservations"][0]["Instances"][0].get("Tags", [])
+
+    # If the instance is managed by Terraform, warn user
+
+
+    # Confirmation step
+    typer.secho(
+        f"WARNING: You are about to terminate instance {instance_name}. "
+        f"All volumes and data associated with this instance will be deleted permanently.",
+        fg=typer.colors.RED,
+    )
+    typer.secho(
+        f"To create a snapshot or an image of the instance before termination, use the relevant AWS commands.",
+        fg=typer.colors.YELLOW,
+    )
+
+    confirm_name = typer.prompt(
+        "To confirm, please re-enter the instance name", type=str
+    )
+
+    if confirm_name != instance_name:
+        typer.secho(
+            "Instance names did not match. Aborting termination.", fg=typer.colors.RED
+        )
+
+        return
+
+    terraform_managed = any('terraform' in tag['Value'].lower() for tag in tags)
+
+
+    if terraform_managed:
+        typer.secho(
+            "WARNING: This instance appears to be managed by Terraform. "
+            "It is recommended to destroy it using Terraform to ensure proper cleanup of associated resources.",
+            fg=typer.colors.RED,
+        )
+
+
+    confirm = typer.confirm(
+        f"Are you sure you want to terminate instance {instance_name}?",
+        default=False,
+    )
+
+    if confirm:
+        ec2_client.terminate_instances(InstanceIds=[instance_id])
+        typer.secho(
+            f"Instance {instance_name} is being terminated", fg=typer.colors.GREEN
+        )
+    else:
+        typer.secho(
+            f"Termination of instance {instance_name} has been cancelled",
+            fg=typer.colors.YELLOW,
+        )
+
+
 if __name__ == "__main__":
     app()
