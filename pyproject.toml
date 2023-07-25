@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "remote-py"
-version = "0.2.1"
+version = "0.2.2"
 description = "Soft wrapper on top of awscli"
 authors = ["Matthew Upson <matt@mantisnlp.com>"]
 license = "MIT License"
