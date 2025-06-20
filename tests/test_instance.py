@@ -64,7 +64,7 @@ def test_instance_status_when_not_found(mocker, test_config):
     # Mock the AWS EC2 client to return empty reservations (instance not found)
     mocker.patch("remotepy.utils.ec2_client", autospec=True)
     remotepy.utils.ec2_client.describe_instances.return_value = {"Reservations": []}
-    
+
     result = runner.invoke(app, ["status", "test"])
 
     # Expect a 1 exit code as we sys.exit(1)
@@ -76,7 +76,7 @@ def test_empty_list(mocker, test_config):
     # Mock the AWS EC2 client to return empty reservations
     mocker.patch("remotepy.utils.ec2_client", autospec=True)
     remotepy.utils.ec2_client.describe_instances.return_value = {"Reservations": []}
-    
+
     result = runner.invoke(app, ["list"])
 
     assert result.exit_code == 0
