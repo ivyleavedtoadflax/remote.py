@@ -1,7 +1,6 @@
 import typer
 import wasabi
 
-from remotepy.config import cfg
 from remotepy.utils import (
     ec2_client,
     get_instance_id,
@@ -44,7 +43,7 @@ def list(instance_name: str = typer.Argument(None, help="Instance name")):
     """
 
     if not instance_name:
-        instance_name = get_instance_name(cfg)
+        instance_name = get_instance_name()
 
     typer.secho(f"Listing snapshots for instance {instance_name}", fg=typer.colors.YELLOW)
 

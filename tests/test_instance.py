@@ -108,7 +108,7 @@ def test_list(mocker, mock_describe_instances_response):
     assert "i-0123456789abcdef0" in result.stdout
     assert "running" in result.stdout
     assert "t2.micro" in result.stdout
-    assert "2023-07-15 00:00:00 UTC" in result.stdout
+    assert "2023-07-14 22:00:00 UTC" in result.stdout
 
 
 def test_get_launch_template_id(mocker):

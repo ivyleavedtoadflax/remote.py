@@ -7,7 +7,6 @@ import time
 import typer
 import wasabi
 
-from remotepy.config import cfg
 from remotepy.utils import (
     ec2_client,
     get_instance_dns,
@@ -61,7 +60,7 @@ def status(instance_name: str = typer.Argument(None, help="Instance name")):
     """
 
     if not instance_name:
-        instance_name = get_instance_name(cfg)
+        instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
     typer.secho(f"Getting status of {instance_name} ({instance_id})", fg=typer.colors.YELLOW)
     status = get_instance_status(instance_id)
@@ -104,7 +103,7 @@ def start(instance_name: str = typer.Argument(None, help="Instance name")):
     """
 
     if not instance_name:
-        instance_name = get_instance_name(cfg)
+        instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
 
     if is_instance_running(instance_id):
@@ -126,7 +125,7 @@ def stop(instance_name: str = typer.Argument(None, help="Instance name")):
     """
 
     if not instance_name:
-        instance_name = get_instance_name(cfg)
+        instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
 
     if not is_instance_running(instance_id):
@@ -166,7 +165,7 @@ def connect(
     """
 
     if not instance_name:
-        instance_name = get_instance_name(cfg)
+        instance_name = get_instance_name()
     max_attempts = 5
     sleep_duration = 20
     instance_id = get_instance_id(instance_name)
@@ -247,7 +246,7 @@ def type(
     instance_name: str = typer.Argument(None, help="Instance name"),
 ):
     if not instance_name:
-        instance_name = get_instance_name(cfg)
+        instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
     current_type = get_instance_type(instance_id)
 
@@ -549,7 +548,7 @@ def terminate(instance_name: str = typer.Argument(None, help="Instance name")):
     """
 
     if not instance_name:
-        instance_name = get_instance_name(cfg)
+        instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
 
     # Check if instance is managed by Terraform

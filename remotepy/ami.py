@@ -4,7 +4,6 @@ import string
 import typer
 import wasabi
 
-from remotepy.config import cfg
 from remotepy.utils import (
     ec2_client,
     get_account_id,
@@ -48,7 +47,7 @@ def create(
     """
 
     if not instance_name:
-        instance_name = get_instance_name(cfg)
+        instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
 
     ami = ec2_client.create_image(
