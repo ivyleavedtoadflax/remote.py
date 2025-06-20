@@ -15,49 +15,49 @@ pipx install git+https://github.com/ivyleavedtoadflax/remote.py.git
 Add the name of your default instance to the config file
 
 ```
-remotepy config add
+remote config add
 ```
 
 Check that is was set
 
 ```
-remotepy config show
+remote config show
 ```
 
 Start the instance:
 
 ```
-remotepy start
+remote start
 ```
 
 Connect to the instance with ssh
 
 ```
-remotepy connect
+remote connect
 ```
 
 Connect to the instance with ssh and port forwarding and verbosity
 
 ```
-remotepy connect -p 1234:localhost:1234 -v
+remote connect -p 1234:localhost:1234 -v
 ```
 
 Stop the instance:
 
 ```
-remotepy stop
+remote stop
 ```
 
 Get the instance status:
 
 ```
-remotepy status
+remote status
 ```
 
 To run commands on a different instance, pass the name as an argument:
 
 ```
-remotepy status another_ec2_instance
+remote status another_ec2_instance
 ```
 
 ## Configuration
@@ -70,10 +70,10 @@ The configuration is stored in `~/.config/remote.py/config.ini`
 
 ```bash
 # Add default instance interactively
-remotepy config add
+remote config add
 
 # Show current configuration  
-remotepy config show
+remote config show
 ```
 
 That's it! The config file is the single source of truth for your settings.
@@ -127,7 +127,6 @@ uv run pytest tests/test_config.py
 - **No AWS credentials required** - All AWS calls are mocked during testing
 - **Test isolation** - Tests don't interfere with local configuration files
 - **Comprehensive coverage** - Tests for configuration, AWS operations, and CLI commands
-- **Issue #27 resolved** - Tests work without any local setup or environment variables
 
 ## CI/CD
 
