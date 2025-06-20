@@ -32,7 +32,7 @@ def mock_describe_instances_response():
                         "InstanceId": "i-0123456789abcdef0",
                         "InstanceType": "t2.micro",
                         "State": {"Name": "running", "Code": 16},
-                        "LaunchTime": datetime.datetime(2023, 7, 15, 0, 0, 0),
+                        "LaunchTime": datetime.datetime(2023, 7, 15, 0, 0, 0, tzinfo=datetime.UTC),
                         "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
                         "Tags": [
                             {"Key": "Name", "Value": "running-instance"},
@@ -47,7 +47,7 @@ def mock_describe_instances_response():
                         "InstanceId": "i-0123456789abcdef1",
                         "InstanceType": "t2.micro",
                         "State": {"Name": "stopped", "Code": 80},
-                        "LaunchTime": datetime.datetime(2023, 7, 15, 0, 0, 0),
+                        "LaunchTime": datetime.datetime(2023, 7, 15, 0, 0, 0, tzinfo=datetime.UTC),
                         "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
                         "Tags": [
                             {"Key": "Name", "Value": "stopped-instance"},
@@ -108,7 +108,7 @@ def test_list(mocker, mock_describe_instances_response):
     assert "i-0123456789abcdef0" in result.stdout
     assert "running" in result.stdout
     assert "t2.micro" in result.stdout
-    assert "2023-07-14 22:00:00 UTC" in result.stdout
+    assert "2023-07-15 00:00:00 UTC" in result.stdout
 
 
 def test_get_launch_template_id(mocker):
