@@ -293,7 +293,7 @@ wheels = [
 ]
 
 [[package]]
-name = "remote-py"
+name = "remotepy"
 version = "0.2.5"
 source = { editable = "." }
 dependencies = [
