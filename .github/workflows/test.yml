@@ -33,9 +33,9 @@ jobs:
       run: |
         uv run ruff format --check .
 
-    - name: Run tests with pytest
+    - name: Run tests with pytest and coverage
       run: |
-        uv run pytest -v --tb=short
+        uv run pytest -v --tb=short --cov=remote_py --cov-report=term-missing
       env:
         AWS_DEFAULT_REGION: us-east-1
         AWS_ACCESS_KEY_ID: dummy
