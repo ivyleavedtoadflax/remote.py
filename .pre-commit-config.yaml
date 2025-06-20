@@ -1,4 +1,4 @@
-default_stages: [pre-push]
+default_stages: [push]
 
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -27,5 +27,5 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
-        stages: [pre-push]
+        stages: [push]
 

@@ -157,7 +157,7 @@ def mock_ebs_snapshots():
                 ],
             },
             {
-                "SnapshotId": "snap-0123456789abcdef1", 
+                "SnapshotId": "snap-0123456789abcdef1",
                 "VolumeId": "vol-0123456789abcdef1",
                 "State": "pending",
                 "Progress": "50%",
@@ -188,7 +188,7 @@ def mock_amis():
             },
             {
                 "ImageId": "ami-0123456789abcdef1",
-                "Name": "test-ami-2", 
+                "Name": "test-ami-2",
                 "State": "pending",
                 "CreationDate": datetime.datetime(2023, 7, 16, 0, 0, 0, tzinfo=datetime.UTC),
                 "Description": "Test AMI 2",
@@ -289,7 +289,7 @@ def populated_aws_clients(mocker, mock_ec2_instances, mock_ecs_clusters, mock_ec
     }
 
     # Mock ECS client with populated responses
-    mock_ecs = mocker.patch("remotepy.ecs.ecs_client", autospec=True) 
+    mock_ecs = mocker.patch("remotepy.ecs.ecs_client", autospec=True)
     mock_ecs.list_clusters.return_value = mock_ecs_clusters
     mock_ecs.list_services.return_value = mock_ecs_services
 

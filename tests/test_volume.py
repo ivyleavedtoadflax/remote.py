@@ -1,10 +1,8 @@
-from unittest.mock import patch
 
 import pytest
 from typer.testing import CliRunner
 
 from remotepy.volume import app
-
 
 runner = CliRunner()
 
@@ -47,16 +45,16 @@ def test_list_volumes_with_instance_name(mocker, mock_volume_response):
     mock_get_volume_name = mocker.patch(
         "remotepy.volume.get_volume_name", return_value="test-volume"
     )
-    
+
     mock_ec2_client.describe_volumes.return_value = mock_volume_response
-    
+
     result = runner.invoke(app, ["list", "test-instance"])
-    
+
     assert result.exit_code == 0
     mock_get_instance_id.assert_called_once_with("test-instance")
     mock_ec2_client.describe_volumes.assert_called_once()
     mock_get_volume_name.assert_called_once_with("vol-0123456789abcdef0")
-    
+
     assert "test-instance" in result.stdout
     assert "vol-0123456789abcdef0" in result.stdout
     assert "test-volume" in result.stdout
@@ -73,11 +71,11 @@ def test_list_volumes_without_instance_name(mocker, mock_volume_response):
     mock_get_volume_name = mocker.patch(
         "remotepy.volume.get_volume_name", return_value="test-volume"
     )
-    
+
     mock_ec2_client.describe_volumes.return_value = mock_volume_response
-    
+
     result = runner.invoke(app, ["list"])
-    
+
     assert result.exit_code == 0
     mock_get_instance_name.assert_called_once()
     mock_get_instance_id.assert_called_once_with("default-instance")
@@ -89,7 +87,7 @@ def test_list_volumes_no_attachments(mocker):
     mock_get_instance_id = mocker.patch(
         "remotepy.volume.get_instance_id", return_value="i-0123456789abcdef0"
     )
-    
+
     # Volume with no attachments to our instance
     mock_ec2_client.describe_volumes.return_value = {
         "Volumes": [
@@ -103,13 +101,13 @@ def test_list_volumes_no_attachments(mocker):
             }
         ]
     }
-    
+
     result = runner.invoke(app, ["list", "test-instance"])
-    
+
     assert result.exit_code == 0
     mock_get_instance_id.assert_called_once_with("test-instance")
     mock_ec2_client.describe_volumes.assert_called_once()
-    
+
     # Should show headers but no volume data since no volumes are attached to our instance
     assert "Instance Name" in result.stdout
     assert "VolumeId" in result.stdout
@@ -124,7 +122,7 @@ def test_list_volumes_multiple_attachments(mocker):
     mock_get_volume_name = mocker.patch(
         "remotepy.volume.get_volume_name", side_effect=["vol1-name", "vol2-name"]
     )
-    
+
     # Multiple volumes attached to the same instance
     mock_ec2_client.describe_volumes.return_value = {
         "Volumes": [
@@ -158,9 +156,9 @@ def test_list_volumes_multiple_attachments(mocker):
             },
         ]
     }
-    
+
     result = runner.invoke(app, ["list", "test-instance"])
-    
+
     assert result.exit_code == 0
     assert "vol-0123456789abcdef0" in result.stdout
     assert "vol-0123456789abcdef1" in result.stdout
@@ -176,11 +174,11 @@ def test_list_command_alias_ls(mocker, mock_volume_response):
     mock_get_volume_name = mocker.patch(
         "remotepy.volume.get_volume_name", return_value="test-volume"
     )
-    
+
     mock_ec2_client.describe_volumes.return_value = mock_volume_response
-    
+
     result = runner.invoke(app, ["ls", "test-instance"])
-    
+
     assert result.exit_code == 0
     mock_get_instance_id.assert_called_once_with("test-instance")
     mock_ec2_client.describe_volumes.assert_called_once()

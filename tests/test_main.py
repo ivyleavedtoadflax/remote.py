@@ -1,22 +1,19 @@
-from unittest.mock import patch
 
-import pytest
 from typer.testing import CliRunner
 
 from remotepy.__main__ import app
-
 
 runner = CliRunner()
 
 
 def test_version_command(mocker):
     mock_version = mocker.patch(
-        "remotepy.__main__.importlib.metadata.version", 
+        "remotepy.__main__.importlib.metadata.version",
         return_value="0.2.5"
     )
-    
+
     result = runner.invoke(app, ["version"])
-    
+
     assert result.exit_code == 0
     mock_version.assert_called_once_with("remotepy")
     assert "0.2.5" in result.stdout
@@ -25,12 +22,12 @@ def test_version_command(mocker):
 def test_main_app_imports():
     """Test that all sub-apps are properly imported and added to main app."""
     # Test that the main app structure exists
-    from remotepy.instance import app as instance_app
     from remotepy.__main__ import app as main_app
-    
+    from remotepy.instance import app as instance_app
+
     # The main app should be the same as instance app (enhanced with sub-apps)
     assert main_app is instance_app
-    
+
     # Test that the app has commands and groups registered
     assert len(app.registered_commands) > 0
     assert len(app.registered_groups) > 0
@@ -39,11 +36,9 @@ def test_main_app_imports():
 def test_main_app_structure():
     """Test the overall structure of the main app."""
     # Test that imports work correctly
-    from remotepy import ami, config, ecs, instance, snapshot, volume
-    
     # Test that the main module imports exist
-    import remotepy.__main__
-    
+    from remotepy import ami, config, ecs, instance, snapshot, volume
+
     # Verify that we can access the apps
     assert hasattr(ami, 'app')
     assert hasattr(config, 'app')
@@ -56,7 +51,7 @@ def test_main_app_structure():
 def test_help_shows_subcommands():
     """Test that help output shows all available subcommands."""
     result = runner.invoke(app, ["--help"])
-    
+
     assert result.exit_code == 0
     assert "ami" in result.stdout
     assert "config" in result.stdout
@@ -105,7 +100,7 @@ def test_default_instance_commands_work():
     """Test that instance commands work as default commands."""
     # Test that we can call instance commands directly without 'instance' prefix
     result = runner.invoke(app, ["--help"])
-    
+
     assert result.exit_code == 0
     # Should see instance commands in the main help
     assert "list" in result.stdout or "List" in result.stdout
