@@ -1,5 +1,3 @@
-from typing import List
-
 import boto3
 import typer
 
@@ -8,7 +6,7 @@ ecs_client = boto3.client("ecs")
 app = typer.Typer()
 
 
-def get_all_clusters() -> List[str]:
+def get_all_clusters() -> list[str]:
     """
     Get all ECS clusters
 
@@ -20,7 +18,7 @@ def get_all_clusters() -> List[str]:
     return clusters["clusterArns"]
 
 
-def get_all_services(cluster_name: str) -> List[str]:
+def get_all_services(cluster_name: str) -> list[str]:
     """
     Get all ECS services
 
@@ -69,13 +67,13 @@ def prompt_for_cluster_name() -> str:
         typer.echo("Please select a cluster from the following list:")
 
         for i, cluster in enumerate(clusters):
-            typer.secho(f"{i+1}. {cluster}", fg=typer.colors.BLUE)
+            typer.secho(f"{i + 1}. {cluster}", fg=typer.colors.BLUE)
         cluster_choice = typer.prompt("Enter the number of the cluster")
 
         return clusters[int(cluster_choice) - 1]
 
 
-def prompt_for_services_name(cluster_name: str) -> List[str]:
+def prompt_for_services_name(cluster_name: str) -> list[str]:
     """
     Prompt the user to select one or more services
 
@@ -101,7 +99,7 @@ def prompt_for_services_name(cluster_name: str) -> List[str]:
         )
 
         for i, service in enumerate(services):
-            typer.secho(f"{i+1}. {service}", fg=typer.colors.BLUE)
+            typer.secho(f"{i + 1}. {service}", fg=typer.colors.BLUE)
         service_choices = typer.prompt("Enter the numbers of the services (comma separated)")
         service_choices = [int(choice.strip()) for choice in service_choices.split(",")]
         selected_services = [services[choice - 1] for choice in service_choices]
@@ -121,9 +119,7 @@ def list_clusters() -> None:
 
 
 @app.command(name="list-services")
-def list_services(
-    cluster_name: str = typer.Argument(None, help="Cluster name")
-) -> None:
+def list_services(cluster_name: str = typer.Argument(None, help="Cluster name")) -> None:
     """
     List ECS services
 
@@ -144,9 +140,7 @@ def list_services(
 def scale(
     cluster_name: str = typer.Argument(None, help="Cluster name"),
     service_name: str = typer.Argument(None, help="Service name"),
-    desired_count: int = typer.Option(
-        None, "-n", "--count", help="Desired count of tasks"
-    ),
+    desired_count: int = typer.Option(None, "-n", "--count", help="Desired count of tasks"),
 ) -> None:
     """
     Scale ECS services
@@ -168,6 +162,4 @@ def scale(
 
         if typer.confirm(confirm_message):
             scale_service(cluster_name, service, desired_count)
-            typer.secho(
-                f"Scaled {service} to {desired_count} tasks", fg=typer.colors.GREEN
-            )
+            typer.secho(f"Scaled {service} to {desired_count} tasks", fg=typer.colors.GREEN)

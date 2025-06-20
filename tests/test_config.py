@@ -1,8 +1,9 @@
 import configparser
 
 import pytest
-from remotepy import config
 from typer.testing import CliRunner
+
+from remotepy import config
 
 runner = CliRunner()
 

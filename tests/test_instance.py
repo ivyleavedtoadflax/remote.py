@@ -2,9 +2,10 @@ import configparser
 import datetime
 
 import pytest
+from typer.testing import CliRunner
+
 import remotepy
 from remotepy.instance import app, get_launch_template_id
-from typer.testing import CliRunner
 
 runner = CliRunner()
 
@@ -82,9 +83,7 @@ def test_list(mocker, mock_describe_instances_response):
     mocker.patch("remotepy.utils.ec2_client", autospec=True)
 
     # Simulate a response from AWS EC2
-    remotepy.utils.ec2_client.describe_instances.return_value = (
-        mock_describe_instances_response
-    )
+    remotepy.utils.ec2_client.describe_instances.return_value = mock_describe_instances_response
     # Call the function
     result = runner.invoke(app, ["list"])
 
@@ -109,9 +108,7 @@ def test_get_launch_template_id(mocker):
     mocker.patch("remotepy.instance.ec2_client", autospec=True)
 
     # Mock the describe_launch_templates function
-    mock_describe_launch_templates = (
-        remotepy.instance.ec2_client.describe_launch_templates
-    )
+    mock_describe_launch_templates = remotepy.instance.ec2_client.describe_launch_templates
 
     # Simulate a response from AWS EC2
     mock_describe_launch_templates.return_value = {

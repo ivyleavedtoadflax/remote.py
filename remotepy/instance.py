@@ -35,9 +35,7 @@ def list():
     instances = get_instances()
     ids = get_instance_ids(instances)
 
-    names, public_dnss, statuses, instance_types, launch_times = get_instance_info(
-        instances
-    )
+    names, public_dnss, statuses, instance_types, launch_times = get_instance_info(instances)
 
     # Format table using wasabi
 
@@ -46,7 +44,7 @@ def list():
     data = [
         (name, id, dns, status, it, lt)
         for name, id, dns, status, it, lt in zip(
-            names, ids, public_dnss, statuses, instance_types, launch_times
+            names, ids, public_dnss, statuses, instance_types, launch_times, strict=False
         )
     ]
 
@@ -65,13 +63,10 @@ def status(instance_name: str = typer.Argument(None, help="Instance name")):
     if not instance_name:
         instance_name = get_instance_name(cfg)
     instance_id = get_instance_id(instance_name)
-    typer.secho(
-        f"Getting status of {instance_name} ({instance_id})", fg=typer.colors.YELLOW
-    )
+    typer.secho(f"Getting status of {instance_name} ({instance_id})", fg=typer.colors.YELLOW)
     status = get_instance_status(instance_id)
 
     if status["InstanceStatuses"]:
-
         # Format table using wasabi
 
         header = [
@@ -113,9 +108,7 @@ def start(instance_name: str = typer.Argument(None, help="Instance name")):
     instance_id = get_instance_id(instance_name)
 
     if is_instance_running(instance_id):
-        typer.secho(
-            f"Instance {instance_name} is already running", fg=typer.colors.YELLOW
-        )
+        typer.secho(f"Instance {instance_name} is already running", fg=typer.colors.YELLOW)
 
         return
 
@@ -137,9 +130,7 @@ def stop(instance_name: str = typer.Argument(None, help="Instance name")):
     instance_id = get_instance_id(instance_name)
 
     if not is_instance_running(instance_id):
-        typer.secho(
-            f"Instance {instance_name} is already stopped", fg=typer.colors.YELLOW
-        )
+        typer.secho(f"Instance {instance_name} is already stopped", fg=typer.colors.YELLOW)
 
         return
 
@@ -153,9 +144,7 @@ def stop(instance_name: str = typer.Argument(None, help="Instance name")):
             ec2_client.stop_instances(InstanceIds=[instance_id])
             typer.secho(f"Instance {instance_name} is stopping", fg=typer.colors.GREEN)
         else:
-            typer.secho(
-                f"Instance {instance_name} is still running", fg=typer.colors.YELLOW
-            )
+            typer.secho(f"Instance {instance_name} is still running", fg=typer.colors.YELLOW)
     except Exception as e:
         typer.secho(f"Error stopping instance: {e}", fg=typer.colors.RED)
 
@@ -169,9 +158,7 @@ def connect(
         "-p",
         help="Port forwarding configuration (local:remote)",
     ),
-    user: str = typer.Option(
-        "ubuntu", "--user", "-u", help="User to be used for ssh connection."
-    ),
+    user: str = typer.Option("ubuntu", "--user", "-u", help="User to be used for ssh connection."),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose mode"),
 ):
     """
@@ -196,7 +183,6 @@ def connect(
         )
 
         if start_instance:
-
             # Try to start the instance, and exit if it fails
 
             while not is_instance_running(instance_id) and max_attempts > 0:
@@ -266,7 +252,6 @@ def type(
     current_type = get_instance_type(instance_id)
 
     if type:
-
         # If the current instance type is the same as the requested type,
         # exit.
 
@@ -279,12 +264,10 @@ def type(
             return
 
         else:
-
             # If the instance is running prompt whether to stop it. If no,
             # then exit.
 
             if is_instance_running(instance_id):
-
                 typer.secho(
                     "You can only change the type of a stopped instances",
                     fg=typer.colors.RED,
@@ -445,23 +428,17 @@ def launch(
         launch_template_name = launch_template["LaunchTemplateName"]
         launch_template_id = launch_template["LaunchTemplateId"]
 
-        typer.secho(
-            f"Launch template {launch_template_name} selected", fg=typer.colors.YELLOW
-        )
+        typer.secho(f"Launch template {launch_template_name} selected", fg=typer.colors.YELLOW)
         typer.secho(
             f"Defaulting to latest version: {launch_template['LatestVersionNumber']}",
             fg=typer.colors.YELLOW,
         )
-        typer.secho(
-            f"Launching instance based on launch template {launch_template_name}"
-        )
+        typer.secho(f"Launching instance based on launch template {launch_template_name}")
 
     # if no name is specified, ask the user for the name
 
     if not name:
-        random_string = "".join(
-            random.choices(string.ascii_letters + string.digits, k=6)
-        )
+        random_string = "".join(random.choices(string.ascii_letters + string.digits, k=6))
         name_suggestion = launch_template_name + "-" + random_string
         name = typer.prompt(
             "Please enter a name for the instance", type=str, default=name_suggestion
@@ -528,23 +505,17 @@ def launch(
         launch_template_name = launch_template["LaunchTemplateName"]
         launch_template_id = launch_template["LaunchTemplateId"]
 
-        typer.secho(
-            f"Launch template {launch_template_name} selected", fg=typer.colors.YELLOW
-        )
+        typer.secho(f"Launch template {launch_template_name} selected", fg=typer.colors.YELLOW)
         typer.secho(
             f"Defaulting to latest version: {launch_template['LatestVersionNumber']}",
             fg=typer.colors.YELLOW,
         )
-        typer.secho(
-            f"Launching instance based on launch template {launch_template_name}"
-        )
+        typer.secho(f"Launching instance based on launch template {launch_template_name}")
 
     # if no name is specified, ask the user for the name
 
     if not name:
-        random_string = "".join(
-            random.choices(string.ascii_letters + string.digits, k=6)
-        )
+        random_string = "".join(random.choices(string.ascii_letters + string.digits, k=6))
         name_suggestion = launch_template_name + "-" + random_string
         name = typer.prompt(
             "Please enter a name for the instance", type=str, default=name_suggestion
@@ -587,7 +558,6 @@ def terminate(instance_name: str = typer.Argument(None, help="Instance name")):
 
     # If the instance is managed by Terraform, warn user
 
-
     # Confirmation step
     typer.secho(
         f"WARNING: You are about to terminate instance {instance_name}. "
@@ -595,23 +565,18 @@ def terminate(instance_name: str = typer.Argument(None, help="Instance name")):
         fg=typer.colors.RED,
     )
     typer.secho(
-        f"To create a snapshot or an image of the instance before termination, use the relevant AWS commands.",
+        "To create a snapshot or an image of the instance before termination, use the relevant AWS commands.",
         fg=typer.colors.YELLOW,
     )
 
-    confirm_name = typer.prompt(
-        "To confirm, please re-enter the instance name", type=str
-    )
+    confirm_name = typer.prompt("To confirm, please re-enter the instance name", type=str)
 
     if confirm_name != instance_name:
-        typer.secho(
-            "Instance names did not match. Aborting termination.", fg=typer.colors.RED
-        )
+        typer.secho("Instance names did not match. Aborting termination.", fg=typer.colors.RED)
 
         return
 
-    terraform_managed = any('terraform' in tag['Value'].lower() for tag in tags)
-
+    terraform_managed = any("terraform" in tag["Value"].lower() for tag in tags)
 
     if terraform_managed:
         typer.secho(
@@ -620,7 +585,6 @@ def terminate(instance_name: str = typer.Argument(None, help="Instance name")):
             fg=typer.colors.RED,
         )
 
-
     confirm = typer.confirm(
         f"Are you sure you want to terminate instance {instance_name}?",
         default=False,
@@ -628,9 +592,7 @@ def terminate(instance_name: str = typer.Argument(None, help="Instance name")):
 
     if confirm:
         ec2_client.terminate_instances(InstanceIds=[instance_id])
-        typer.secho(
-            f"Instance {instance_name} is being terminated", fg=typer.colors.GREEN
-        )
+        typer.secho(f"Instance {instance_name} is being terminated", fg=typer.colors.GREEN)
     else:
         typer.secho(
             f"Termination of instance {instance_name} has been cancelled",

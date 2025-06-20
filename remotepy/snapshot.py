@@ -46,9 +46,7 @@ def list(instance_name: str = typer.Argument(None, help="Instance name")):
     if not instance_name:
         instance_name = get_instance_name(cfg)
 
-    typer.secho(
-        f"Listing snapshots for instance {instance_name}", fg=typer.colors.YELLOW
-    )
+    typer.secho(f"Listing snapshots for instance {instance_name}", fg=typer.colors.YELLOW)
 
     instance_id = get_instance_id(instance_name)
     volume_ids = get_volume_ids(instance_id)
@@ -58,7 +56,6 @@ def list(instance_name: str = typer.Argument(None, help="Instance name")):
     data = []
 
     for volume_id in volume_ids:
-
         snapshots = ec2_client.describe_snapshots(
             Filters=[{"Name": "volume-id", "Values": [volume_id]}]
         )

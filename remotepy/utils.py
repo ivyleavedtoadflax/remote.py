@@ -33,7 +33,6 @@ def get_instance_id(instance_name):
     )
 
     if instances["Reservations"]:
-
         if len(instances["Reservations"]) == 1:
             return instances["Reservations"][0]["Instances"][0]["InstanceId"]
         else:
@@ -67,9 +66,9 @@ def get_instances(exclude_terminated: bool = False):
 def get_instance_dns(instance_id):
     """Returns the public IP address of the instance"""
 
-    return ec2_client.describe_instances(InstanceIds=[instance_id])["Reservations"][0][
-        "Instances"
-    ][0]["PublicDnsName"]
+    return ec2_client.describe_instances(InstanceIds=[instance_id])["Reservations"][0]["Instances"][
+        0
+    ]["PublicDnsName"]
 
 
 def get_instance_name(cfg: ConfigParser):
@@ -83,9 +82,7 @@ def get_instance_name(cfg: ConfigParser):
         sys.exit(1)
 
 
-def get_instance_info(
-    instances: list, name_filter: str = None, drop_nameless: bool = False
-):
+def get_instance_info(instances: list, name_filter: str = None, drop_nameless: bool = False):
     """
     Get all instance names for the given account from aws cli
 
@@ -102,7 +99,6 @@ def get_instance_info(
 
     for i in instances:
         for instance in i["Instances"]:
-
             # Check whether there is a Name tag, and break out of the loop
             # if there is not. This is to avoid fetching information about
             # instances that are part of kubernetes clusters, etc.
@@ -164,9 +160,9 @@ def is_instance_stopped(instance_id):
 def get_instance_type(instance_id):
     """Returns the instance type of the instance"""
 
-    return ec2_client.describe_instances(InstanceIds=[instance_id])["Reservations"][0][
-        "Instances"
-    ][0]["InstanceType"]
+    return ec2_client.describe_instances(InstanceIds=[instance_id])["Reservations"][0]["Instances"][
+        0
+    ]["InstanceType"]
 
 
 def get_volume_ids(instance_id):
@@ -197,9 +193,7 @@ def get_volume_name(volume_id):
 def get_snapshot_status(snapshot_id):
     """Returns the status of the snapshot"""
 
-    return ec2_client.describe_snapshots(SnapshotIds=[snapshot_id])["Snapshots"][0][
-        "State"
-    ]
+    return ec2_client.describe_snapshots(SnapshotIds=[snapshot_id])["Snapshots"][0]["State"]
 
 
 def get_launch_template_id(launch_template_name: str):
