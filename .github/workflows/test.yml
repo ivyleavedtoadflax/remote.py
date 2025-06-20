@@ -39,3 +39,7 @@ jobs:
     - name: Run tests with pytest
       run: |
         uv run pytest -v --tb=short
+      env:
+        AWS_DEFAULT_REGION: us-east-1
+        AWS_ACCESS_KEY_ID: dummy
+        AWS_SECRET_ACCESS_KEY: dummy
