@@ -45,10 +45,10 @@ def test_settings_only_testing_flags():
     settings = Settings()
 
     # Should only have testing flags, no instance configuration
-    assert hasattr(settings, 'testing_mode')
-    assert hasattr(settings, 'mock_aws_calls')
-    assert not hasattr(settings, 'default_instance_name')
-    assert not hasattr(settings, 'aws_region')
+    assert hasattr(settings, "testing_mode")
+    assert hasattr(settings, "mock_aws_calls")
+    assert not hasattr(settings, "default_instance_name")
+    assert not hasattr(settings, "aws_region")
 
 
 def test_no_sys_exit_on_missing_config(mock_aws_clients):

@@ -86,8 +86,6 @@ def write_config(cfg, config_path):
     return cfg
 
 
-
-
 @app.command()
 def show(config_path: str = typer.Option(CONFIG_PATH, "--config", "-c")):
     """

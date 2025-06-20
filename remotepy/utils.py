@@ -90,7 +90,9 @@ def get_instance_name(cfg: ConfigParser = None):
         return instance_name
     else:
         typer.secho("No default instance configured.", fg=typer.colors.RED)
-        typer.secho("Run `remotepy config add` to set up your default instance.", fg=typer.colors.RED)
+        typer.secho(
+            "Run `remotepy config add` to set up your default instance.", fg=typer.colors.RED
+        )
         raise typer.Exit(1)
 
 

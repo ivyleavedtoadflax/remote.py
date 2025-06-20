@@ -15,10 +15,7 @@ def test_config():
     This fixture ensures that tests don't depend on the user's local configuration
     and provides sensible defaults for testing.
     """
-    test_settings = Settings(
-        testing_mode=True,
-        mock_aws_calls=True
-    )
+    test_settings = Settings(testing_mode=True, mock_aws_calls=True)
 
     # Create a mock config manager that returns test instance name
     mock_config_manager = MagicMock()
@@ -54,7 +51,4 @@ def mock_aws_clients(mocker):
     mock_ecs = mocker.patch("remotepy.ecs.ecs_client", autospec=True)
     mock_ecs.list_clusters.return_value = {"clusterArns": []}
 
-    return {
-        "ec2": mock_ec2,
-        "ecs": mock_ecs
-    }
+    return {"ec2": mock_ec2, "ecs": mock_ecs}
