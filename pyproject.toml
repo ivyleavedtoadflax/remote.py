@@ -1,6 +1,6 @@
 [project]
 name = "remote-py"
-version = "0.2.3"
+version = "0.2.4"
 description = "Soft wrapper on top of awscli"
 authors = [{name = "Matthew Upson", email = "matt@mantisnlp.com"}]
 license = {text = "MIT License"}
