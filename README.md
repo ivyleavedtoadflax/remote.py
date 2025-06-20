@@ -60,6 +60,23 @@ To run commands on a different instance, pass the name as an argument:
 remotepy status another_ec2_instance
 ```
 
+## Configuration
+
+RemotePy uses a simple configuration file to store your default instance and other settings.
+
+### Config File Setup
+
+The configuration is stored in `~/.config/remote.py/config.ini`
+
+```bash
+# Add default instance interactively
+remotepy config add
+
+# Show current configuration  
+remotepy config show
+```
+
+That's it! The config file is the single source of truth for your settings.
 
 # For development
 
@@ -89,6 +106,28 @@ uv run ruff check . --fix # Fix linting issues
 # Build package
 uv build
 ```
+
+## Testing
+
+The project includes comprehensive testing infrastructure:
+
+### Running Tests
+```bash
+# Run all tests
+uv run pytest
+
+# Run tests with verbose output
+uv run pytest -v
+
+# Run specific test file
+uv run pytest tests/test_config.py
+```
+
+### Test Features
+- **No AWS credentials required** - All AWS calls are mocked during testing
+- **Test isolation** - Tests don't interfere with local configuration files
+- **Comprehensive coverage** - Tests for configuration, AWS operations, and CLI commands
+- **Issue #27 resolved** - Tests work without any local setup or environment variables
 
 ## CI/CD
 

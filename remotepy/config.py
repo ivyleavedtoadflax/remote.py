@@ -4,13 +4,62 @@ import os
 import typer
 import wasabi
 
+from remotepy.settings import Settings
 from remotepy.utils import get_instance_ids, get_instance_info, get_instances
 
-CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".config", "remote.py/", "config.ini")
-cfg = configparser.ConfigParser()
-cfg.read(CONFIG_PATH)
-
 app = typer.Typer()
+
+
+class ConfigManager:
+    """Configuration manager for config file operations."""
+
+    def __init__(self):
+        self._file_config: configparser.ConfigParser | None = None
+
+    @property
+    def file_config(self) -> configparser.ConfigParser:
+        """Lazy load file configuration."""
+        if self._file_config is None:
+            self._file_config = configparser.ConfigParser()
+            config_path = Settings.get_config_path()
+            if config_path.exists():
+                self._file_config.read(config_path)
+        return self._file_config
+
+    def get_instance_name(self) -> str | None:
+        """Get default instance name from config file."""
+        try:
+            if "DEFAULT" in self.file_config and "instance_name" in self.file_config["DEFAULT"]:
+                return self.file_config["DEFAULT"]["instance_name"]
+        except Exception:
+            # Config file might be corrupted or inaccessible
+            pass
+
+        # No configuration found
+        return None
+
+    def set_instance_name(self, instance_name: str, config_path: str | None = None) -> None:
+        """Set default instance name in config file."""
+        if config_path is None:
+            config_path = str(Settings.get_config_path())
+
+        # Reload config to get latest state
+        self._file_config = None
+        config = self.file_config
+
+        # Ensure DEFAULT section exists
+        if "DEFAULT" not in config:
+            config.add_section("DEFAULT")
+
+        config.set("DEFAULT", "instance_name", instance_name)
+        write_config(config, config_path)
+
+
+# Global config manager instance
+config_manager = ConfigManager()
+
+# Default config path for CLI commands
+CONFIG_PATH = str(Settings.get_config_path())
 
 
 def read_config(config_path):
@@ -35,9 +84,6 @@ def write_config(cfg, config_path):
         cfg.write(configfile)
 
     return cfg
-
-
-cfg = read_config(config_path=CONFIG_PATH)
 
 
 @app.command()
@@ -121,8 +167,7 @@ def add(
             return
 
     # If an instance name was directly provided or selected from the list, update the configuration file
-    cfg.set("DEFAULT", "instance_name", instance_name)
-    write_config(cfg, config_path)
+    config_manager.set_instance_name(instance_name, config_path)
     typer.secho(f"Default instance set to {instance_name}", fg=typer.colors.GREEN)
 
 

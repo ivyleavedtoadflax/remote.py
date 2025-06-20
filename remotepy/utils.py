@@ -1,4 +1,3 @@
-import sys
 from configparser import ConfigParser
 from datetime import datetime
 
@@ -40,10 +39,10 @@ def get_instance_id(instance_name):
                 f"Multiple instances found with name {instance_name}",
                 fg=typer.colors.RED,
             )
-            sys.exit(1)
+            raise typer.Exit(1)
     else:
         typer.secho(f"Instance {instance_name} not found", fg=typer.colors.RED)
-        sys.exit(1)
+        raise typer.Exit(1)
 
 
 def get_instance_status(instance_id: str = None):
@@ -71,15 +70,30 @@ def get_instance_dns(instance_id):
     ]["PublicDnsName"]
 
 
-def get_instance_name(cfg: ConfigParser):
-    """Returns the name of the instance as defined in the config file"""
+def get_instance_name(cfg: ConfigParser = None):
+    """Returns the name of the instance as defined in the config file.
 
-    if instance_name := cfg["DEFAULT"].get("instance_name"):
+    Args:
+        cfg: Legacy config parser (for backward compatibility)
+
+    Returns:
+        str: Instance name if found
+
+    Raises:
+        typer.Exit: If no instance name is configured
+    """
+    from remotepy.config import config_manager
+
+    instance_name = config_manager.get_instance_name()
+
+    if instance_name:
         return instance_name
     else:
-        typer.secho("Instance name not found in config file", fg=typer.colors.RED)
-        typer.secho("Run `remotepy config add` to add it", fg=typer.colors.RED)
-        sys.exit(1)
+        typer.secho("No default instance configured.", fg=typer.colors.RED)
+        typer.secho(
+            "Run `remotepy config add` to set up your default instance.", fg=typer.colors.RED
+        )
+        raise typer.Exit(1)
 
 
 def get_instance_info(instances: list, name_filter: str = None, drop_nameless: bool = False):
