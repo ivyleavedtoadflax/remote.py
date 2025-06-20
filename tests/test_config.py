@@ -151,7 +151,7 @@ class TestConfigManager:
         assert manager.file_config["DEFAULT"]["instance_name"] == "new-instance"
 
     def test_set_instance_name_creates_default_section(self, mocker):
-        mock_write_config = mocker.patch("remotepy.config.write_config")
+        mocker.patch("remotepy.config.write_config")
 
         manager = ConfigManager()
         manager._file_config = configparser.ConfigParser()
@@ -273,8 +273,8 @@ def test_add_interactive_valid_selection(mocker, mock_instances_data):
 
 
 def test_add_interactive_invalid_selection_too_high(mocker, mock_instances_data):
-    mock_get_instances = mocker.patch("remotepy.config.get_instances", return_value=mock_instances_data)
-    mock_get_instance_ids = mocker.patch("remotepy.config.get_instance_ids", return_value=["i-123", "i-456"])
+    mocker.patch("remotepy.config.get_instances", return_value=mock_instances_data)
+    mocker.patch("remotepy.config.get_instance_ids", return_value=["i-123", "i-456"])
     mock_get_instance_info = mocker.patch("remotepy.config.get_instance_info",
                                         return_value=(["test-instance-1", "test-instance-2"],
                                                     ["dns1", "dns2"],

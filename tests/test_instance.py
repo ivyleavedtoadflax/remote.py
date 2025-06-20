@@ -173,7 +173,7 @@ def test_status_with_instance_name(mocker):
     mock_get_instance_id = mocker.patch(
         "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
     )
-    mock_get_instance_status = mocker.patch(
+    mocker.patch(
         "remotepy.instance.get_instance_status",
         return_value={"InstanceStatuses": []}
     )
@@ -225,10 +225,10 @@ def test_start_instance_success(mocker):
 
 def test_start_instance_exception(mocker):
     mock_ec2_client = mocker.patch("remotepy.instance.ec2_client", autospec=True)
-    mock_get_instance_id = mocker.patch(
+    mocker.patch(
         "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
     )
-    mock_is_instance_running = mocker.patch(
+    mocker.patch(
         "remotepy.instance.is_instance_running", return_value=False
     )
 
@@ -258,10 +258,10 @@ def test_stop_instance_already_stopped(mocker):
 
 def test_stop_instance_confirmed(mocker):
     mock_ec2_client = mocker.patch("remotepy.instance.ec2_client", autospec=True)
-    mock_get_instance_id = mocker.patch(
+    mocker.patch(
         "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
     )
-    mock_is_instance_running = mocker.patch(
+    mocker.patch(
         "remotepy.instance.is_instance_running", return_value=True
     )
 
@@ -274,10 +274,10 @@ def test_stop_instance_confirmed(mocker):
 
 def test_stop_instance_cancelled(mocker):
     mock_ec2_client = mocker.patch("remotepy.instance.ec2_client", autospec=True)
-    mock_get_instance_id = mocker.patch(
+    mocker.patch(
         "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
     )
-    mock_is_instance_running = mocker.patch(
+    mocker.patch(
         "remotepy.instance.is_instance_running", return_value=True
     )
 

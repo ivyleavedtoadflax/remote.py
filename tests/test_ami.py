@@ -92,10 +92,10 @@ def test_create_ami_without_instance_name(mocker):
 
 def test_create_ami_minimal_params(mocker):
     mock_ec2_client = mocker.patch("remotepy.ami.ec2_client", autospec=True)
-    mock_get_instance_name = mocker.patch(
+    mocker.patch(
         "remotepy.ami.get_instance_name", return_value="default-instance"
     )
-    mock_get_instance_id = mocker.patch(
+    mocker.patch(
         "remotepy.ami.get_instance_id", return_value="i-0123456789abcdef0"
     )
 
@@ -151,7 +151,7 @@ def test_list_amis_alias_ls(mocker, mock_ami_response):
 
 def test_list_amis_empty(mocker):
     mock_ec2_client = mocker.patch("remotepy.ami.ec2_client", autospec=True)
-    mock_get_account_id = mocker.patch(
+    mocker.patch(
         "remotepy.ami.get_account_id", return_value="123456789012"
     )
 
@@ -211,7 +211,7 @@ def test_list_launch_templates_empty(mocker):
 
 def test_launch_with_template_name(mocker):
     mock_ec2_client = mocker.patch("remotepy.ami.ec2_client", autospec=True)
-    mock_get_launch_template_id = mocker.patch(
+    mocker.patch(
         "remotepy.ami.get_launch_template_id", return_value="lt-0123456789abcdef0"
     )
 
@@ -243,7 +243,7 @@ def test_launch_with_template_name(mocker):
 
 def test_launch_with_default_version(mocker):
     mock_ec2_client = mocker.patch("remotepy.ami.ec2_client", autospec=True)
-    mock_get_launch_template_id = mocker.patch(
+    mocker.patch(
         "remotepy.ami.get_launch_template_id", return_value="lt-0123456789abcdef0"
     )
 
@@ -294,12 +294,12 @@ def test_launch_without_template_interactive(mocker, mock_launch_template_respon
 
 def test_launch_without_name_uses_suggestion(mocker):
     mock_ec2_client = mocker.patch("remotepy.ami.ec2_client", autospec=True)
-    mock_get_launch_template_id = mocker.patch(
+    mocker.patch(
         "remotepy.ami.get_launch_template_id", return_value="lt-0123456789abcdef0"
     )
 
     # Mock random string generation for name suggestion
-    mock_random_choices = mocker.patch("remotepy.ami.random.choices", return_value=list("abc123"))
+    mocker.patch("remotepy.ami.random.choices", return_value=list("abc123"))
 
     mock_ec2_client.run_instances.return_value = {
         "Instances": [{"InstanceId": "i-suggested"}]

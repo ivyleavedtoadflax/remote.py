@@ -148,7 +148,7 @@ def test_prompt_for_services_name_single_service_selection(mocker, capsys):
         "remotepy.ecs.get_all_services",
         return_value=["test-service-1", "test-service-2", "test-service-3"]
     )
-    mock_prompt = mocker.patch("typer.prompt", return_value="2")
+    mocker.patch("typer.prompt", return_value="2")
 
     result = prompt_for_services_name("test-cluster")
 
