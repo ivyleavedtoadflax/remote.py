@@ -12,8 +12,9 @@ pytest tests/test_*.py    # Run specific test file
 
 ### Code Quality
 ```bash
-black .                   # Format code
-flake8                    # Lint code
+ruff format .             # Format code
+ruff check .              # Lint code
+ruff check . --fix        # Fix linting issues automatically
 ```
 
 ### Package Management
