@@ -188,7 +188,6 @@ def launch(
     """
 
     # if no launch template is specified, list all the launch templates
-
     if not launch_template:
         typer.secho("Please specify a launch template", fg=typer.colors.RED)
         typer.secho("Available launch templates:", fg=typer.colors.YELLOW)
@@ -205,9 +204,12 @@ def launch(
             fg=typer.colors.YELLOW,
         )
         typer.secho(f"Launching instance based on launch template {launch_template_name}")
+    else:
+        # launch template name was provided, get the ID and set variables
+        launch_template_name = launch_template
+        launch_template_id = get_launch_template_id(launch_template)
 
     # if no name is specified, ask the user for the name
-
     if not name:
         random_string = "".join(random.choices(string.ascii_letters + string.digits, k=6))
         name_suggestion = launch_template_name + "-" + random_string
