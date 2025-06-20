@@ -200,23 +200,17 @@ def launch(
         launch_template_name = launch_template["LaunchTemplateName"]
         launch_template_id = launch_template["LaunchTemplateId"]
 
-        typer.secho(
-            f"Launch template {launch_template_name} selected", fg=typer.colors.YELLOW
-        )
+        typer.secho(f"Launch template {launch_template_name} selected", fg=typer.colors.YELLOW)
         typer.secho(
             f"Defaulting to latest version: {launch_template['LatestVersionNumber']}",
             fg=typer.colors.YELLOW,
         )
-        typer.secho(
-            f"Launching instance based on launch template {launch_template_name}"
-        )
+        typer.secho(f"Launching instance based on launch template {launch_template_name}")
 
     # if no name is specified, ask the user for the name
 
     if not name:
-        random_string = "".join(
-            random.choices(string.ascii_letters + string.digits, k=6)
-        )
+        random_string = "".join(random.choices(string.ascii_letters + string.digits, k=6))
         name_suggestion = launch_template_name + "-" + random_string
         name = typer.prompt(
             "Please enter a name for the instance", type=str, default=name_suggestion

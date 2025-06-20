@@ -8,13 +8,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 pytest                    # Run all tests
 pytest tests/test_*.py    # Run specific test file
-tox                       # Run tests across Python versions
 ```
 
 ### Code Quality
 ```bash
-black .                   # Format code
-flake8                    # Lint code
+ruff format .             # Format code
+ruff check .              # Lint code
+ruff check . --fix        # Fix linting issues automatically
 ```
 
 ### Package Management

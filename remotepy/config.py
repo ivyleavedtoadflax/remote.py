@@ -1,15 +1,12 @@
 import configparser
 import os
-from typing import Optional
 
 import typer
 import wasabi
 
 from remotepy.utils import get_instance_ids, get_instance_info, get_instances
 
-CONFIG_PATH = os.path.join(
-    os.path.expanduser("~"), ".config", "remote.py/", "config.ini"
-)
+CONFIG_PATH = os.path.join(os.path.expanduser("~"), ".config", "remote.py/", "config.ini")
 cfg = configparser.ConfigParser()
 cfg.read(CONFIG_PATH)
 
@@ -24,18 +21,14 @@ def read_config(config_path):
 
 
 def create_config_dir(config_path):
-
     # check whether the config path exists, and create if not.
 
     if not os.path.exists(os.path.dirname(config_path)):
         os.makedirs(os.path.dirname(config_path))
-        typer.secho(
-            f"Created config directory: {os.path.dirname(config_path)}", fg="green"
-        )
+        typer.secho(f"Created config directory: {os.path.dirname(config_path)}", fg="green")
 
 
 def write_config(cfg, config_path):
-
     create_config_dir(config_path)
 
     with open(config_path, "w") as configfile:
@@ -68,7 +61,7 @@ def show(config_path: str = typer.Option(CONFIG_PATH, "--config", "-c")):
 
 @app.command()
 def add(
-    instance_name: Optional[str] = typer.Argument(None),
+    instance_name: str | None = typer.Argument(None),
     config_path: str = typer.Option(CONFIG_PATH, "--config", "-c"),
 ):
     """
@@ -106,7 +99,7 @@ def add(
         aligns = ["l", "l", "l", "l"]
         data = [
             (i, name, id, it)
-            for i, (name, id, it) in enumerate(zip(names, ids, instance_types), 1)
+            for i, (name, id, it) in enumerate(zip(names, ids, instance_types, strict=False), 1)
         ]
 
         # Print the instances table

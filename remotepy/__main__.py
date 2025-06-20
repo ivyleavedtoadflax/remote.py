@@ -4,10 +4,10 @@ import typer
 
 from remotepy.ami import app as ami_app
 from remotepy.config import app as config_app
+from remotepy.ecs import app as ecs_app
 from remotepy.instance import app as app
 from remotepy.snapshot import app as snapshot_app
 from remotepy.volume import app as volume_app
-from remotepy.ecs import app as ecs_app
 
 # This means that the instance app is the default app, so we don't need to run
 # remote instance, we can just run remote

@@ -63,17 +63,36 @@ remotepy status another_ec2_instance
 
 # For development
 
-Create a virtual environment and install the package
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management and requires Python 3.12+.
 
-```
-virtualenv - -python 3.8 venv
-source venv/bin/activate
-pip install ".[tests]"
+## Setup
+
+```bash
+# Install dependencies
+uv sync --dev
+
+# Install pre-commit hooks (optional)
+uv run pre-commit install
 ```
 
+## Development Commands
+
+```bash
 # Run tests
+uv run pytest
 
+# Code formatting and linting
+uv run ruff format .      # Format code
+uv run ruff check .       # Lint code
+uv run ruff check . --fix # Fix linting issues
 
+# Build package
+uv build
 ```
-pytest
-```
+
+## CI/CD
+
+The project includes automated CI/CD:
+- **Tests** run automatically on all pushes
+- **Code quality** checks (ruff linting/formatting) 
+- **Manual publishing** workflow for PyPI releases

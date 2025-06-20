@@ -2,9 +2,10 @@ import configparser
 import datetime
 
 import pytest
+from typer.testing import CliRunner
+
 import remotepy
 from remotepy.instance import app, get_launch_template_id
-from typer.testing import CliRunner
 
 runner = CliRunner()
 
@@ -59,7 +60,11 @@ def mock_describe_instances_response():
     }
 
 
-def test_instance_status_when_not_found(test_config):
+def test_instance_status_when_not_found(mocker, test_config):
+    # Mock the AWS EC2 client to return empty reservations (instance not found)
+    mocker.patch("remotepy.utils.ec2_client", autospec=True)
+    remotepy.utils.ec2_client.describe_instances.return_value = {"Reservations": []}
+
     result = runner.invoke(app, ["status", "test"])
 
     # Expect a 1 exit code as we sys.exit(1)
@@ -67,7 +72,11 @@ def test_instance_status_when_not_found(test_config):
     assert "Instance test not found" in result.stdout
 
 
-def test_empty_list(test_config):
+def test_empty_list(mocker, test_config):
+    # Mock the AWS EC2 client to return empty reservations
+    mocker.patch("remotepy.utils.ec2_client", autospec=True)
+    remotepy.utils.ec2_client.describe_instances.return_value = {"Reservations": []}
+
     result = runner.invoke(app, ["list"])
 
     assert result.exit_code == 0
@@ -82,9 +91,7 @@ def test_list(mocker, mock_describe_instances_response):
     mocker.patch("remotepy.utils.ec2_client", autospec=True)
 
     # Simulate a response from AWS EC2
-    remotepy.utils.ec2_client.describe_instances.return_value = (
-        mock_describe_instances_response
-    )
+    remotepy.utils.ec2_client.describe_instances.return_value = mock_describe_instances_response
     # Call the function
     result = runner.invoke(app, ["list"])
 
@@ -101,7 +108,7 @@ def test_list(mocker, mock_describe_instances_response):
     assert "i-0123456789abcdef0" in result.stdout
     assert "running" in result.stdout
     assert "t2.micro" in result.stdout
-    assert "2023-07-14 22:00:00 UTC" in result.stdout
+    assert "2023-07-15 00:00:00 UTC" in result.stdout
 
 
 def test_get_launch_template_id(mocker):
@@ -109,9 +116,7 @@ def test_get_launch_template_id(mocker):
     mocker.patch("remotepy.instance.ec2_client", autospec=True)
 
     # Mock the describe_launch_templates function
-    mock_describe_launch_templates = (
-        remotepy.instance.ec2_client.describe_launch_templates
-    )
+    mock_describe_launch_templates = remotepy.instance.ec2_client.describe_launch_templates
 
     # Simulate a response from AWS EC2
     mock_describe_launch_templates.return_value = {

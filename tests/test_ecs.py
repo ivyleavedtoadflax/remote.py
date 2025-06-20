@@ -1,7 +1,5 @@
 from unittest.mock import patch
 
-import pytest
-import typer
 from remotepy.ecs import prompt_for_services_name
 
 
