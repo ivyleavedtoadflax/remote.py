@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        python-version: ["3.8", "3.12"]
 
     steps:
     - uses: actions/checkout@v4
@@ -26,13 +26,16 @@ jobs:
       run: uv python install ${{ matrix.python-version }}
     
     - name: Install dependencies
-      run: uv sync --dev
+      run: uv sync --all-extras --dev
     
-    - name: Lint with flake8
-      run: uv run flake8 remotepy tests
-    
-    - name: Format check with black
-      run: uv run black --check remotepy tests
-    
-    - name: Run tests
-      run: uv run pytest --verbose
+    - name: Run ruff linting
+      run: |
+        uv run ruff check .
+
+    - name: Run ruff formatting check
+      run: |
+        uv run ruff format --check .
+
+    - name: Run tests with pytest
+      run: |
+        uv run pytest -v --tb=short
