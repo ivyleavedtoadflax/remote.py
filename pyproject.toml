@@ -76,6 +76,7 @@ line-ending = "auto"
 dev = [
     "pre-commit>=4.2.0",
     "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
     "pytest-mock>=3.14.1",
     "ruff>=0.12.0",
     "tox>=4.27.0",
@@ -83,3 +84,58 @@ dev = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["src"]
+
+# ============================================================================
+# Test Coverage Configuration
+# ============================================================================
+
+[tool.coverage.run]
+source = ["remotepy"]
+omit = [
+    "tests/*",
+    "remotepy/__init__.py",
+    "*/__pycache__/*",
+    "*/migrations/*",
+    "*/venv/*",
+    "*/.venv/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+show_missing = true
+skip_covered = false
+skip_empty = false
+
+# Minimum coverage thresholds - fail if below these percentages
+fail_under = 85
+precision = 1
+
+[tool.coverage.html]
+directory = "htmlcov"
+title = "RemotePy Test Coverage Report"
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
+# Per-module minimum coverage requirements
+[tool.coverage.report.coverage_thresholds]
+# Core modules should maintain high coverage
+"remotepy/utils.py" = 95
+"remotepy/config.py" = 90
+"remotepy/ecs.py" = 95
+"remotepy/instance.py" = 60  # Allow lower for now due to complex CLI interactions
+"remotepy/ami.py" = 95
+"remotepy/volume.py" = 90
+"remotepy/snapshot.py" = 90
+"remotepy/__main__.py" = 90

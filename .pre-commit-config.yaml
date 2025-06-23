@@ -17,7 +17,7 @@ repos:
 
       # 3. Ruff formatter
       - id: ruff-format
-        stages: [manual]  # also opt-in, to avoid auto-formatting on push
+        stages: [pre-push]  # automatically format on push
 
   - repo: local
     hooks:
