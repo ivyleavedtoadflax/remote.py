@@ -290,10 +290,10 @@ def test_stop_instance_cancelled(mocker):
 
 def test_stop_instance_exception(mocker):
     mock_ec2_client = mocker.patch("remotepy.instance.ec2_client", autospec=True)
-    mock_get_instance_id = mocker.patch(
+    mocker.patch(
         "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
     )
-    mock_is_instance_running = mocker.patch(
+    mocker.patch(
         "remotepy.instance.is_instance_running", return_value=True
     )
 
@@ -327,10 +327,10 @@ def test_type_command_show_current_type(mocker):
 
 
 def test_type_command_same_type(mocker):
-    mock_get_instance_id = mocker.patch(
+    mocker.patch(
         "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
     )
-    mock_get_instance_type = mocker.patch(
+    mocker.patch(
         "remotepy.instance.get_instance_type", return_value="t2.micro"
     )
 
@@ -341,13 +341,13 @@ def test_type_command_same_type(mocker):
 
 
 def test_type_command_running_instance_error(mocker):
-    mock_get_instance_id = mocker.patch(
+    mocker.patch(
         "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
     )
-    mock_get_instance_type = mocker.patch(
+    mocker.patch(
         "remotepy.instance.get_instance_type", return_value="t2.micro"
     )
-    mock_is_instance_running = mocker.patch(
+    mocker.patch(
         "remotepy.instance.is_instance_running", return_value=True
     )
 
@@ -359,16 +359,16 @@ def test_type_command_running_instance_error(mocker):
 
 def test_type_command_change_success(mocker):
     mock_ec2_client = mocker.patch("remotepy.instance.ec2_client", autospec=True)
-    mock_get_instance_id = mocker.patch(
+    mocker.patch(
         "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
     )
-    mock_get_instance_type = mocker.patch(
+    mocker.patch(
         "remotepy.instance.get_instance_type", side_effect=["t2.micro", "t2.small"]
     )
-    mock_is_instance_running = mocker.patch(
+    mocker.patch(
         "remotepy.instance.is_instance_running", return_value=False
     )
-    mock_time = mocker.patch("remotepy.instance.time.sleep")
+    mocker.patch("remotepy.instance.time.sleep")
 
     result = runner.invoke(app, ["type", "t2.small", "test-instance"])
 
@@ -385,7 +385,7 @@ def test_terminate_instance_name_mismatch(mocker):
     mock_get_instance_name = mocker.patch(
         "remotepy.instance.get_instance_name", return_value="test-instance"
     )
-    mock_get_instance_id = mocker.patch(
+    mocker.patch(
         "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
     )
 
@@ -403,7 +403,7 @@ def test_terminate_instance_name_mismatch(mocker):
 
 def test_terminate_instance_cancelled(mocker):
     mock_ec2_client = mocker.patch("remotepy.instance.ec2_client", autospec=True)
-    mock_get_instance_id = mocker.patch(
+    mocker.patch(
         "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
     )
 
@@ -420,7 +420,7 @@ def test_terminate_instance_cancelled(mocker):
 
 def test_terminate_instance_confirmed(mocker):
     mock_ec2_client = mocker.patch("remotepy.instance.ec2_client", autospec=True)
-    mock_get_instance_id = mocker.patch(
+    mocker.patch(
         "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
     )
 
@@ -437,7 +437,7 @@ def test_terminate_instance_confirmed(mocker):
 
 def test_terminate_terraform_managed_instance(mocker):
     mock_ec2_client = mocker.patch("remotepy.instance.ec2_client", autospec=True)
-    mock_get_instance_id = mocker.patch(
+    mocker.patch(
         "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
     )
 

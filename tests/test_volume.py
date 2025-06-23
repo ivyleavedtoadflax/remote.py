@@ -68,7 +68,7 @@ def test_list_volumes_without_instance_name(mocker, mock_volume_response):
     mock_get_instance_id = mocker.patch(
         "remotepy.volume.get_instance_id", return_value="i-0123456789abcdef0"
     )
-    mock_get_volume_name = mocker.patch(
+    mocker.patch(
         "remotepy.volume.get_volume_name", return_value="test-volume"
     )
 
@@ -116,10 +116,10 @@ def test_list_volumes_no_attachments(mocker):
 
 def test_list_volumes_multiple_attachments(mocker):
     mock_ec2_client = mocker.patch("remotepy.volume.ec2_client", autospec=True)
-    mock_get_instance_id = mocker.patch(
+    mocker.patch(
         "remotepy.volume.get_instance_id", return_value="i-0123456789abcdef0"
     )
-    mock_get_volume_name = mocker.patch(
+    mocker.patch(
         "remotepy.volume.get_volume_name", side_effect=["vol1-name", "vol2-name"]
     )
 
@@ -171,7 +171,7 @@ def test_list_command_alias_ls(mocker, mock_volume_response):
     mock_get_instance_id = mocker.patch(
         "remotepy.volume.get_instance_id", return_value="i-0123456789abcdef0"
     )
-    mock_get_volume_name = mocker.patch(
+    mocker.patch(
         "remotepy.volume.get_volume_name", return_value="test-volume"
     )
 

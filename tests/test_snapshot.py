@@ -134,10 +134,10 @@ def test_list_snapshots_without_instance_name(mocker, mock_snapshot_response):
 
 def test_list_snapshots_multiple_volumes(mocker):
     mock_ec2_client = mocker.patch("remotepy.snapshot.ec2_client", autospec=True)
-    mock_get_instance_id = mocker.patch(
+    mocker.patch(
         "remotepy.snapshot.get_instance_id", return_value="i-0123456789abcdef0"
     )
-    mock_get_volume_ids = mocker.patch(
+    mocker.patch(
         "remotepy.snapshot.get_volume_ids",
         return_value=["vol-0123456789abcdef0", "vol-0123456789abcdef1"]
     )
@@ -181,10 +181,10 @@ def test_list_snapshots_multiple_volumes(mocker):
 
 def test_list_snapshots_no_snapshots(mocker):
     mock_ec2_client = mocker.patch("remotepy.snapshot.ec2_client", autospec=True)
-    mock_get_instance_id = mocker.patch(
+    mocker.patch(
         "remotepy.snapshot.get_instance_id", return_value="i-0123456789abcdef0"
     )
-    mock_get_volume_ids = mocker.patch(
+    mocker.patch(
         "remotepy.snapshot.get_volume_ids", return_value=["vol-0123456789abcdef0"]
     )
 
