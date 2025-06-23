@@ -75,13 +75,7 @@ def test_get_instance_id_single_instance(mocker):
     mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
 
     mock_ec2_client.describe_instances.return_value = {
-        "Reservations": [
-            {
-                "Instances": [
-                    {"InstanceId": "i-0123456789abcdef0"}
-                ]
-            }
-        ]
+        "Reservations": [{"Instances": [{"InstanceId": "i-0123456789abcdef0"}]}]
     }
 
     result = get_instance_id("test-instance")
@@ -172,20 +166,14 @@ def test_get_instance_dns(mocker):
 
     mock_ec2_client.describe_instances.return_value = {
         "Reservations": [
-            {
-                "Instances": [
-                    {"PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com"}
-                ]
-            }
+            {"Instances": [{"PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com"}]}
         ]
     }
 
     result = get_instance_dns("i-0123456789abcdef0")
 
     assert result == "ec2-123-45-67-89.compute-1.amazonaws.com"
-    mock_ec2_client.describe_instances.assert_called_once_with(
-        InstanceIds=["i-0123456789abcdef0"]
-    )
+    mock_ec2_client.describe_instances.assert_called_once_with(InstanceIds=["i-0123456789abcdef0"])
 
 
 def test_get_instance_name_success(mocker):
@@ -257,9 +245,7 @@ def test_get_instance_ids(mock_instances_response):
 def test_is_instance_running_true(mocker):
     mock_get_instance_status = mocker.patch("remotepy.utils.get_instance_status")
     mock_get_instance_status.return_value = {
-        "InstanceStatuses": [
-            {"InstanceState": {"Name": "running"}}
-        ]
+        "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
     }
 
     result = is_instance_running("i-0123456789abcdef0")
@@ -271,9 +257,7 @@ def test_is_instance_running_true(mocker):
 def test_is_instance_running_false(mocker):
     mock_get_instance_status = mocker.patch("remotepy.utils.get_instance_status")
     mock_get_instance_status.return_value = {
-        "InstanceStatuses": [
-            {"InstanceState": {"Name": "stopped"}}
-        ]
+        "InstanceStatuses": [{"InstanceState": {"Name": "stopped"}}]
     }
 
     result = is_instance_running("i-0123456789abcdef0")
@@ -293,9 +277,7 @@ def test_is_instance_running_no_status(mocker):
 def test_is_instance_stopped_true(mocker):
     mock_get_instance_status = mocker.patch("remotepy.utils.get_instance_status")
     mock_get_instance_status.return_value = {
-        "InstanceStatuses": [
-            {"InstanceState": {"Name": "stopped"}}
-        ]
+        "InstanceStatuses": [{"InstanceState": {"Name": "stopped"}}]
     }
 
     result = is_instance_stopped("i-0123456789abcdef0")
@@ -306,9 +288,7 @@ def test_is_instance_stopped_true(mocker):
 def test_is_instance_stopped_false(mocker):
     mock_get_instance_status = mocker.patch("remotepy.utils.get_instance_status")
     mock_get_instance_status.return_value = {
-        "InstanceStatuses": [
-            {"InstanceState": {"Name": "running"}}
-        ]
+        "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
     }
 
     result = is_instance_stopped("i-0123456789abcdef0")
@@ -320,21 +300,13 @@ def test_get_instance_type(mocker):
     mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
 
     mock_ec2_client.describe_instances.return_value = {
-        "Reservations": [
-            {
-                "Instances": [
-                    {"InstanceType": "t2.micro"}
-                ]
-            }
-        ]
+        "Reservations": [{"Instances": [{"InstanceType": "t2.micro"}]}]
     }
 
     result = get_instance_type("i-0123456789abcdef0")
 
     assert result == "t2.micro"
-    mock_ec2_client.describe_instances.assert_called_once_with(
-        InstanceIds=["i-0123456789abcdef0"]
-    )
+    mock_ec2_client.describe_instances.assert_called_once_with(InstanceIds=["i-0123456789abcdef0"])
 
 
 def test_get_volume_ids(mocker):
@@ -372,9 +344,7 @@ def test_get_volume_name_with_name_tag(mocker):
     result = get_volume_name("vol-0123456789abcdef0")
 
     assert result == "test-volume"
-    mock_ec2_client.describe_volumes.assert_called_once_with(
-        VolumeIds=["vol-0123456789abcdef0"]
-    )
+    mock_ec2_client.describe_volumes.assert_called_once_with(VolumeIds=["vol-0123456789abcdef0"])
 
 
 def test_get_volume_name_without_name_tag(mocker):
@@ -410,11 +380,7 @@ def test_get_volume_name_no_tags(mocker):
 def test_get_snapshot_status(mocker):
     mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
 
-    mock_ec2_client.describe_snapshots.return_value = {
-        "Snapshots": [
-            {"State": "completed"}
-        ]
-    }
+    mock_ec2_client.describe_snapshots.return_value = {"Snapshots": [{"State": "completed"}]}
 
     result = get_snapshot_status("snap-0123456789abcdef0")
 
@@ -428,9 +394,7 @@ def test_get_launch_template_id(mocker):
     mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
 
     mock_ec2_client.describe_launch_templates.return_value = {
-        "LaunchTemplates": [
-            {"LaunchTemplateId": "lt-0123456789abcdef0"}
-        ]
+        "LaunchTemplates": [{"LaunchTemplateId": "lt-0123456789abcdef0"}]
     }
 
     result = get_launch_template_id("test-template")

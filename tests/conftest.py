@@ -45,6 +45,7 @@ def test_config_file(tmpdir):
 # Comprehensive AWS Mock Data Fixtures
 # ============================================================================
 
+
 @pytest.fixture
 def mock_ec2_instances():
     """Standard mock EC2 instances data for testing."""
@@ -229,6 +230,7 @@ def mock_launch_templates():
 # Comprehensive AWS Client Mocking
 # ============================================================================
 
+
 @pytest.fixture
 def mock_aws_clients(mocker):
     """Mock all AWS clients used in the application with comprehensive responses."""
@@ -264,8 +266,16 @@ def mock_aws_clients(mocker):
 
 
 @pytest.fixture
-def populated_aws_clients(mocker, mock_ec2_instances, mock_ecs_clusters, mock_ecs_services,
-                          mock_ebs_volumes, mock_ebs_snapshots, mock_amis, mock_launch_templates):
+def populated_aws_clients(
+    mocker,
+    mock_ec2_instances,
+    mock_ecs_clusters,
+    mock_ecs_services,
+    mock_ebs_volumes,
+    mock_ebs_snapshots,
+    mock_amis,
+    mock_launch_templates,
+):
     """Mock AWS clients with realistic populated data for comprehensive testing."""
     # Mock EC2 client with populated responses
     mock_ec2 = mocker.patch("remotepy.utils.ec2_client", autospec=True)
@@ -280,10 +290,7 @@ def populated_aws_clients(mocker, mock_ec2_instances, mock_ecs_clusters, mock_ec
                 "InstanceId": "i-0123456789abcdef0",
                 "InstanceState": {"Name": "running"},
                 "SystemStatus": {"Status": "ok"},
-                "InstanceStatus": {
-                    "Status": "ok",
-                    "Details": [{"Status": "passed"}]
-                },
+                "InstanceStatus": {"Status": "ok", "Details": [{"Status": "passed"}]},
             }
         ]
     }
@@ -305,6 +312,7 @@ def populated_aws_clients(mocker, mock_ec2_instances, mock_ecs_clusters, mock_ec
 # ============================================================================
 # Utility Test Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def aws_account_id():

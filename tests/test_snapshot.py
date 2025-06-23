@@ -33,16 +33,20 @@ def mock_snapshot_response():
 def test_create_snapshot(mocker):
     mock_ec2_client = mocker.patch("remotepy.snapshot.ec2_client", autospec=True)
 
-    mock_ec2_client.create_snapshot.return_value = {
-        "SnapshotId": "snap-0123456789abcdef0"
-    }
+    mock_ec2_client.create_snapshot.return_value = {"SnapshotId": "snap-0123456789abcdef0"}
 
-    result = runner.invoke(app, [
-        "create",
-        "--volume-id", "vol-0123456789abcdef0",
-        "--name", "test-snapshot",
-        "--description", "Test snapshot description"
-    ])
+    result = runner.invoke(
+        app,
+        [
+            "create",
+            "--volume-id",
+            "vol-0123456789abcdef0",
+            "--name",
+            "test-snapshot",
+            "--description",
+            "Test snapshot description",
+        ],
+    )
 
     assert result.exit_code == 0
     mock_ec2_client.create_snapshot.assert_called_once_with(
@@ -61,14 +65,9 @@ def test_create_snapshot(mocker):
 def test_create_snapshot_minimal_params(mocker):
     mock_ec2_client = mocker.patch("remotepy.snapshot.ec2_client", autospec=True)
 
-    mock_ec2_client.create_snapshot.return_value = {
-        "SnapshotId": "snap-minimal"
-    }
+    mock_ec2_client.create_snapshot.return_value = {"SnapshotId": "snap-minimal"}
 
-    result = runner.invoke(app, [
-        "create",
-        "--volume-id", "vol-test"
-    ])
+    result = runner.invoke(app, ["create", "--volume-id", "vol-test"])
 
     assert result.exit_code == 0
     mock_ec2_client.create_snapshot.assert_called_once_with(
@@ -134,12 +133,10 @@ def test_list_snapshots_without_instance_name(mocker, mock_snapshot_response):
 
 def test_list_snapshots_multiple_volumes(mocker):
     mock_ec2_client = mocker.patch("remotepy.snapshot.ec2_client", autospec=True)
-    mocker.patch(
-        "remotepy.snapshot.get_instance_id", return_value="i-0123456789abcdef0"
-    )
+    mocker.patch("remotepy.snapshot.get_instance_id", return_value="i-0123456789abcdef0")
     mocker.patch(
         "remotepy.snapshot.get_volume_ids",
-        return_value=["vol-0123456789abcdef0", "vol-0123456789abcdef1"]
+        return_value=["vol-0123456789abcdef0", "vol-0123456789abcdef1"],
     )
 
     # Mock different responses for different volume IDs
@@ -147,23 +144,27 @@ def test_list_snapshots_multiple_volumes(mocker):
         volume_id = Filters[0]["Values"][0]
         if volume_id == "vol-0123456789abcdef0":
             return {
-                "Snapshots": [{
-                    "SnapshotId": "snap-vol1",
-                    "VolumeId": "vol-0123456789abcdef0",
-                    "State": "completed",
-                    "StartTime": datetime.datetime(2023, 7, 15, 0, 0, 0, tzinfo=datetime.UTC),
-                    "Description": "Snapshot for vol1",
-                }]
+                "Snapshots": [
+                    {
+                        "SnapshotId": "snap-vol1",
+                        "VolumeId": "vol-0123456789abcdef0",
+                        "State": "completed",
+                        "StartTime": datetime.datetime(2023, 7, 15, 0, 0, 0, tzinfo=datetime.UTC),
+                        "Description": "Snapshot for vol1",
+                    }
+                ]
             }
         else:
             return {
-                "Snapshots": [{
-                    "SnapshotId": "snap-vol2",
-                    "VolumeId": "vol-0123456789abcdef1",
-                    "State": "pending",
-                    "StartTime": datetime.datetime(2023, 7, 16, 0, 0, 0, tzinfo=datetime.UTC),
-                    "Description": "Snapshot for vol2",
-                }]
+                "Snapshots": [
+                    {
+                        "SnapshotId": "snap-vol2",
+                        "VolumeId": "vol-0123456789abcdef1",
+                        "State": "pending",
+                        "StartTime": datetime.datetime(2023, 7, 16, 0, 0, 0, tzinfo=datetime.UTC),
+                        "Description": "Snapshot for vol2",
+                    }
+                ]
             }
 
     mock_ec2_client.describe_snapshots.side_effect = mock_describe_snapshots
@@ -181,12 +182,8 @@ def test_list_snapshots_multiple_volumes(mocker):
 
 def test_list_snapshots_no_snapshots(mocker):
     mock_ec2_client = mocker.patch("remotepy.snapshot.ec2_client", autospec=True)
-    mocker.patch(
-        "remotepy.snapshot.get_instance_id", return_value="i-0123456789abcdef0"
-    )
-    mocker.patch(
-        "remotepy.snapshot.get_volume_ids", return_value=["vol-0123456789abcdef0"]
-    )
+    mocker.patch("remotepy.snapshot.get_instance_id", return_value="i-0123456789abcdef0")
+    mocker.patch("remotepy.snapshot.get_volume_ids", return_value=["vol-0123456789abcdef0"])
 
     mock_ec2_client.describe_snapshots.return_value = {"Snapshots": []}
 

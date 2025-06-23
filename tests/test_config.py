@@ -252,14 +252,22 @@ def test_add_no_instances(mocker):
 
 
 def test_add_interactive_valid_selection(mocker, mock_instances_data):
-    mock_get_instances = mocker.patch("remotepy.config.get_instances", return_value=mock_instances_data)
-    mock_get_instance_ids = mocker.patch("remotepy.config.get_instance_ids", return_value=["i-123", "i-456"])
-    mock_get_instance_info = mocker.patch("remotepy.config.get_instance_info",
-                                        return_value=(["test-instance-1", "test-instance-2"],
-                                                    ["dns1", "dns2"],
-                                                    ["running", "stopped"],
-                                                    ["t2.micro", "t2.small"],
-                                                    ["time1", "time2"]))
+    mock_get_instances = mocker.patch(
+        "remotepy.config.get_instances", return_value=mock_instances_data
+    )
+    mock_get_instance_ids = mocker.patch(
+        "remotepy.config.get_instance_ids", return_value=["i-123", "i-456"]
+    )
+    mock_get_instance_info = mocker.patch(
+        "remotepy.config.get_instance_info",
+        return_value=(
+            ["test-instance-1", "test-instance-2"],
+            ["dns1", "dns2"],
+            ["running", "stopped"],
+            ["t2.micro", "t2.small"],
+            ["time1", "time2"],
+        ),
+    )
     mock_config_manager = mocker.patch("remotepy.config.config_manager")
 
     result = runner.invoke(config.app, ["add"], input="1\n")
@@ -268,19 +276,25 @@ def test_add_interactive_valid_selection(mocker, mock_instances_data):
     mock_get_instances.assert_called_once()
     mock_get_instance_ids.assert_called_once_with(mock_instances_data)
     mock_get_instance_info.assert_called_once_with(mock_instances_data)
-    mock_config_manager.set_instance_name.assert_called_once_with("test-instance-1", config.CONFIG_PATH)
+    mock_config_manager.set_instance_name.assert_called_once_with(
+        "test-instance-1", config.CONFIG_PATH
+    )
     assert "Default instance set to test-instance-1" in result.stdout
 
 
 def test_add_interactive_invalid_selection_too_high(mocker, mock_instances_data):
     mocker.patch("remotepy.config.get_instances", return_value=mock_instances_data)
     mocker.patch("remotepy.config.get_instance_ids", return_value=["i-123", "i-456"])
-    mocker.patch("remotepy.config.get_instance_info",
-                                        return_value=(["test-instance-1", "test-instance-2"],
-                                                    ["dns1", "dns2"],
-                                                    ["running", "stopped"],
-                                                    ["t2.micro", "t2.small"],
-                                                    ["time1", "time2"]))
+    mocker.patch(
+        "remotepy.config.get_instance_info",
+        return_value=(
+            ["test-instance-1", "test-instance-2"],
+            ["dns1", "dns2"],
+            ["running", "stopped"],
+            ["t2.micro", "t2.small"],
+            ["time1", "time2"],
+        ),
+    )
     mock_config_manager = mocker.patch("remotepy.config.config_manager")
 
     result = runner.invoke(config.app, ["add"], input="5\n")
@@ -293,12 +307,16 @@ def test_add_interactive_invalid_selection_too_high(mocker, mock_instances_data)
 def test_add_interactive_invalid_selection_zero(mocker, mock_instances_data):
     mocker.patch("remotepy.config.get_instances", return_value=mock_instances_data)
     mocker.patch("remotepy.config.get_instance_ids", return_value=["i-123", "i-456"])
-    mocker.patch("remotepy.config.get_instance_info",
-                                        return_value=(["test-instance-1", "test-instance-2"],
-                                                    ["dns1", "dns2"],
-                                                    ["running", "stopped"],
-                                                    ["t2.micro", "t2.small"],
-                                                    ["time1", "time2"]))
+    mocker.patch(
+        "remotepy.config.get_instance_info",
+        return_value=(
+            ["test-instance-1", "test-instance-2"],
+            ["dns1", "dns2"],
+            ["running", "stopped"],
+            ["t2.micro", "t2.small"],
+            ["time1", "time2"],
+        ),
+    )
     mock_config_manager = mocker.patch("remotepy.config.config_manager")
 
     result = runner.invoke(config.app, ["add"], input="0\n")
@@ -311,16 +329,22 @@ def test_add_interactive_invalid_selection_zero(mocker, mock_instances_data):
 def test_add_interactive_valid_selection_second_instance(mocker, mock_instances_data):
     mocker.patch("remotepy.config.get_instances", return_value=mock_instances_data)
     mocker.patch("remotepy.config.get_instance_ids", return_value=["i-123", "i-456"])
-    mocker.patch("remotepy.config.get_instance_info",
-                                        return_value=(["test-instance-1", "test-instance-2"],
-                                                    ["dns1", "dns2"],
-                                                    ["running", "stopped"],
-                                                    ["t2.micro", "t2.small"],
-                                                    ["time1", "time2"]))
+    mocker.patch(
+        "remotepy.config.get_instance_info",
+        return_value=(
+            ["test-instance-1", "test-instance-2"],
+            ["dns1", "dns2"],
+            ["running", "stopped"],
+            ["t2.micro", "t2.small"],
+            ["time1", "time2"],
+        ),
+    )
     mock_config_manager = mocker.patch("remotepy.config.config_manager")
 
     result = runner.invoke(config.app, ["add"], input="2\n")
 
     assert result.exit_code == 0
-    mock_config_manager.set_instance_name.assert_called_once_with("test-instance-2", config.CONFIG_PATH)
+    mock_config_manager.set_instance_name.assert_called_once_with(
+        "test-instance-2", config.CONFIG_PATH
+    )
     assert "Default instance set to test-instance-2" in result.stdout

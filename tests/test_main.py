@@ -1,4 +1,3 @@
-
 from typer.testing import CliRunner
 
 from remotepy.__main__ import app
@@ -8,8 +7,7 @@ runner = CliRunner()
 
 def test_version_command(mocker):
     mock_version = mocker.patch(
-        "remotepy.__main__.importlib.metadata.version",
-        return_value="0.2.5"
+        "remotepy.__main__.importlib.metadata.version", return_value="0.2.5"
     )
 
     result = runner.invoke(app, ["version"])
@@ -40,12 +38,12 @@ def test_main_app_structure():
     from remotepy import ami, config, ecs, instance, snapshot, volume
 
     # Verify that we can access the apps
-    assert hasattr(ami, 'app')
-    assert hasattr(config, 'app')
-    assert hasattr(ecs, 'app')
-    assert hasattr(instance, 'app')
-    assert hasattr(snapshot, 'app')
-    assert hasattr(volume, 'app')
+    assert hasattr(ami, "app")
+    assert hasattr(config, "app")
+    assert hasattr(ecs, "app")
+    assert hasattr(instance, "app")
+    assert hasattr(snapshot, "app")
+    assert hasattr(volume, "app")
 
 
 def test_help_shows_subcommands():

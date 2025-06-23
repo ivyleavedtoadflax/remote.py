@@ -87,8 +87,7 @@ def test_prompt_for_cluster_name_single_cluster(mocker, capsys):
 
 def test_prompt_for_cluster_name_multiple_clusters(mocker, capsys):
     mock_get_all_clusters = mocker.patch(
-        "remotepy.ecs.get_all_clusters",
-        return_value=["test-cluster-1", "test-cluster-2"]
+        "remotepy.ecs.get_all_clusters", return_value=["test-cluster-1", "test-cluster-2"]
     )
     mock_prompt = mocker.patch("typer.prompt", return_value="2")
 
@@ -146,7 +145,7 @@ def test_prompt_for_services_name_no_services(mocker):
 def test_prompt_for_services_name_single_service_selection(mocker, capsys):
     mock_get_all_services = mocker.patch(
         "remotepy.ecs.get_all_services",
-        return_value=["test-service-1", "test-service-2", "test-service-3"]
+        return_value=["test-service-1", "test-service-2", "test-service-3"],
     )
     mocker.patch("typer.prompt", return_value="2")
 
@@ -160,8 +159,7 @@ def test_prompt_for_services_name_single_service_selection(mocker, capsys):
 
 def test_list_clusters_command(mocker):
     mock_get_all_clusters = mocker.patch(
-        "remotepy.ecs.get_all_clusters",
-        return_value=["test-cluster-1", "test-cluster-2"]
+        "remotepy.ecs.get_all_clusters", return_value=["test-cluster-1", "test-cluster-2"]
     )
 
     result = runner.invoke(app, ["list-clusters"])
@@ -183,8 +181,7 @@ def test_list_clusters_command_empty(mocker):
 
 def test_list_services_command_with_cluster_name(mocker):
     mock_get_all_services = mocker.patch(
-        "remotepy.ecs.get_all_services",
-        return_value=["test-service-1", "test-service-2"]
+        "remotepy.ecs.get_all_services", return_value=["test-service-1", "test-service-2"]
     )
 
     result = runner.invoke(app, ["list-services", "test-cluster"])
@@ -213,9 +210,9 @@ def test_list_services_command_without_cluster_name(mocker):
 def test_scale_command_with_all_params(mocker):
     mock_scale_service = mocker.patch("remotepy.ecs.scale_service")
 
-    result = runner.invoke(app, [
-        "scale", "test-cluster", "test-service", "--count", "3"
-    ], input="y\n")
+    result = runner.invoke(
+        app, ["scale", "test-cluster", "test-service", "--count", "3"], input="y\n"
+    )
 
     assert result.exit_code == 0
     mock_scale_service.assert_called_once_with("test-cluster", "test-service", 3)
@@ -231,9 +228,7 @@ def test_scale_command_without_cluster_name(mocker):
     )
     mock_scale_service = mocker.patch("remotepy.ecs.scale_service")
 
-    result = runner.invoke(app, [
-        "scale", "--count", "2"
-    ], input="y\n")
+    result = runner.invoke(app, ["scale", "--count", "2"], input="y\n")
 
     assert result.exit_code == 0
     mock_prompt_for_cluster_name.assert_called_once()
@@ -247,9 +242,7 @@ def test_scale_command_without_service_name(mocker):
     )
     mock_scale_service = mocker.patch("remotepy.ecs.scale_service")
 
-    result = runner.invoke(app, [
-        "scale", "test-cluster", "--count", "4"
-    ], input="y\n")
+    result = runner.invoke(app, ["scale", "test-cluster", "--count", "4"], input="y\n")
 
     assert result.exit_code == 0
     mock_prompt_for_services_name.assert_called_once_with("test-cluster")
@@ -259,9 +252,7 @@ def test_scale_command_without_service_name(mocker):
 def test_scale_command_without_desired_count(mocker):
     mock_scale_service = mocker.patch("remotepy.ecs.scale_service")
 
-    result = runner.invoke(app, [
-        "scale", "test-cluster", "test-service"
-    ], input="5\ny\n")
+    result = runner.invoke(app, ["scale", "test-cluster", "test-service"], input="5\ny\n")
 
     assert result.exit_code == 0
     mock_scale_service.assert_called_once_with("test-cluster", "test-service", 5)
@@ -270,9 +261,9 @@ def test_scale_command_without_desired_count(mocker):
 def test_scale_command_cancelled(mocker):
     mock_scale_service = mocker.patch("remotepy.ecs.scale_service")
 
-    result = runner.invoke(app, [
-        "scale", "test-cluster", "test-service", "--count", "3"
-    ], input="n\n")
+    result = runner.invoke(
+        app, ["scale", "test-cluster", "test-service", "--count", "3"], input="n\n"
+    )
 
     assert result.exit_code == 0
     mock_scale_service.assert_not_called()
@@ -280,14 +271,11 @@ def test_scale_command_cancelled(mocker):
 
 def test_scale_command_multiple_services(mocker):
     mock_prompt_for_services_name = mocker.patch(
-        "remotepy.ecs.prompt_for_services_name",
-        return_value=["service-1", "service-2"]
+        "remotepy.ecs.prompt_for_services_name", return_value=["service-1", "service-2"]
     )
     mock_scale_service = mocker.patch("remotepy.ecs.scale_service")
 
-    result = runner.invoke(app, [
-        "scale", "test-cluster", "--count", "2"
-    ], input="y\ny\n")
+    result = runner.invoke(app, ["scale", "test-cluster", "--count", "2"], input="y\ny\n")
 
     assert result.exit_code == 0
     mock_prompt_for_services_name.assert_called_once_with("test-cluster")

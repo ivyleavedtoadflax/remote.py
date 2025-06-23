@@ -54,12 +54,18 @@ def test_create_ami_with_instance_name(mocker):
 
     mock_ec2_client.create_image.return_value = {"ImageId": "ami-0123456789abcdef0"}
 
-    result = runner.invoke(app, [
-        "create",
-        "--instance-name", "test-instance",
-        "--name", "test-ami",
-        "--description", "Test AMI description"
-    ])
+    result = runner.invoke(
+        app,
+        [
+            "create",
+            "--instance-name",
+            "test-instance",
+            "--name",
+            "test-ami",
+            "--description",
+            "Test AMI description",
+        ],
+    )
 
     assert result.exit_code == 0
     mock_get_instance_id.assert_called_once_with("test-instance")
@@ -92,12 +98,8 @@ def test_create_ami_without_instance_name(mocker):
 
 def test_create_ami_minimal_params(mocker):
     mock_ec2_client = mocker.patch("remotepy.ami.ec2_client", autospec=True)
-    mocker.patch(
-        "remotepy.ami.get_instance_name", return_value="default-instance"
-    )
-    mocker.patch(
-        "remotepy.ami.get_instance_id", return_value="i-0123456789abcdef0"
-    )
+    mocker.patch("remotepy.ami.get_instance_name", return_value="default-instance")
+    mocker.patch("remotepy.ami.get_instance_id", return_value="i-0123456789abcdef0")
 
     mock_ec2_client.create_image.return_value = {"ImageId": "ami-minimal"}
 
@@ -114,9 +116,7 @@ def test_create_ami_minimal_params(mocker):
 
 def test_list_amis(mocker, mock_ami_response):
     mock_ec2_client = mocker.patch("remotepy.ami.ec2_client", autospec=True)
-    mock_get_account_id = mocker.patch(
-        "remotepy.ami.get_account_id", return_value="123456789012"
-    )
+    mock_get_account_id = mocker.patch("remotepy.ami.get_account_id", return_value="123456789012")
 
     mock_ec2_client.describe_images.return_value = mock_ami_response
 
@@ -136,9 +136,7 @@ def test_list_amis(mocker, mock_ami_response):
 
 def test_list_amis_alias_ls(mocker, mock_ami_response):
     mock_ec2_client = mocker.patch("remotepy.ami.ec2_client", autospec=True)
-    mock_get_account_id = mocker.patch(
-        "remotepy.ami.get_account_id", return_value="123456789012"
-    )
+    mock_get_account_id = mocker.patch("remotepy.ami.get_account_id", return_value="123456789012")
 
     mock_ec2_client.describe_images.return_value = mock_ami_response
 
@@ -151,9 +149,7 @@ def test_list_amis_alias_ls(mocker, mock_ami_response):
 
 def test_list_amis_empty(mocker):
     mock_ec2_client = mocker.patch("remotepy.ami.ec2_client", autospec=True)
-    mocker.patch(
-        "remotepy.ami.get_account_id", return_value="123456789012"
-    )
+    mocker.patch("remotepy.ami.get_account_id", return_value="123456789012")
 
     mock_ec2_client.describe_images.return_value = {"Images": []}
 
@@ -211,20 +207,24 @@ def test_list_launch_templates_empty(mocker):
 
 def test_launch_with_template_name(mocker):
     mock_ec2_client = mocker.patch("remotepy.ami.ec2_client", autospec=True)
-    mocker.patch(
-        "remotepy.ami.get_launch_template_id", return_value="lt-0123456789abcdef0"
-    )
+    mocker.patch("remotepy.ami.get_launch_template_id", return_value="lt-0123456789abcdef0")
 
     mock_ec2_client.run_instances.return_value = {
         "Instances": [{"InstanceId": "i-0123456789abcdef0"}]
     }
 
-    result = runner.invoke(app, [
-        "launch",
-        "--launch-template", "test-template",
-        "--name", "test-instance",
-        "--version", "2"
-    ])
+    result = runner.invoke(
+        app,
+        [
+            "launch",
+            "--launch-template",
+            "test-template",
+            "--name",
+            "test-instance",
+            "--version",
+            "2",
+        ],
+    )
 
     assert result.exit_code == 0
     mock_ec2_client.run_instances.assert_called_once_with(
@@ -243,19 +243,13 @@ def test_launch_with_template_name(mocker):
 
 def test_launch_with_default_version(mocker):
     mock_ec2_client = mocker.patch("remotepy.ami.ec2_client", autospec=True)
-    mocker.patch(
-        "remotepy.ami.get_launch_template_id", return_value="lt-0123456789abcdef0"
+    mocker.patch("remotepy.ami.get_launch_template_id", return_value="lt-0123456789abcdef0")
+
+    mock_ec2_client.run_instances.return_value = {"Instances": [{"InstanceId": "i-default"}]}
+
+    result = runner.invoke(
+        app, ["launch", "--launch-template", "test-template", "--name", "test-instance"]
     )
-
-    mock_ec2_client.run_instances.return_value = {
-        "Instances": [{"InstanceId": "i-default"}]
-    }
-
-    result = runner.invoke(app, [
-        "launch",
-        "--launch-template", "test-template",
-        "--name", "test-instance"
-    ])
 
     assert result.exit_code == 0
     mock_ec2_client.run_instances.assert_called_once_with(
@@ -277,9 +271,7 @@ def test_launch_without_template_interactive(mocker, mock_launch_template_respon
         "remotepy.ami.list_launch_templates", return_value=mock_launch_template_response
     )
 
-    mock_ec2_client.run_instances.return_value = {
-        "Instances": [{"InstanceId": "i-interactive"}]
-    }
+    mock_ec2_client.run_instances.return_value = {"Instances": [{"InstanceId": "i-interactive"}]}
 
     # Mock user input: select template 1, use suggested name
     result = runner.invoke(app, ["launch"], input="1\ntest-instance-abc123\n")
@@ -294,22 +286,15 @@ def test_launch_without_template_interactive(mocker, mock_launch_template_respon
 
 def test_launch_without_name_uses_suggestion(mocker):
     mock_ec2_client = mocker.patch("remotepy.ami.ec2_client", autospec=True)
-    mocker.patch(
-        "remotepy.ami.get_launch_template_id", return_value="lt-0123456789abcdef0"
-    )
+    mocker.patch("remotepy.ami.get_launch_template_id", return_value="lt-0123456789abcdef0")
 
     # Mock random string generation for name suggestion
     mocker.patch("remotepy.ami.random.choices", return_value=list("abc123"))
 
-    mock_ec2_client.run_instances.return_value = {
-        "Instances": [{"InstanceId": "i-suggested"}]
-    }
+    mock_ec2_client.run_instances.return_value = {"Instances": [{"InstanceId": "i-suggested"}]}
 
     # User accepts the suggested name by pressing enter
-    result = runner.invoke(app, [
-        "launch",
-        "--launch-template", "test-template"
-    ], input="\n")
+    result = runner.invoke(app, ["launch", "--launch-template", "test-template"], input="\n")
 
     assert result.exit_code == 0
 
