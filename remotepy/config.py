@@ -31,9 +31,13 @@ class ConfigManager:
         try:
             if "DEFAULT" in self.file_config and "instance_name" in self.file_config["DEFAULT"]:
                 return self.file_config["DEFAULT"]["instance_name"]
-        except Exception:
+        except (configparser.Error, OSError, PermissionError) as e:
             # Config file might be corrupted or inaccessible
-            pass
+            # Log the specific error but don't crash the application
+            print(f"Warning: Could not read config file: {e}")
+        except (KeyError, TypeError, AttributeError):
+            # Handle malformed config structure
+            print("Warning: Config file structure is invalid")
 
         # No configuration found
         return None

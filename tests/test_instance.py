@@ -5,7 +5,8 @@ import pytest
 from typer.testing import CliRunner
 
 import remotepy
-from remotepy.instance import app, get_launch_template_id
+from remotepy.instance import app
+from remotepy.utils import get_launch_template_id
 
 runner = CliRunner()
 

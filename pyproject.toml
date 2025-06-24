@@ -64,6 +64,7 @@ ignore = [
     "C901",  # too complex
     "E722",  # do not use bare except - will fix gradually
     "F811",  # redefinition of unused function - will fix gradually
+    "B904",  # exception chaining - will improve gradually
 ]
 
 [tool.ruff.format]
