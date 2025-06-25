@@ -304,3 +304,42 @@ def test_launch_without_name_uses_suggestion(mocker):
     tag_specs = call_args[1]["TagSpecifications"]
     instance_name = tag_specs[0]["Tags"][0]["Value"]
     assert "test-template-abc123" == instance_name
+
+
+def test_launch_no_instances_returned(mocker):
+    """Test launch when AWS returns no instances in the response."""
+    mock_ec2_client = mocker.patch("remotepy.ami.ec2_client", autospec=True)
+    mocker.patch("remotepy.ami.get_launch_template_id", return_value="lt-0123456789abcdef0")
+
+    # Return empty instances list
+    mock_ec2_client.run_instances.return_value = {"Instances": []}
+
+    result = runner.invoke(
+        app, ["launch", "--launch-template", "test-template", "--name", "test-instance"]
+    )
+
+    assert result.exit_code == 0
+    assert "Warning: No instance information returned from launch" in result.stdout
+
+
+def test_launch_validation_error_accessing_results(mocker):
+    """Test launch when ValidationError occurs accessing launch results."""
+    mock_ec2_client = mocker.patch("remotepy.ami.ec2_client", autospec=True)
+    mocker.patch("remotepy.ami.get_launch_template_id", return_value="lt-0123456789abcdef0")
+    
+    # Mock safe_get_array_item to raise ValidationError
+    from remotepy.exceptions import ValidationError
+    mock_safe_get = mocker.patch("remotepy.ami.safe_get_array_item")
+    mock_safe_get.side_effect = ValidationError("Array access failed")
+
+    # Return instances but safe_get_array_item will fail
+    mock_ec2_client.run_instances.return_value = {
+        "Instances": [{"InstanceId": "i-0123456789abcdef0"}]
+    }
+
+    result = runner.invoke(
+        app, ["launch", "--launch-template", "test-template", "--name", "test-instance"]
+    )
+
+    assert result.exit_code == 1
+    assert "Error accessing launch result: Validation error: Array access failed" in result.stdout
