@@ -67,7 +67,7 @@ def scale_service(cluster_name: str, service_name: str, desired_count: int) -> N
     cluster_name (str): The name of the cluster
     service_name (str): The name of the service
     desired_count (int): The desired count of tasks
-    
+
     Raises:
         AWSServiceError: If AWS API call fails
     """

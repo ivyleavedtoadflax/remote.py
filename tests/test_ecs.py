@@ -288,16 +288,17 @@ def test_scale_command_multiple_services(mocker):
 
 # Error path tests for improved coverage
 
+
 def test_get_all_clusters_client_error(mocker):
     """Test get_all_clusters with ClientError."""
     mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
-    
+
     error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Access denied"}}
     mock_ecs_client.list_clusters.side_effect = ClientError(error_response, "list_clusters")
-    
+
     with pytest.raises(AWSServiceError) as exc_info:
         get_all_clusters()
-    
+
     assert exc_info.value.service == "ECS"
     assert exc_info.value.operation == "list_clusters"
     assert exc_info.value.aws_error_code == "UnauthorizedOperation"
@@ -306,12 +307,12 @@ def test_get_all_clusters_client_error(mocker):
 def test_get_all_clusters_no_credentials_error(mocker):
     """Test get_all_clusters with NoCredentialsError."""
     mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
-    
+
     mock_ecs_client.list_clusters.side_effect = NoCredentialsError()
-    
+
     with pytest.raises(AWSServiceError) as exc_info:
         get_all_clusters()
-    
+
     assert exc_info.value.service == "ECS"
     assert exc_info.value.operation == "list_clusters"
     assert exc_info.value.aws_error_code == "NoCredentials"
@@ -320,13 +321,13 @@ def test_get_all_clusters_no_credentials_error(mocker):
 def test_get_all_services_client_error(mocker):
     """Test get_all_services with ClientError."""
     mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
-    
+
     error_response = {"Error": {"Code": "ClusterNotFoundException", "Message": "Cluster not found"}}
     mock_ecs_client.list_services.side_effect = ClientError(error_response, "list_services")
-    
+
     with pytest.raises(AWSServiceError) as exc_info:
         get_all_services("nonexistent-cluster")
-    
+
     assert exc_info.value.service == "ECS"
     assert exc_info.value.operation == "list_services"
     assert exc_info.value.aws_error_code == "ClusterNotFoundException"
@@ -335,12 +336,12 @@ def test_get_all_services_client_error(mocker):
 def test_get_all_services_no_credentials_error(mocker):
     """Test get_all_services with NoCredentialsError."""
     mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
-    
+
     mock_ecs_client.list_services.side_effect = NoCredentialsError()
-    
+
     with pytest.raises(AWSServiceError) as exc_info:
         get_all_services("test-cluster")
-    
+
     assert exc_info.value.service == "ECS"
     assert exc_info.value.operation == "list_services"
     assert exc_info.value.aws_error_code == "NoCredentials"
@@ -349,13 +350,13 @@ def test_get_all_services_no_credentials_error(mocker):
 def test_scale_service_client_error(mocker):
     """Test scale_service with ClientError."""
     mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
-    
+
     error_response = {"Error": {"Code": "ServiceNotFoundException", "Message": "Service not found"}}
     mock_ecs_client.update_service.side_effect = ClientError(error_response, "update_service")
-    
+
     with pytest.raises(AWSServiceError) as exc_info:
         scale_service("test-cluster", "nonexistent-service", 5)
-    
+
     assert exc_info.value.service == "ECS"
     assert exc_info.value.operation == "update_service"
     assert exc_info.value.aws_error_code == "ServiceNotFoundException"
@@ -364,12 +365,12 @@ def test_scale_service_client_error(mocker):
 def test_scale_service_no_credentials_error(mocker):
     """Test scale_service with NoCredentialsError."""
     mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
-    
+
     mock_ecs_client.update_service.side_effect = NoCredentialsError()
-    
+
     with pytest.raises(AWSServiceError) as exc_info:
         scale_service("test-cluster", "test-service", 3)
-    
+
     assert exc_info.value.service == "ECS"
     assert exc_info.value.operation == "update_service"
     assert exc_info.value.aws_error_code == "NoCredentials"
