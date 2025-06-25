@@ -1,6 +1,7 @@
 """Tests for input validation functions in remotepy.validation module."""
 
 import pytest
+from hypothesis import given, strategies as st
 
 from remotepy.exceptions import InvalidInputError, ValidationError
 from remotepy.validation import (
@@ -75,6 +76,19 @@ class TestValidateInstanceId:
             validate_instance_id("i-12345678@#")
 
         assert exc_info.value.parameter_name == "instance_id"
+
+    @given(st.text(alphabet="0123456789abcdef", min_size=8, max_size=17))
+    def test_should_accept_valid_instance_id_formats(self, suffix: str):
+        """Property-based test: valid instance ID format should be accepted."""
+        instance_id = f"i-{suffix}"
+        result = validate_instance_id(instance_id)
+        assert result == instance_id
+
+    @given(st.text().filter(lambda x: not x.startswith("i-") and len(x) > 0))
+    def test_should_reject_instance_ids_without_prefix(self, invalid_id: str):
+        """Property-based test: any non-empty string not starting with 'i-' should be invalid."""
+        with pytest.raises(InvalidInputError):
+            validate_instance_id(invalid_id)
 
 
 class TestValidateInstanceName:
@@ -252,6 +266,20 @@ class TestValidateArrayIndex:
         # Python int() truncates floats, so 2.5 becomes 2, then adjusted to 1-based gives index 1
         result = validate_array_index(2.5, 5, "test items")
         assert result == 1  # 2.5 -> 2 -> 2-1 = 1 (zero-based index)
+
+    @given(st.integers(min_value=1, max_value=100), st.integers(min_value=1, max_value=100))
+    def test_should_convert_valid_indices_correctly(self, index: int, array_size: int):
+        """Property-based test: valid 1-based indices should convert to correct 0-based indices."""
+        # Only test when index is within valid range
+        if 1 <= index <= array_size:
+            result = validate_array_index(index, array_size, "test items")
+            assert result == index - 1  # Should convert to 0-based index
+
+    @given(st.integers(max_value=0))
+    def test_should_reject_non_positive_indices(self, invalid_index: int):
+        """Property-based test: any non-positive integer should be rejected."""
+        with pytest.raises(ValidationError):
+            validate_array_index(invalid_index, 5, "test items")
 
 
 class TestSafeGetNestedValue:
