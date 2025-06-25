@@ -1,8 +1,15 @@
 import datetime
 
 import pytest
+from botocore.exceptions import ClientError, NoCredentialsError
 from click.exceptions import Exit
 
+from remotepy.exceptions import (
+    AWSServiceError,
+    InstanceNotFoundError,
+    MultipleInstancesFoundError,
+    ResourceNotFoundError,
+)
 from remotepy.utils import (
     get_account_id,
     get_instance_dns,
@@ -102,9 +109,9 @@ def test_get_instance_id_multiple_instances(mocker):
         ]
     }
 
-    with pytest.raises(Exit) as exc_info:
+    with pytest.raises(MultipleInstancesFoundError) as exc_info:
         get_instance_id("test-instance")
-    assert exc_info.value.exit_code == 1
+    assert "Multiple instances (2) found" in str(exc_info.value)
 
 
 def test_get_instance_id_not_found(mocker):
@@ -112,9 +119,9 @@ def test_get_instance_id_not_found(mocker):
 
     mock_ec2_client.describe_instances.return_value = {"Reservations": []}
 
-    with pytest.raises(Exit) as exc_info:
+    with pytest.raises(InstanceNotFoundError) as exc_info:
         get_instance_id("nonexistent-instance")
-    assert exc_info.value.exit_code == 1
+    assert "not found" in str(exc_info.value)
 
 
 def test_get_instance_status_with_id(mocker):
@@ -271,7 +278,7 @@ def test_is_instance_running_no_status(mocker):
 
     result = is_instance_running("i-0123456789abcdef0")
 
-    assert result is None
+    assert result is False
 
 
 def test_is_instance_stopped_true(mocker):
@@ -403,3 +410,340 @@ def test_get_launch_template_id(mocker):
     mock_ec2_client.describe_launch_templates.assert_called_once_with(
         Filters=[{"Name": "tag:Name", "Values": ["test-template"]}]
     )
+
+
+# Error path tests for improved coverage
+
+
+def test_get_account_id_client_error(mocker):
+    """Test get_account_id with ClientError."""
+    mock_boto3_client = mocker.patch("remotepy.utils.boto3.client")
+    mock_sts_client = mock_boto3_client.return_value
+
+    error_response = {"Error": {"Code": "AccessDenied", "Message": "Access denied"}}
+    mock_sts_client.get_caller_identity.side_effect = ClientError(
+        error_response, "get_caller_identity"
+    )
+
+    with pytest.raises(AWSServiceError) as exc_info:
+        get_account_id()
+
+    assert exc_info.value.service == "STS"
+    assert exc_info.value.operation == "get_caller_identity"
+    assert exc_info.value.aws_error_code == "AccessDenied"
+
+
+def test_get_account_id_no_credentials_error(mocker):
+    """Test get_account_id with NoCredentialsError."""
+    mock_boto3_client = mocker.patch("remotepy.utils.boto3.client")
+    mock_sts_client = mock_boto3_client.return_value
+
+    mock_sts_client.get_caller_identity.side_effect = NoCredentialsError()
+
+    with pytest.raises(AWSServiceError) as exc_info:
+        get_account_id()
+
+    assert exc_info.value.service == "STS"
+    assert exc_info.value.operation == "get_caller_identity"
+    assert exc_info.value.aws_error_code == "NoCredentials"
+
+
+def test_get_instance_id_client_error(mocker):
+    """Test get_instance_id with ClientError."""
+    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+
+    error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Unauthorized"}}
+    mock_ec2_client.describe_instances.side_effect = ClientError(
+        error_response, "describe_instances"
+    )
+
+    with pytest.raises(AWSServiceError) as exc_info:
+        get_instance_id("test-instance")
+
+    assert exc_info.value.service == "EC2"
+    assert exc_info.value.operation == "describe_instances"
+    assert exc_info.value.aws_error_code == "UnauthorizedOperation"
+
+
+def test_get_instance_id_no_credentials_error(mocker):
+    """Test get_instance_id with NoCredentialsError."""
+    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+
+    mock_ec2_client.describe_instances.side_effect = NoCredentialsError()
+
+    with pytest.raises(AWSServiceError) as exc_info:
+        get_instance_id("test-instance")
+
+    assert exc_info.value.service == "EC2"
+    assert exc_info.value.operation == "describe_instances"
+    assert exc_info.value.aws_error_code == "NoCredentials"
+
+
+def test_get_instance_id_no_instances_in_reservation(mocker):
+    """Test get_instance_id when reservation has no instances."""
+    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+
+    mock_ec2_client.describe_instances.return_value = {
+        "Reservations": [
+            {
+                "Instances": []  # Empty instances list
+            }
+        ]
+    }
+
+    with pytest.raises(InstanceNotFoundError) as exc_info:
+        get_instance_id("test-instance")
+
+    assert exc_info.value.instance_name == "test-instance"
+    assert "no instances in reservation" in exc_info.value.details
+
+
+def test_get_instance_status_client_error(mocker):
+    """Test get_instance_status with ClientError."""
+    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+
+    error_response = {
+        "Error": {"Code": "InvalidInstanceID.NotFound", "Message": "Instance not found"}
+    }
+    mock_ec2_client.describe_instance_status.side_effect = ClientError(
+        error_response, "describe_instance_status"
+    )
+
+    with pytest.raises(AWSServiceError) as exc_info:
+        get_instance_status("i-12345678")
+
+    assert exc_info.value.service == "EC2"
+    assert exc_info.value.operation == "describe_instance_status"
+
+
+def test_get_instance_status_no_credentials_error(mocker):
+    """Test get_instance_status with NoCredentialsError."""
+    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+
+    mock_ec2_client.describe_instance_status.side_effect = NoCredentialsError()
+
+    with pytest.raises(AWSServiceError) as exc_info:
+        get_instance_status()
+
+    assert exc_info.value.aws_error_code == "NoCredentials"
+
+
+def test_get_instances_client_error(mocker):
+    """Test get_instances with ClientError."""
+    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+
+    error_response = {"Error": {"Code": "RequestLimitExceeded", "Message": "Rate limit exceeded"}}
+    mock_ec2_client.describe_instances.side_effect = ClientError(
+        error_response, "describe_instances"
+    )
+
+    with pytest.raises(AWSServiceError) as exc_info:
+        get_instances()
+
+    assert exc_info.value.aws_error_code == "RequestLimitExceeded"
+
+
+def test_get_instances_no_credentials_error(mocker):
+    """Test get_instances with NoCredentialsError."""
+    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+
+    mock_ec2_client.describe_instances.side_effect = NoCredentialsError()
+
+    with pytest.raises(AWSServiceError) as exc_info:
+        get_instances()
+
+    assert exc_info.value.aws_error_code == "NoCredentials"
+
+
+def test_get_instance_dns_instance_not_found_error(mocker):
+    """Test get_instance_dns with instance not found."""
+    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+
+    error_response = {
+        "Error": {"Code": "InvalidInstanceID.NotFound", "Message": "Instance not found"}
+    }
+    mock_ec2_client.describe_instances.side_effect = ClientError(
+        error_response, "describe_instances"
+    )
+
+    with pytest.raises(ResourceNotFoundError) as exc_info:
+        get_instance_dns("i-1234567890abcdef0")
+
+    assert exc_info.value.resource_type == "Instance"
+    assert exc_info.value.resource_id == "i-1234567890abcdef0"
+
+
+def test_get_instance_dns_other_client_error(mocker):
+    """Test get_instance_dns with other ClientError."""
+    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+
+    error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Unauthorized"}}
+    mock_ec2_client.describe_instances.side_effect = ClientError(
+        error_response, "describe_instances"
+    )
+
+    with pytest.raises(AWSServiceError) as exc_info:
+        get_instance_dns("i-12345678")
+
+    assert exc_info.value.aws_error_code == "UnauthorizedOperation"
+
+
+def test_get_instance_type_instance_not_found_error(mocker):
+    """Test get_instance_type with instance not found."""
+    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+
+    error_response = {
+        "Error": {"Code": "InvalidInstanceID.NotFound", "Message": "Instance not found"}
+    }
+    mock_ec2_client.describe_instances.side_effect = ClientError(
+        error_response, "describe_instances"
+    )
+
+    with pytest.raises(ResourceNotFoundError) as exc_info:
+        get_instance_type("i-1234567890abcdef0")
+
+    assert exc_info.value.resource_type == "Instance"
+    assert exc_info.value.resource_id == "i-1234567890abcdef0"
+
+
+def test_get_instance_type_other_client_error(mocker):
+    """Test get_instance_type with other ClientError."""
+    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+
+    error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Unauthorized"}}
+    mock_ec2_client.describe_instances.side_effect = ClientError(
+        error_response, "describe_instances"
+    )
+
+    with pytest.raises(AWSServiceError) as exc_info:
+        get_instance_type("i-12345678")
+
+    assert exc_info.value.aws_error_code == "UnauthorizedOperation"
+
+
+def test_get_volume_ids_client_error(mocker):
+    """Test get_volume_ids with ClientError."""
+    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+
+    error_response = {
+        "Error": {"Code": "InvalidInstanceID.NotFound", "Message": "Instance not found"}
+    }
+    mock_ec2_client.describe_volumes.side_effect = ClientError(error_response, "describe_volumes")
+
+    with pytest.raises(AWSServiceError) as exc_info:
+        get_volume_ids("i-12345678")
+
+    assert exc_info.value.service == "EC2"
+    assert exc_info.value.operation == "describe_volumes"
+
+
+def test_get_volume_ids_no_credentials_error(mocker):
+    """Test get_volume_ids with NoCredentialsError."""
+    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+
+    mock_ec2_client.describe_volumes.side_effect = NoCredentialsError()
+
+    with pytest.raises(AWSServiceError) as exc_info:
+        get_volume_ids("i-12345678")
+
+    assert exc_info.value.aws_error_code == "NoCredentials"
+
+
+def test_get_volume_name_volume_not_found_error(mocker):
+    """Test get_volume_name with volume not found."""
+    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+
+    error_response = {"Error": {"Code": "InvalidVolumeID.NotFound", "Message": "Volume not found"}}
+    mock_ec2_client.describe_volumes.side_effect = ClientError(error_response, "describe_volumes")
+
+    with pytest.raises(ResourceNotFoundError) as exc_info:
+        get_volume_name("vol-1234567890abcdef0")
+
+    assert exc_info.value.resource_type == "Volume"
+    assert exc_info.value.resource_id == "vol-1234567890abcdef0"
+
+
+def test_get_volume_name_other_client_error(mocker):
+    """Test get_volume_name with other ClientError."""
+    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+
+    error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Unauthorized"}}
+    mock_ec2_client.describe_volumes.side_effect = ClientError(error_response, "describe_volumes")
+
+    with pytest.raises(AWSServiceError) as exc_info:
+        get_volume_name("vol-12345678")
+
+    assert exc_info.value.aws_error_code == "UnauthorizedOperation"
+
+
+def test_get_snapshot_status_snapshot_not_found_error(mocker):
+    """Test get_snapshot_status with snapshot not found."""
+    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+
+    error_response = {
+        "Error": {"Code": "InvalidSnapshotID.NotFound", "Message": "Snapshot not found"}
+    }
+    mock_ec2_client.describe_snapshots.side_effect = ClientError(
+        error_response, "describe_snapshots"
+    )
+
+    with pytest.raises(ResourceNotFoundError) as exc_info:
+        get_snapshot_status("snap-1234567890abcdef0")
+
+    assert exc_info.value.resource_type == "Snapshot"
+    assert exc_info.value.resource_id == "snap-1234567890abcdef0"
+
+
+def test_get_snapshot_status_other_client_error(mocker):
+    """Test get_snapshot_status with other ClientError."""
+    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+
+    error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Unauthorized"}}
+    mock_ec2_client.describe_snapshots.side_effect = ClientError(
+        error_response, "describe_snapshots"
+    )
+
+    with pytest.raises(AWSServiceError) as exc_info:
+        get_snapshot_status("snap-12345678")
+
+    assert exc_info.value.aws_error_code == "UnauthorizedOperation"
+
+
+def test_get_launch_template_id_client_error(mocker):
+    """Test get_launch_template_id with ClientError."""
+    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+
+    error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Unauthorized"}}
+    mock_ec2_client.describe_launch_templates.side_effect = ClientError(
+        error_response, "describe_launch_templates"
+    )
+
+    with pytest.raises(AWSServiceError) as exc_info:
+        get_launch_template_id("test-template")
+
+    assert exc_info.value.service == "EC2"
+    assert exc_info.value.operation == "describe_launch_templates"
+    assert exc_info.value.aws_error_code == "UnauthorizedOperation"
+
+
+def test_get_launch_template_id_validation_error(mocker):
+    """Test get_launch_template_id with empty template name."""
+    from remotepy.exceptions import ValidationError
+
+    with pytest.raises(ValidationError) as exc_info:
+        get_launch_template_id("")
+
+    assert "Launch template name cannot be empty" in str(exc_info.value)
+
+
+def test_get_launch_template_id_no_templates_found(mocker):
+    """Test get_launch_template_id when no templates found."""
+    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+
+    mock_ec2_client.describe_launch_templates.return_value = {"LaunchTemplates": []}
+
+    with pytest.raises(ResourceNotFoundError) as exc_info:
+        get_launch_template_id("nonexistent-template")
+
+    assert exc_info.value.resource_type == "Launch Template"
+    assert exc_info.value.resource_id == "nonexistent-template"

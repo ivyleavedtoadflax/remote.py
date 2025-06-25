@@ -4,16 +4,10 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.8.4
     hooks:
-      # 1. Ruff lint (check-only)
+      # 1. Ruff lint with auto-fix
       - id: ruff
         name: ruff-check
-        args: []
-
-      # 2. Ruff fix (format)
-      - id: ruff
-        name: ruff-fix
         args: [--fix]
-        stages: [manual]  # only runs if you explicitly run it
 
       # 3. Ruff formatter
       - id: ruff-format
