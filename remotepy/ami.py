@@ -101,7 +101,6 @@ def list():
     typer.secho(formatted, fg=typer.colors.YELLOW)
 
 
-
 @app.command()
 def list_launch_templates():
     """
@@ -215,7 +214,9 @@ def launch(
     try:
         instances = instance.get("Instances", [])
         if not instances:
-            typer.secho("Warning: No instance information returned from launch", fg=typer.colors.YELLOW)
+            typer.secho(
+                "Warning: No instance information returned from launch", fg=typer.colors.YELLOW
+            )
             return
 
         launched_instance = safe_get_array_item(instances, 0, "launched instances")

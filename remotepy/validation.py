@@ -26,13 +26,13 @@ def validate_instance_id(instance_id: str) -> str:
         raise InvalidInputError("instance_id", "", "i-xxxxxxxxx")
 
     # EC2 instance IDs should match pattern: i-[0-9a-f]{8,17}
-    pattern = r'^i-[0-9a-f]{8,17}$'
+    pattern = r"^i-[0-9a-f]{8,17}$"
     if not re.match(pattern, instance_id, re.IGNORECASE):
         raise InvalidInputError(
             "instance_id",
             instance_id,
             "i-xxxxxxxxx (where x is alphanumeric)",
-            "Instance IDs start with 'i-' followed by 8-17 alphanumeric characters"
+            "Instance IDs start with 'i-' followed by 8-17 alphanumeric characters",
         )
 
     return instance_id
@@ -58,16 +58,16 @@ def validate_instance_name(instance_name: str) -> str:
             "instance_name",
             instance_name,
             "string with maximum 255 characters",
-            f"Instance name is {len(instance_name)} characters long"
+            f"Instance name is {len(instance_name)} characters long",
         )
 
     # Allow alphanumeric, hyphens, underscores, and spaces
-    if not re.match(r'^[a-zA-Z0-9_\-\s]+$', instance_name):
+    if not re.match(r"^[a-zA-Z0-9_\-\s]+$", instance_name):
         raise InvalidInputError(
             "instance_name",
             instance_name,
             "alphanumeric characters, hyphens, underscores, and spaces only",
-            "Special characters except hyphens and underscores are not allowed"
+            "Special characters except hyphens and underscores are not allowed",
         )
 
     return instance_name
@@ -89,13 +89,13 @@ def validate_volume_id(volume_id: str) -> str:
         raise InvalidInputError("volume_id", "", "vol-xxxxxxxxx")
 
     # Volume IDs should match pattern: vol-[0-9a-f]{8,17}
-    pattern = r'^vol-[0-9a-f]{8,17}$'
+    pattern = r"^vol-[0-9a-f]{8,17}$"
     if not re.match(pattern, volume_id, re.IGNORECASE):
         raise InvalidInputError(
             "volume_id",
             volume_id,
             "vol-xxxxxxxxx (where x is alphanumeric)",
-            "Volume IDs start with 'vol-' followed by 8-17 alphanumeric characters"
+            "Volume IDs start with 'vol-' followed by 8-17 alphanumeric characters",
         )
 
     return volume_id
@@ -117,13 +117,13 @@ def validate_snapshot_id(snapshot_id: str) -> str:
         raise InvalidInputError("snapshot_id", "", "snap-xxxxxxxxx")
 
     # Snapshot IDs should match pattern: snap-[0-9a-f]{8,17}
-    pattern = r'^snap-[0-9a-f]{8,17}$'
+    pattern = r"^snap-[0-9a-f]{8,17}$"
     if not re.match(pattern, snapshot_id, re.IGNORECASE):
         raise InvalidInputError(
             "snapshot_id",
             snapshot_id,
             "snap-xxxxxxxxx (where x is alphanumeric)",
-            "Snapshot IDs start with 'snap-' followed by 8-17 alphanumeric characters"
+            "Snapshot IDs start with 'snap-' followed by 8-17 alphanumeric characters",
         )
 
     return snapshot_id
@@ -182,8 +182,7 @@ def validate_array_index(index: Any, array_length: int, context: str) -> int:
 
     if zero_based_index >= array_length:
         raise ValidationError(
-            f"Selection {index} is out of range for {context}. "
-            f"Valid range: 1-{array_length}"
+            f"Selection {index} is out of range for {context}. Valid range: 1-{array_length}"
         )
 
     return zero_based_index
@@ -236,7 +235,9 @@ def safe_get_array_item(array: list[Any], index: int, context: str, default: Any
     return array[index]
 
 
-def validate_aws_response_structure(response: dict[str, Any], expected_keys: list[str], context: str) -> None:
+def validate_aws_response_structure(
+    response: dict[str, Any], expected_keys: list[str], context: str
+) -> None:
     """Validate that an AWS API response has the expected structure.
 
     Args:
@@ -248,7 +249,9 @@ def validate_aws_response_structure(response: dict[str, Any], expected_keys: lis
         ValidationError: If response structure is invalid
     """
     if not isinstance(response, dict):
-        raise ValidationError(f"Invalid {context} response: expected dictionary, got {type(response)}")
+        raise ValidationError(
+            f"Invalid {context} response: expected dictionary, got {type(response)}"
+        )
 
     for key in expected_keys:
         if key not in response:

@@ -80,14 +80,20 @@ def status(instance_name: str = typer.Argument(None, help="Instance name")):
             # Safely extract nested values with defaults
             instance_id_value = first_status.get("InstanceId", "unknown")
             state_name = safe_get_nested_value(first_status, ["InstanceState", "Name"], "unknown")
-            system_status = safe_get_nested_value(first_status, ["SystemStatus", "Status"], "unknown")
-            instance_status = safe_get_nested_value(first_status, ["InstanceStatus", "Status"], "unknown")
+            system_status = safe_get_nested_value(
+                first_status, ["SystemStatus", "Status"], "unknown"
+            )
+            instance_status = safe_get_nested_value(
+                first_status, ["InstanceStatus", "Status"], "unknown"
+            )
 
             # Safely access details array
             details = safe_get_nested_value(first_status, ["InstanceStatus", "Details"], [])
             reachability = "unknown"
             if details:
-                first_detail = safe_get_array_item(details, 0, "status details", {"Status": "unknown"})
+                first_detail = safe_get_array_item(
+                    details, 0, "status details", {"Status": "unknown"}
+                )
                 reachability = first_detail.get("Status", "unknown")
 
             # Format table using wasabi
@@ -100,14 +106,16 @@ def status(instance_name: str = typer.Argument(None, help="Instance name")):
                 "Reachability",
             ]
             aligns = ["l", "l", "l", "l", "l", "l"]
-            data = [[
-                instance_name,
-                instance_id_value,
-                state_name,
-                system_status,
-                instance_status,
-                reachability,
-            ]]
+            data = [
+                [
+                    instance_name,
+                    instance_id_value,
+                    state_name,
+                    system_status,
+                    instance_status,
+                    reachability,
+                ]
+            ]
 
             # Return the status in a nicely formatted table
             formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
@@ -145,9 +153,12 @@ def start(instance_name: str = typer.Argument(None, help="Instance name")):
         ec2_client.start_instances(InstanceIds=[instance_id])
         typer.secho(f"Instance {instance_name} started", fg=typer.colors.GREEN)
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        error_message = e.response['Error']['Message']
-        typer.secho(f"AWS Error starting instance {instance_name}: {error_message} ({error_code})", fg=typer.colors.RED)
+        error_code = e.response["Error"]["Code"]
+        error_message = e.response["Error"]["Message"]
+        typer.secho(
+            f"AWS Error starting instance {instance_name}: {error_message} ({error_code})",
+            fg=typer.colors.RED,
+        )
         raise typer.Exit(1)
     except NoCredentialsError:
         typer.secho("Error: AWS credentials not found or invalid", fg=typer.colors.RED)
@@ -181,9 +192,12 @@ def stop(instance_name: str = typer.Argument(None, help="Instance name")):
         else:
             typer.secho(f"Instance {instance_name} is still running", fg=typer.colors.YELLOW)
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        error_message = e.response['Error']['Message']
-        typer.secho(f"AWS Error stopping instance {instance_name}: {error_message} ({error_code})", fg=typer.colors.RED)
+        error_code = e.response["Error"]["Code"]
+        error_message = e.response["Error"]["Message"]
+        typer.secho(
+            f"AWS Error stopping instance {instance_name}: {error_message} ({error_code})",
+            fg=typer.colors.RED,
+        )
         raise typer.Exit(1)
     except NoCredentialsError:
         typer.secho("Error: AWS credentials not found or invalid", fg=typer.colors.RED)
@@ -354,8 +368,8 @@ def type(
                                 fg=typer.colors.YELLOW,
                             )
             except ClientError as e:
-                error_code = e.response['Error']['Code']
-                error_message = e.response['Error']['Message']
+                error_code = e.response["Error"]["Code"]
+                error_message = e.response["Error"]["Message"]
                 typer.secho(
                     f"AWS Error changing instance {instance_name} to {type}: {error_message} ({error_code})",
                     fg=typer.colors.RED,
@@ -372,7 +386,6 @@ def type(
             f"Instance {instance_name} is currently of type {type}",
             fg=typer.colors.YELLOW,
         )
-
 
 
 @app.command()
@@ -449,7 +462,9 @@ def launch(
         launch_template_number = typer.prompt("Launch template", type=str)
         # Validate user input and safely access array
         try:
-            template_index = validate_array_index(launch_template_number, len(launch_templates), "launch templates")
+            template_index = validate_array_index(
+                launch_template_number, len(launch_templates), "launch templates"
+            )
             launch_template = launch_templates[template_index]
         except ValidationError as e:
             typer.secho(f"Error: {e}", fg=typer.colors.RED)
@@ -492,7 +507,9 @@ def launch(
     try:
         instances = instance.get("Instances", [])
         if not instances:
-            typer.secho("Warning: No instance information returned from launch", fg=typer.colors.YELLOW)
+            typer.secho(
+                "Warning: No instance information returned from launch", fg=typer.colors.YELLOW
+            )
             return
 
         launched_instance = safe_get_array_item(instances, 0, "launched instances")

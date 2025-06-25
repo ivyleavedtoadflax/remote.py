@@ -24,15 +24,12 @@ def get_all_clusters() -> list[str]:
         response = ecs_client.list_clusters()
         return response.get("clusterArns", [])
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        error_message = e.response['Error']['Message']
+        error_code = e.response["Error"]["Code"]
+        error_message = e.response["Error"]["Message"]
         raise AWSServiceError("ECS", "list_clusters", error_code, error_message)
     except NoCredentialsError:
         raise AWSServiceError(
-            "ECS",
-            "list_clusters",
-            "NoCredentials",
-            "AWS credentials not found or invalid"
+            "ECS", "list_clusters", "NoCredentials", "AWS credentials not found or invalid"
         )
 
 
@@ -53,15 +50,12 @@ def get_all_services(cluster_name: str) -> list[str]:
         response = ecs_client.list_services(cluster=cluster_name)
         return response.get("serviceArns", [])
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        error_message = e.response['Error']['Message']
+        error_code = e.response["Error"]["Code"]
+        error_message = e.response["Error"]["Message"]
         raise AWSServiceError("ECS", "list_services", error_code, error_message)
     except NoCredentialsError:
         raise AWSServiceError(
-            "ECS",
-            "list_services",
-            "NoCredentials",
-            "AWS credentials not found or invalid"
+            "ECS", "list_services", "NoCredentials", "AWS credentials not found or invalid"
         )
 
 

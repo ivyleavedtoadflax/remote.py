@@ -48,15 +48,12 @@ def get_account_id() -> str:
         return response["Account"]
 
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        error_message = e.response['Error']['Message']
+        error_code = e.response["Error"]["Code"]
+        error_message = e.response["Error"]["Message"]
         raise AWSServiceError("STS", "get_caller_identity", error_code, error_message)
     except NoCredentialsError:
         raise AWSServiceError(
-            "STS",
-            "get_caller_identity",
-            "NoCredentials",
-            "AWS credentials not found or invalid"
+            "STS", "get_caller_identity", "NoCredentials", "AWS credentials not found or invalid"
         )
 
 
@@ -102,22 +99,18 @@ def get_instance_id(instance_name: str) -> str:
         instances = reservations[0].get("Instances", [])
         if not instances:
             raise InstanceNotFoundError(
-                instance_name,
-                "Instance reservation found but no instances in reservation"
+                instance_name, "Instance reservation found but no instances in reservation"
             )
 
         return instances[0]["InstanceId"]
 
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        error_message = e.response['Error']['Message']
+        error_code = e.response["Error"]["Code"]
+        error_message = e.response["Error"]["Message"]
         raise AWSServiceError("EC2", "describe_instances", error_code, error_message)
     except NoCredentialsError:
         raise AWSServiceError(
-            "EC2",
-            "describe_instances",
-            "NoCredentials",
-            "AWS credentials not found or invalid"
+            "EC2", "describe_instances", "NoCredentials", "AWS credentials not found or invalid"
         )
 
 
@@ -142,15 +135,15 @@ def get_instance_status(instance_id: str = None) -> dict:
             return ec2_client.describe_instance_status()
 
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        error_message = e.response['Error']['Message']
+        error_code = e.response["Error"]["Code"]
+        error_message = e.response["Error"]["Message"]
         raise AWSServiceError("EC2", "describe_instance_status", error_code, error_message)
     except NoCredentialsError:
         raise AWSServiceError(
             "EC2",
             "describe_instance_status",
             "NoCredentials",
-            "AWS credentials not found or invalid"
+            "AWS credentials not found or invalid",
         )
 
 
@@ -170,10 +163,12 @@ def get_instances(exclude_terminated: bool = False) -> list[dict]:
     try:
         filters = []
         if exclude_terminated:
-            filters.append({
-                "Name": "instance-state-name",
-                "Values": ["pending", "running", "shutting-down", "stopping", "stopped"]
-            })
+            filters.append(
+                {
+                    "Name": "instance-state-name",
+                    "Values": ["pending", "running", "shutting-down", "stopping", "stopped"],
+                }
+            )
 
         if filters:
             response = ec2_client.describe_instances(Filters=filters)
@@ -186,15 +181,12 @@ def get_instances(exclude_terminated: bool = False) -> list[dict]:
         return response["Reservations"]
 
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        error_message = e.response['Error']['Message']
+        error_code = e.response["Error"]["Code"]
+        error_message = e.response["Error"]["Message"]
         raise AWSServiceError("EC2", "describe_instances", error_code, error_message)
     except NoCredentialsError:
         raise AWSServiceError(
-            "EC2",
-            "describe_instances",
-            "NoCredentials",
-            "AWS credentials not found or invalid"
+            "EC2", "describe_instances", "NoCredentials", "AWS credentials not found or invalid"
         )
 
 
@@ -226,11 +218,11 @@ def get_instance_dns(instance_id: str) -> str:
         return instances[0].get("PublicDnsName", "")
 
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        if error_code == 'InvalidInstanceID.NotFound':
+        error_code = e.response["Error"]["Code"]
+        if error_code == "InvalidInstanceID.NotFound":
             raise ResourceNotFoundError("Instance", instance_id)
 
-        error_message = e.response['Error']['Message']
+        error_message = e.response["Error"]["Message"]
         raise AWSServiceError("EC2", "describe_instances", error_code, error_message)
 
 
@@ -260,7 +252,9 @@ def get_instance_name(cfg: ConfigParser = None):
         raise typer.Exit(1)
 
 
-def get_instance_info(instances: list[dict], name_filter: str = None, drop_nameless: bool = False) -> tuple[list[str], list[str], list[str], list[str], list[str]]:
+def get_instance_info(
+    instances: list[dict], name_filter: str = None, drop_nameless: bool = False
+) -> tuple[list[str], list[str], list[str], list[str], list[str]]:
     """
     Get all instance names for the given account from aws cli.
 
@@ -464,11 +458,11 @@ def get_instance_type(instance_id: str) -> str:
         return instances[0]["InstanceType"]
 
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        if error_code == 'InvalidInstanceID.NotFound':
+        error_code = e.response["Error"]["Code"]
+        if error_code == "InvalidInstanceID.NotFound":
             raise ResourceNotFoundError("Instance", instance_id)
 
-        error_message = e.response['Error']['Message']
+        error_message = e.response["Error"]["Message"]
         raise AWSServiceError("EC2", "describe_instances", error_code, error_message)
 
 
@@ -504,15 +498,12 @@ def get_volume_ids(instance_id: str) -> list[str]:
         return volume_ids
 
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        error_message = e.response['Error']['Message']
+        error_code = e.response["Error"]["Code"]
+        error_message = e.response["Error"]["Message"]
         raise AWSServiceError("EC2", "describe_volumes", error_code, error_message)
     except NoCredentialsError:
         raise AWSServiceError(
-            "EC2",
-            "describe_volumes",
-            "NoCredentials",
-            "AWS credentials not found or invalid"
+            "EC2", "describe_volumes", "NoCredentials", "AWS credentials not found or invalid"
         )
 
 
@@ -549,11 +540,11 @@ def get_volume_name(volume_id: str) -> str:
         return ""  # No name tag found
 
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        if error_code == 'InvalidVolumeID.NotFound':
+        error_code = e.response["Error"]["Code"]
+        if error_code == "InvalidVolumeID.NotFound":
             raise ResourceNotFoundError("Volume", volume_id)
 
-        error_message = e.response['Error']['Message']
+        error_message = e.response["Error"]["Message"]
         raise AWSServiceError("EC2", "describe_volumes", error_code, error_message)
 
 
@@ -584,11 +575,11 @@ def get_snapshot_status(snapshot_id: str) -> str:
         return snapshots[0]["State"]
 
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        if error_code == 'InvalidSnapshotID.NotFound':
+        error_code = e.response["Error"]["Code"]
+        if error_code == "InvalidSnapshotID.NotFound":
             raise ResourceNotFoundError("Snapshot", snapshot_id)
 
-        error_message = e.response['Error']['Message']
+        error_message = e.response["Error"]["Message"]
         raise AWSServiceError("EC2", "describe_snapshots", error_code, error_message)
 
 
@@ -630,6 +621,6 @@ def get_launch_template_id(launch_template_name: str) -> str:
         return launch_templates[0]["LaunchTemplateId"]
 
     except ClientError as e:
-        error_code = e.response['Error']['Code']
-        error_message = e.response['Error']['Message']
+        error_code = e.response["Error"]["Code"]
+        error_message = e.response["Error"]["Message"]
         raise AWSServiceError("EC2", "describe_launch_templates", error_code, error_message)

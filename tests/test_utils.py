@@ -3,6 +3,7 @@ import datetime
 import pytest
 from click.exceptions import Exit
 
+from remotepy.exceptions import InstanceNotFoundError, MultipleInstancesFoundError
 from remotepy.utils import (
     get_account_id,
     get_instance_dns,
@@ -102,9 +103,9 @@ def test_get_instance_id_multiple_instances(mocker):
         ]
     }
 
-    with pytest.raises(Exit) as exc_info:
+    with pytest.raises(MultipleInstancesFoundError) as exc_info:
         get_instance_id("test-instance")
-    assert exc_info.value.exit_code == 1
+    assert "Multiple instances (2) found" in str(exc_info.value)
 
 
 def test_get_instance_id_not_found(mocker):
@@ -112,9 +113,9 @@ def test_get_instance_id_not_found(mocker):
 
     mock_ec2_client.describe_instances.return_value = {"Reservations": []}
 
-    with pytest.raises(Exit) as exc_info:
+    with pytest.raises(InstanceNotFoundError) as exc_info:
         get_instance_id("nonexistent-instance")
-    assert exc_info.value.exit_code == 1
+    assert "not found" in str(exc_info.value)
 
 
 def test_get_instance_status_with_id(mocker):
@@ -271,7 +272,7 @@ def test_is_instance_running_no_status(mocker):
 
     result = is_instance_running("i-0123456789abcdef0")
 
-    assert result is None
+    assert result is False
 
 
 def test_is_instance_stopped_true(mocker):

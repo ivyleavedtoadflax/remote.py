@@ -5,6 +5,7 @@ import pytest
 from typer.testing import CliRunner
 
 import remotepy
+import remotepy.utils
 from remotepy.instance import app
 from remotepy.utils import get_launch_template_id
 
@@ -70,7 +71,7 @@ def test_instance_status_when_not_found(mocker, test_config):
 
     # Expect a 1 exit code as we sys.exit(1)
     assert result.exit_code == 1
-    assert "Instance test not found" in result.stdout
+    assert "Instance 'test' not found" in result.stdout
 
 
 def test_empty_list(mocker, test_config):
@@ -114,10 +115,10 @@ def test_list(mocker, mock_describe_instances_response):
 
 def test_get_launch_template_id(mocker):
     # Mock the AWS EC2 client
-    mocker.patch("remotepy.instance.ec2_client", autospec=True)
+    mocker.patch("remotepy.utils.ec2_client", autospec=True)
 
     # Mock the describe_launch_templates function
-    mock_describe_launch_templates = remotepy.instance.ec2_client.describe_launch_templates
+    mock_describe_launch_templates = remotepy.utils.ec2_client.describe_launch_templates
 
     # Simulate a response from AWS EC2
     mock_describe_launch_templates.return_value = {
@@ -223,12 +224,15 @@ def test_start_instance_exception(mocker):
     mocker.patch("remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0")
     mocker.patch("remotepy.instance.is_instance_running", return_value=False)
 
-    mock_ec2_client.start_instances.side_effect = Exception("AWS Error")
+    from botocore.exceptions import ClientError
+
+    error_response = {"Error": {"Code": "TestError", "Message": "AWS Error"}}
+    mock_ec2_client.start_instances.side_effect = ClientError(error_response, "start_instances")
 
     result = runner.invoke(app, ["start", "test-instance"])
 
-    assert result.exit_code == 0
-    assert "Error starting instance test-instance: AWS Error" in result.stdout
+    assert result.exit_code == 1
+    assert "AWS Error starting instance test-instance: AWS Error (TestError)" in result.stdout
 
 
 def test_stop_instance_already_stopped(mocker):
@@ -276,12 +280,15 @@ def test_stop_instance_exception(mocker):
     mocker.patch("remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0")
     mocker.patch("remotepy.instance.is_instance_running", return_value=True)
 
-    mock_ec2_client.stop_instances.side_effect = Exception("AWS Error")
+    from botocore.exceptions import ClientError
+
+    error_response = {"Error": {"Code": "TestError", "Message": "AWS Error"}}
+    mock_ec2_client.stop_instances.side_effect = ClientError(error_response, "stop_instances")
 
     result = runner.invoke(app, ["stop", "test-instance"], input="y\n")
 
-    assert result.exit_code == 0
-    assert "Error stopping instance: AWS Error" in result.stdout
+    assert result.exit_code == 1
+    assert "AWS Error stopping instance test-instance: AWS Error (TestError)" in result.stdout
 
 
 def test_type_command_show_current_type(mocker):

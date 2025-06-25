@@ -38,6 +38,9 @@ class ConfigManager:
         except (KeyError, TypeError, AttributeError):
             # Handle malformed config structure
             print("Warning: Config file structure is invalid")
+        except Exception as e:
+            # Handle any other unexpected errors
+            print(f"Warning: Unexpected error reading config: {e}")
 
         # No configuration found
         return None

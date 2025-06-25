@@ -3,7 +3,8 @@ import datetime
 import pytest
 from typer.testing import CliRunner
 
-from remotepy.ami import app, get_launch_template_id
+from remotepy.ami import app
+from remotepy.utils import get_launch_template_id
 
 runner = CliRunner()
 
@@ -162,7 +163,7 @@ def test_list_amis_empty(mocker):
 
 
 def test_get_launch_template_id(mocker):
-    mock_ec2_client = mocker.patch("remotepy.ami.ec2_client", autospec=True)
+    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client", autospec=True)
 
     mock_ec2_client.describe_launch_templates.return_value = {
         "LaunchTemplates": [{"LaunchTemplateId": "lt-0123456789abcdef0"}]
