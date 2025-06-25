@@ -1,6 +1,5 @@
 """Tests for custom exception classes in remotepy.exceptions module."""
 
-
 from remotepy.exceptions import (
     AWSServiceError,
     InstanceNotFoundError,
@@ -95,7 +94,9 @@ class TestInvalidInstanceStateError:
         """Should create error with state information."""
         error = InvalidInstanceStateError("my-instance", "running", "stopped")
 
-        assert "Instance 'my-instance' is in state 'running', but 'stopped' is required" in str(error)
+        assert "Instance 'my-instance' is in state 'running', but 'stopped' is required" in str(
+            error
+        )
         assert error.instance_name == "my-instance"
         assert error.current_state == "running"
         assert error.required_state == "stopped"
