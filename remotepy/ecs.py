@@ -67,10 +67,22 @@ def scale_service(cluster_name: str, service_name: str, desired_count: int) -> N
     cluster_name (str): The name of the cluster
     service_name (str): The name of the service
     desired_count (int): The desired count of tasks
+    
+    Raises:
+        AWSServiceError: If AWS API call fails
     """
-    ecs_client.update_service(
-        cluster=cluster_name, service=service_name, desiredCount=desired_count
-    )
+    try:
+        ecs_client.update_service(
+            cluster=cluster_name, service=service_name, desiredCount=desired_count
+        )
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        error_message = e.response["Error"]["Message"]
+        raise AWSServiceError("ECS", "update_service", error_code, error_message)
+    except NoCredentialsError:
+        raise AWSServiceError(
+            "ECS", "update_service", "NoCredentials", "AWS credentials not found or invalid"
+        )
 
 
 def prompt_for_cluster_name() -> str:
