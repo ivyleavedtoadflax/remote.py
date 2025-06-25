@@ -6,6 +6,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5] - 2025-06-25
+
+### Added
+
+- Custom exception hierarchy for better error classification (`InstanceNotFoundError`, `AWSServiceError`, `ValidationError`, etc.)
+- Input validation utilities for AWS resource IDs (instance IDs, volume IDs, snapshot IDs)
+- Safe array access utilities with proper bounds checking
+- Comprehensive test coverage achieving 100% for ami.py and validation modules (227 tests total)
+- Detailed error messages with actionable information for common AWS errors
+- Enhanced AWS SDK error handling with user-friendly messages
+
+### Changed
+
+- Replaced unsafe array access patterns with bounds checking throughout codebase
+- Replaced generic Exception handling with specific AWS exceptions for better error handling
+- Consolidated error handling patterns across all modules for consistency
+- Improved error messages to provide more helpful feedback to users
+- Updated pre-commit configuration to auto-fix linting issues
+
+### Fixed
+
+- Test failures in `test_get_launch_template_id` with correct module path mocking
+- Import statements in test files after function relocation
+- Exception handling in config.py to catch all exception types gracefully
+- Ruff formatting issues in test files
+
 ## [0.2.2] - 2023-07-26
 
 ### Added
