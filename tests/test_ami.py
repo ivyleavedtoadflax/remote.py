@@ -326,9 +326,10 @@ def test_launch_validation_error_accessing_results(mocker):
     """Test launch when ValidationError occurs accessing launch results."""
     mock_ec2_client = mocker.patch("remotepy.ami.ec2_client", autospec=True)
     mocker.patch("remotepy.ami.get_launch_template_id", return_value="lt-0123456789abcdef0")
-    
+
     # Mock safe_get_array_item to raise ValidationError
     from remotepy.exceptions import ValidationError
+
     mock_safe_get = mocker.patch("remotepy.ami.safe_get_array_item")
     mock_safe_get.side_effect = ValidationError("Array access failed")
 
