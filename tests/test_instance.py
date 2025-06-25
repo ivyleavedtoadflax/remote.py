@@ -1,7 +1,3 @@
-import configparser
-import datetime
-
-import pytest
 from typer.testing import CliRunner
 
 import remotepy
@@ -90,7 +86,6 @@ class TestLaunchTemplateUtilities:
         )
         assert result == "lt-0123456789abcdef0"
 
-
     def test_should_show_running_instance_status_details(self, mocker):
         """Should display detailed status information for a running instance."""
         mock_get_instance_name = mocker.patch(
@@ -117,12 +112,12 @@ class TestLaunchTemplateUtilities:
 
         # Verify command succeeds
         assert result.exit_code == 0
-        
+
         # Verify correct call sequence
         mock_get_instance_name.assert_called_once()
         mock_get_instance_id.assert_called_once_with("test-instance")
         mock_get_instance_status.assert_called_once_with("i-0123456789abcdef0")
-        
+
         # Verify status information is displayed
         assert "test-instance" in result.stdout
         assert "running" in result.stdout

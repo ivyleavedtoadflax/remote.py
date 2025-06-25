@@ -2,8 +2,8 @@
 
 import configparser
 import datetime
-from dataclasses import dataclass, field, replace
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass, replace
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -51,6 +51,7 @@ def test_config_file(tmpdir):
 @dataclass(frozen=True)
 class MockTag:
     """Represents an AWS resource tag."""
+
     Key: str
     Value: str
 
@@ -58,6 +59,7 @@ class MockTag:
 @dataclass(frozen=True)
 class MockInstanceState:
     """Represents an EC2 instance state."""
+
     Name: str
     Code: int
 
@@ -65,61 +67,67 @@ class MockInstanceState:
 @dataclass(frozen=True)
 class MockInstance:
     """Represents an EC2 instance."""
+
     InstanceId: str
     InstanceType: str
     State: MockInstanceState
     LaunchTime: datetime.datetime
     PublicDnsName: str
-    Tags: List[MockTag]
+    Tags: list[MockTag]
 
 
 @dataclass(frozen=True)
 class MockReservation:
     """Represents an EC2 reservation."""
-    Instances: List[MockInstance]
+
+    Instances: list[MockInstance]
 
 
 @dataclass(frozen=True)
 class MockEbsVolume:
     """Represents an EBS volume."""
+
     VolumeId: str
     Size: int
     VolumeType: str
     State: str
-    Attachments: List[Dict[str, Any]]
-    Tags: List[MockTag]
+    Attachments: list[dict[str, Any]]
+    Tags: list[MockTag]
 
 
 @dataclass(frozen=True)
 class MockEbsSnapshot:
     """Represents an EBS snapshot."""
+
     SnapshotId: str
     VolumeId: str
     State: str
     Progress: str
     StartTime: datetime.datetime
     Description: str
-    Tags: List[MockTag]
+    Tags: list[MockTag]
 
 
 @dataclass(frozen=True)
 class MockAmi:
     """Represents an AMI."""
+
     ImageId: str
     Name: str
     State: str
     CreationDate: datetime.datetime
     Description: str
-    Tags: List[MockTag]
+    Tags: list[MockTag]
 
 
 @dataclass(frozen=True)
 class MockLaunchTemplate:
     """Represents a Launch Template."""
+
     LaunchTemplateId: str
     LaunchTemplateName: str
     LatestVersionNumber: int
-    Tags: List[MockTag]
+    Tags: list[MockTag]
 
 
 def get_mock_instance(**overrides: Any) -> MockInstance:
@@ -140,9 +148,7 @@ def get_mock_instance(**overrides: Any) -> MockInstance:
 
 def get_mock_reservation(**overrides: Any) -> MockReservation:
     """Create a mock EC2 reservation with sensible defaults."""
-    defaults = MockReservation(
-        Instances=[get_mock_instance()]
-    )
+    defaults = MockReservation(Instances=[get_mock_instance()])
     return replace(defaults, **overrides)
 
 
@@ -203,7 +209,7 @@ def get_mock_launch_template(**overrides: Any) -> MockLaunchTemplate:
     return replace(defaults, **overrides)
 
 
-def get_mock_instances_response(**overrides: Any) -> Dict[str, Any]:
+def get_mock_instances_response(**overrides: Any) -> dict[str, Any]:
     """Create a mock EC2 describe_instances response with sensible defaults."""
     defaults = {
         "Reservations": [
@@ -238,14 +244,14 @@ def get_mock_instances_response(**overrides: Any) -> Dict[str, Any]:
             },
         ]
     }
-    
+
     # Apply overrides by merging dictionaries
     result = defaults.copy()
     result.update(overrides)
     return result
 
 
-def get_mock_volumes_response(**overrides: Any) -> Dict[str, Any]:
+def get_mock_volumes_response(**overrides: Any) -> dict[str, Any]:
     """Create a mock EC2 describe_volumes response with sensible defaults."""
     defaults = {
         "Volumes": [
@@ -277,13 +283,13 @@ def get_mock_volumes_response(**overrides: Any) -> Dict[str, Any]:
             },
         ]
     }
-    
+
     result = defaults.copy()
     result.update(overrides)
     return result
 
 
-def get_mock_ecs_clusters_response(**overrides: Any) -> Dict[str, Any]:
+def get_mock_ecs_clusters_response(**overrides: Any) -> dict[str, Any]:
     """Create a mock ECS list_clusters response with sensible defaults."""
     defaults = {
         "clusterArns": [
@@ -291,13 +297,13 @@ def get_mock_ecs_clusters_response(**overrides: Any) -> Dict[str, Any]:
             "arn:aws:ecs:us-east-1:123456789012:cluster/test-cluster-2",
         ]
     }
-    
+
     result = defaults.copy()
     result.update(overrides)
     return result
 
 
-def get_mock_ecs_services_response(**overrides: Any) -> Dict[str, Any]:
+def get_mock_ecs_services_response(**overrides: Any) -> dict[str, Any]:
     """Create a mock ECS list_services response with sensible defaults."""
     defaults = {
         "serviceArns": [
@@ -305,13 +311,13 @@ def get_mock_ecs_services_response(**overrides: Any) -> Dict[str, Any]:
             "arn:aws:ecs:us-east-1:123456789012:service/test-cluster/test-service-2",
         ]
     }
-    
+
     result = defaults.copy()
     result.update(overrides)
     return result
 
 
-def get_mock_snapshots_response(**overrides: Any) -> Dict[str, Any]:
+def get_mock_snapshots_response(**overrides: Any) -> dict[str, Any]:
     """Create a mock EC2 describe_snapshots response with sensible defaults."""
     defaults = {
         "Snapshots": [
@@ -339,13 +345,13 @@ def get_mock_snapshots_response(**overrides: Any) -> Dict[str, Any]:
             },
         ]
     }
-    
+
     result = defaults.copy()
     result.update(overrides)
     return result
 
 
-def get_mock_amis_response(**overrides: Any) -> Dict[str, Any]:
+def get_mock_amis_response(**overrides: Any) -> dict[str, Any]:
     """Create a mock EC2 describe_images response with sensible defaults."""
     defaults = {
         "Images": [
@@ -371,13 +377,13 @@ def get_mock_amis_response(**overrides: Any) -> Dict[str, Any]:
             },
         ]
     }
-    
+
     result = defaults.copy()
     result.update(overrides)
     return result
 
 
-def get_mock_launch_templates_response(**overrides: Any) -> Dict[str, Any]:
+def get_mock_launch_templates_response(**overrides: Any) -> dict[str, Any]:
     """Create a mock EC2 describe_launch_templates response with sensible defaults."""
     defaults = {
         "LaunchTemplates": [
@@ -399,7 +405,7 @@ def get_mock_launch_templates_response(**overrides: Any) -> Dict[str, Any]:
             },
         ]
     }
-    
+
     result = defaults.copy()
     result.update(overrides)
     return result
@@ -457,31 +463,39 @@ def mock_launch_templates():
 # ============================================================================
 
 
-def assert_aws_client_called_correctly(mock_client, method_name: str, expected_args=None, expected_kwargs=None):
+def assert_aws_client_called_correctly(
+    mock_client, method_name: str, expected_args=None, expected_kwargs=None
+):
     """Assert that an AWS client method was called with the correct parameters."""
     method_mock = getattr(mock_client, method_name)
     method_mock.assert_called_once()
-    
+
     if expected_args is not None:
         call_args = method_mock.call_args[0]
         assert call_args == expected_args, f"Expected args {expected_args}, got {call_args}"
-    
+
     if expected_kwargs is not None:
         call_kwargs = method_mock.call_args[1]
-        assert call_kwargs == expected_kwargs, f"Expected kwargs {expected_kwargs}, got {call_kwargs}"
+        assert (
+            call_kwargs == expected_kwargs
+        ), f"Expected kwargs {expected_kwargs}, got {call_kwargs}"
 
 
-def assert_cli_output_contains(result, expected_texts: List[str], description: str = "output"):
+def assert_cli_output_contains(result, expected_texts: list[str], description: str = "output"):
     """Assert that CLI output contains all expected text fragments."""
     missing_texts = []
     for text in expected_texts:
         if text not in result.stdout:
             missing_texts.append(text)
-    
-    assert not missing_texts, f"Missing text in {description}: {missing_texts}. Actual output: {result.stdout}"
+
+    assert (
+        not missing_texts
+    ), f"Missing text in {description}: {missing_texts}. Actual output: {result.stdout}"
 
 
-def assert_error_response_structure(error, expected_service: str, expected_operation: str, expected_code: str):
+def assert_error_response_structure(
+    error, expected_service: str, expected_operation: str, expected_code: str
+):
     """Assert that AWSServiceError has the expected structure."""
     assert error.service == expected_service
     assert error.operation == expected_operation
