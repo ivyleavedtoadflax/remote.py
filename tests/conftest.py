@@ -476,9 +476,9 @@ def assert_aws_client_called_correctly(
 
     if expected_kwargs is not None:
         call_kwargs = method_mock.call_args[1]
-        assert call_kwargs == expected_kwargs, (
-            f"Expected kwargs {expected_kwargs}, got {call_kwargs}"
-        )
+        assert (
+            call_kwargs == expected_kwargs
+        ), f"Expected kwargs {expected_kwargs}, got {call_kwargs}"
 
 
 def assert_cli_output_contains(result, expected_texts: list[str], description: str = "output"):
@@ -488,9 +488,9 @@ def assert_cli_output_contains(result, expected_texts: list[str], description: s
         if text not in result.stdout:
             missing_texts.append(text)
 
-    assert not missing_texts, (
-        f"Missing text in {description}: {missing_texts}. Actual output: {result.stdout}"
-    )
+    assert (
+        not missing_texts
+    ), f"Missing text in {description}: {missing_texts}. Actual output: {result.stdout}"
 
 
 def assert_error_response_structure(
