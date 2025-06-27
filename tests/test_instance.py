@@ -1,7 +1,3 @@
-import configparser
-import datetime
-
-import pytest
 from typer.testing import CliRunner
 
 import remotepy
@@ -12,173 +8,135 @@ from remotepy.utils import get_launch_template_id
 runner = CliRunner()
 
 
-@pytest.fixture(scope="session")
-def test_config(tmpdir_factory):
-    config_path = tmpdir_factory.mktemp("remote.py").join("config.ini")
-    cfg = configparser.ConfigParser()
-    cfg["DEFAULT"]["instance_name"] = "test"
-
-    with open(config_path, "w") as configfile:
-        cfg.write(configfile)
-
-    return config_path
+# ============================================================================
+# Instance CLI Command Tests
+# ============================================================================
 
 
-@pytest.fixture
-def mock_describe_instances_response():
-    return {
-        "Reservations": [
-            {
-                "Instances": [
+class TestInstanceStatusCommand:
+    """Test the 'remote status' command behavior."""
+
+    def test_should_report_error_when_instance_not_found(self, mocker):
+        """Should exit with error code 1 when instance doesn't exist."""
+        mocker.patch("remotepy.utils.ec2_client", autospec=True)
+        remotepy.utils.ec2_client.describe_instances.return_value = {"Reservations": []}
+
+        result = runner.invoke(app, ["status", "test"])
+
+        assert result.exit_code == 1
+        assert "Instance 'test' not found" in result.stdout
+
+
+class TestInstanceListCommand:
+    """Test the 'remote list' command behavior."""
+
+    def test_should_show_table_headers_when_no_instances_exist(self, mocker):
+        """Should display table headers even when no instances are found."""
+        mocker.patch("remotepy.utils.ec2_client", autospec=True)
+        remotepy.utils.ec2_client.describe_instances.return_value = {"Reservations": []}
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 0
+        assert "Name" in result.stdout
+        assert "InstanceId" in result.stdout
+        assert "PublicDnsName" in result.stdout
+        assert "Status" in result.stdout
+
+    def test_should_display_instance_details_when_instances_exist(self, mocker, mock_ec2_instances):
+        """Should show instance details in tabular format when instances are found."""
+        mocker.patch("remotepy.utils.ec2_client", autospec=True)
+        remotepy.utils.ec2_client.describe_instances.return_value = mock_ec2_instances
+
+        result = runner.invoke(app, ["list"])
+
+        # Verify API call was made
+        remotepy.utils.ec2_client.describe_instances.assert_called_once()
+
+        # Verify table headers are present
+        assert "Name" in result.stdout
+        assert "InstanceId" in result.stdout
+        assert "PublicDnsName" in result.stdout
+        assert "Status" in result.stdout
+        assert "Type" in result.stdout
+        assert "Launch Time" in result.stdout
+
+        # Verify actual instance data is displayed
+        assert "i-0123456789abcdef0" in result.stdout
+        assert "running" in result.stdout
+        assert "t2.micro" in result.stdout
+        assert "2023-07-15 00:00:00 UTC" in result.stdout
+
+
+class TestLaunchTemplateUtilities:
+    """Test launch template utility functions."""
+
+    def test_should_return_template_id_when_template_found_by_name(self, mocker):
+        """Should return the launch template ID when template is found by name tag."""
+        mocker.patch("remotepy.utils.ec2_client", autospec=True)
+        mock_describe_launch_templates = remotepy.utils.ec2_client.describe_launch_templates
+        mock_describe_launch_templates.return_value = {
+            "LaunchTemplates": [{"LaunchTemplateId": "lt-0123456789abcdef0"}]
+        }
+
+        result = get_launch_template_id("my-template-name")
+
+        mock_describe_launch_templates.assert_called_once_with(
+            Filters=[{"Name": "tag:Name", "Values": ["my-template-name"]}]
+        )
+        assert result == "lt-0123456789abcdef0"
+
+    def test_should_show_running_instance_status_details(self, mocker):
+        """Should display detailed status information for a running instance."""
+        mock_get_instance_name = mocker.patch(
+            "remotepy.instance.get_instance_name", return_value="test-instance"
+        )
+        mock_get_instance_id = mocker.patch(
+            "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
+        )
+        mock_get_instance_status = mocker.patch(
+            "remotepy.instance.get_instance_status",
+            return_value={
+                "InstanceStatuses": [
                     {
                         "InstanceId": "i-0123456789abcdef0",
-                        "InstanceType": "t2.micro",
-                        "State": {"Name": "running", "Code": 16},
-                        "LaunchTime": datetime.datetime(2023, 7, 15, 0, 0, 0, tzinfo=datetime.UTC),
-                        "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
-                        "Tags": [
-                            {"Key": "Name", "Value": "running-instance"},
-                        ],
-                    },
-                ],
-                "ReservationId": "r-0123456789abcdef0",
+                        "InstanceState": {"Name": "running"},
+                        "SystemStatus": {"Status": "ok"},
+                        "InstanceStatus": {"Status": "ok", "Details": [{"Status": "passed"}]},
+                    }
+                ]
             },
-            {
-                "Instances": [
-                    {
-                        "InstanceId": "i-0123456789abcdef1",
-                        "InstanceType": "t2.micro",
-                        "State": {"Name": "stopped", "Code": 80},
-                        "LaunchTime": datetime.datetime(2023, 7, 15, 0, 0, 0, tzinfo=datetime.UTC),
-                        "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
-                        "Tags": [
-                            {"Key": "Name", "Value": "stopped-instance"},
-                        ],
-                    },
-                ],
-                "ReservationId": "r-0123456789abcdef1",
-            },
-        ]
-    }
+        )
+
+        result = runner.invoke(app, ["status"])
+
+        # Verify command succeeds
+        assert result.exit_code == 0
+
+        # Verify correct call sequence
+        mock_get_instance_name.assert_called_once()
+        mock_get_instance_id.assert_called_once_with("test-instance")
+        mock_get_instance_status.assert_called_once_with("i-0123456789abcdef0")
+
+        # Verify status information is displayed
+        assert "test-instance" in result.stdout
+        assert "running" in result.stdout
+
+    def test_should_report_non_running_instance_status(self, mocker):
+        """Should report when instance exists but is not in running state."""
+        mock_get_instance_id = mocker.patch(
+            "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
+        )
+        mocker.patch("remotepy.instance.get_instance_status", return_value={"InstanceStatuses": []})
+
+        result = runner.invoke(app, ["status", "specific-instance"])
+
+        assert result.exit_code == 0
+        mock_get_instance_id.assert_called_once_with("specific-instance")
+        assert "specific-instance is not in running state" in result.stdout
 
 
-def test_instance_status_when_not_found(mocker, test_config):
-    # Mock the AWS EC2 client to return empty reservations (instance not found)
-    mocker.patch("remotepy.utils.ec2_client", autospec=True)
-    remotepy.utils.ec2_client.describe_instances.return_value = {"Reservations": []}
-
-    result = runner.invoke(app, ["status", "test"])
-
-    # Expect a 1 exit code as we sys.exit(1)
-    assert result.exit_code == 1
-    assert "Instance 'test' not found" in result.stdout
-
-
-def test_empty_list(mocker, test_config):
-    # Mock the AWS EC2 client to return empty reservations
-    mocker.patch("remotepy.utils.ec2_client", autospec=True)
-    remotepy.utils.ec2_client.describe_instances.return_value = {"Reservations": []}
-
-    result = runner.invoke(app, ["list"])
-
-    assert result.exit_code == 0
-    assert "Name" in result.stdout
-    assert "InstanceId" in result.stdout
-    assert "PublicDnsName" in result.stdout
-    assert "Status" in result.stdout
-
-
-def test_list(mocker, mock_describe_instances_response):
-    # Mock the AWS EC2 client
-    mocker.patch("remotepy.utils.ec2_client", autospec=True)
-
-    # Simulate a response from AWS EC2
-    remotepy.utils.ec2_client.describe_instances.return_value = mock_describe_instances_response
-    # Call the function
-    result = runner.invoke(app, ["list"])
-
-    # Check that the describe_instances method was called
-    remotepy.utils.ec2_client.describe_instances.assert_called_once()
-
-    assert "Name" in result.stdout
-    assert "InstanceId" in result.stdout
-    assert "PublicDnsName" in result.stdout
-    assert "Status" in result.stdout
-    assert "Type" in result.stdout
-    assert "Launch Time" in result.stdout
-
-    assert "i-0123456789abcdef0" in result.stdout
-    assert "running" in result.stdout
-    assert "t2.micro" in result.stdout
-    assert "2023-07-15 00:00:00 UTC" in result.stdout
-
-
-def test_get_launch_template_id(mocker):
-    # Mock the AWS EC2 client
-    mocker.patch("remotepy.utils.ec2_client", autospec=True)
-
-    # Mock the describe_launch_templates function
-    mock_describe_launch_templates = remotepy.utils.ec2_client.describe_launch_templates
-
-    # Simulate a response from AWS EC2
-    mock_describe_launch_templates.return_value = {
-        "LaunchTemplates": [{"LaunchTemplateId": "lt-0123456789abcdef0"}]
-    }
-
-    # Call the function with a launch template name
-    result = get_launch_template_id("my-template-name")
-
-    # Check that the describe_launch_templates function was called with the
-    # correct arguments
-
-    mock_describe_launch_templates.assert_called_once_with(
-        Filters=[{"Name": "tag:Name", "Values": ["my-template-name"]}]
-    )
-
-    # Check that the function returned the correct launch template ID
-    assert result == "lt-0123456789abcdef0"
-
-
-def test_status_with_running_instance(mocker):
-    mock_get_instance_name = mocker.patch(
-        "remotepy.instance.get_instance_name", return_value="test-instance"
-    )
-    mock_get_instance_id = mocker.patch(
-        "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
-    )
-    mock_get_instance_status = mocker.patch(
-        "remotepy.instance.get_instance_status",
-        return_value={
-            "InstanceStatuses": [
-                {
-                    "InstanceId": "i-0123456789abcdef0",
-                    "InstanceState": {"Name": "running"},
-                    "SystemStatus": {"Status": "ok"},
-                    "InstanceStatus": {"Status": "ok", "Details": [{"Status": "passed"}]},
-                }
-            ]
-        },
-    )
-
-    result = runner.invoke(app, ["status"])
-
-    assert result.exit_code == 0
-    mock_get_instance_name.assert_called_once()
-    mock_get_instance_id.assert_called_once_with("test-instance")
-    mock_get_instance_status.assert_called_once_with("i-0123456789abcdef0")
-
-
-def test_status_with_instance_name(mocker):
-    mock_get_instance_id = mocker.patch(
-        "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
-    )
-    mocker.patch("remotepy.instance.get_instance_status", return_value={"InstanceStatuses": []})
-
-    result = runner.invoke(app, ["status", "specific-instance"])
-
-    assert result.exit_code == 0
-    mock_get_instance_id.assert_called_once_with("specific-instance")
-    assert "specific-instance is not in running state" in result.stdout
+# Removed duplicate - moved to TestInstanceStatusCommand class above
 
 
 def test_start_instance_already_running(mocker):

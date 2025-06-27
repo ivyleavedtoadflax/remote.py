@@ -18,29 +18,12 @@ from remotepy.exceptions import AWSServiceError
 runner = CliRunner()
 
 
-@pytest.fixture
-def mock_clusters_response():
-    return {
-        "clusterArns": [
-            "arn:aws:ecs:us-east-1:123456789012:cluster/test-cluster-1",
-            "arn:aws:ecs:us-east-1:123456789012:cluster/test-cluster-2",
-        ]
-    }
+# Remove duplicate fixtures - use centralized ones from conftest.py
 
 
-@pytest.fixture
-def mock_services_response():
-    return {
-        "serviceArns": [
-            "arn:aws:ecs:us-east-1:123456789012:service/test-cluster/test-service-1",
-            "arn:aws:ecs:us-east-1:123456789012:service/test-cluster/test-service-2",
-        ]
-    }
-
-
-def test_get_all_clusters(mocker, mock_clusters_response):
+def test_get_all_clusters(mocker, mock_ecs_clusters):
     mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
-    mock_ecs_client.list_clusters.return_value = mock_clusters_response
+    mock_ecs_client.list_clusters.return_value = mock_ecs_clusters
 
     result = get_all_clusters()
 
@@ -51,9 +34,9 @@ def test_get_all_clusters(mocker, mock_clusters_response):
     mock_ecs_client.list_clusters.assert_called_once()
 
 
-def test_get_all_services(mocker, mock_services_response):
+def test_get_all_services(mocker, mock_ecs_services):
     mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
-    mock_ecs_client.list_services.return_value = mock_services_response
+    mock_ecs_client.list_services.return_value = mock_ecs_services
 
     result = get_all_services("test-cluster")
 

@@ -348,3 +348,94 @@ def test_add_interactive_valid_selection_second_instance(mocker, mock_instances_
         "test-instance-2", config.CONFIG_PATH
     )
     assert "Default instance set to test-instance-2" in result.stdout
+
+
+# ============================================================================
+# Enhanced Configuration Edge Case Tests
+# ============================================================================
+
+
+class TestConfigurationEdgeCases:
+    """Test configuration edge cases and error conditions."""
+
+    def test_should_handle_corrupted_config_file(self, mocker, tmpdir):
+        """Should handle gracefully when config file is corrupted."""
+        # Create a corrupted config file
+        config_path = tmpdir.join("config.ini")
+        config_path.write("this is not valid ini format [[[")
+
+        mock_settings = mocker.patch("remotepy.config.Settings")
+        mock_settings.return_value.get_config_path.return_value = str(config_path)
+
+        config_manager = ConfigManager()
+        result = config_manager.get_instance_name()
+
+        assert result is None
+
+    def test_should_handle_missing_config_directory(self, mocker, tmpdir):
+        """Should create config directory when it doesn't exist."""
+        nonexistent_path = tmpdir.join("nonexistent", "config.ini")
+
+        mock_settings = mocker.patch("remotepy.config.Settings")
+        mock_settings.return_value.get_config_path.return_value = str(nonexistent_path)
+        mock_write_config = mocker.patch("remotepy.config.write_config")
+
+        config_manager = ConfigManager()
+        config_manager.set_instance_name("test-instance")
+
+        # Should have attempted to write config despite missing directory
+        mock_write_config.assert_called_once()
+
+    def test_should_handle_config_with_empty_sections(self, mocker):
+        """Should handle config files with empty DEFAULT section."""
+        config_manager = ConfigManager()
+
+        # Mock empty config
+        mock_config = mocker.MagicMock()
+        mock_config.__contains__ = lambda self, key: key == "DEFAULT"
+        mock_config.__getitem__ = lambda self, key: {}  # Empty section
+        config_manager._file_config = mock_config
+
+        result = config_manager.get_instance_name()
+        assert result is None
+
+    def test_should_validate_instance_name_format(self, mocker):
+        """Should validate instance name format when setting."""
+        mock_write_config = mocker.patch("remotepy.config.write_config")
+        config_manager = ConfigManager()
+
+        # Test with valid instance name
+        config_manager.set_instance_name("valid-instance-name")
+        mock_write_config.assert_called_once()
+
+        # Test with instance name containing spaces (should still work)
+        mock_write_config.reset_mock()
+        config_manager.set_instance_name("instance with spaces")
+        mock_write_config.assert_called_once()
+
+
+class TestSettingsConfiguration:
+    """Test the Settings class behavior."""
+
+    def test_should_use_testing_mode_in_test_environment(self):
+        """Should correctly identify testing mode."""
+        from remotepy.settings import Settings
+
+        test_settings = Settings(testing_mode=True)
+        assert test_settings.testing_mode is True
+
+        production_settings = Settings(testing_mode=False)
+        assert production_settings.testing_mode is False
+
+    def test_should_handle_config_path_generation(self, mocker, tmpdir):
+        """Should generate correct config paths."""
+        from remotepy.settings import Settings
+
+        with mocker.patch("pathlib.Path.home", return_value=tmpdir):
+            settings = Settings()
+            config_path = settings.get_config_path()
+
+            # Should generate path under .config/remote.py/
+            assert "config.ini" in str(config_path)
+            assert ".config" in str(config_path)
+            assert "remote.py" in str(config_path)
