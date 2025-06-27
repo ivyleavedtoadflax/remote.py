@@ -76,7 +76,7 @@ line-ending = "auto"
 [dependency-groups]
 dev = [
     "hypothesis>=6.135.14",
-    "pre-commit>=4.2.0",
+    "pre-commit>=4.0.0",
     "pytest>=8.4.1",
     "pytest-cov>=6.2.1",
     "pytest-mock>=3.14.1",
