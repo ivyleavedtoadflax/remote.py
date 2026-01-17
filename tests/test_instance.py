@@ -36,7 +36,7 @@ class TestInstanceListCommand:
         mock_paginator.paginate.return_value = [{"Reservations": []}]
         mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
-        result = runner.invoke(app, ["list"])
+        result = runner.invoke(app, ["list", "--no-pricing"])
 
         assert result.exit_code == 0
         assert "Name" in result.stdout
@@ -52,6 +52,10 @@ class TestInstanceListCommand:
         mock_paginator = mocker.MagicMock()
         mock_paginator.paginate.return_value = [mock_ec2_instances]
         mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        # Mock pricing to avoid actual API calls
+        mocker.patch("remotepy.instance.get_instance_price", return_value=0.0104)
+        mocker.patch("remotepy.instance.get_monthly_estimate", return_value=7.59)
 
         result = runner.invoke(app, ["list"])
 
@@ -71,6 +75,81 @@ class TestInstanceListCommand:
         assert "running" in result.stdout
         assert "t2.micro" in result.stdout
         assert "2023-07-15 00:00:00 UTC" in result.stdout
+
+    def test_should_show_pricing_columns_by_default(self, mocker):
+        """Should display pricing columns when --no-pricing is not specified."""
+        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [{"Reservations": []}]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 0
+        assert "$/hr" in result.stdout
+        assert "$/month" in result.stdout
+
+    def test_should_hide_pricing_columns_with_no_pricing_flag(self, mocker):
+        """Should not display pricing columns when --no-pricing is specified."""
+        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [{"Reservations": []}]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        result = runner.invoke(app, ["list", "--no-pricing"])
+
+        assert result.exit_code == 0
+        assert "$/hr" not in result.stdout
+        assert "$/month" not in result.stdout
+
+    def test_should_display_pricing_data_for_instances(self, mocker, mock_ec2_instances):
+        """Should show pricing information for each instance type."""
+        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [mock_ec2_instances]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        # Mock pricing functions
+        mocker.patch("remotepy.instance.get_instance_price", return_value=0.0104)
+        mocker.patch("remotepy.instance.get_monthly_estimate", return_value=7.59)
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 0
+        # format_price formats 0.0104 as "$0.01" since it's >= 0.01 (uses 2 decimal places)
+        assert "$0.01" in result.stdout
+        assert "$7.59" in result.stdout
+
+    def test_should_handle_unavailable_pricing_gracefully(self, mocker, mock_ec2_instances):
+        """Should display dash when pricing is unavailable."""
+        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [mock_ec2_instances]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        # Mock pricing to return None (unavailable)
+        mocker.patch("remotepy.instance.get_instance_price", return_value=None)
+        mocker.patch("remotepy.instance.get_monthly_estimate", return_value=None)
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 0
+        # format_price returns "-" for None values
+        assert "-" in result.stdout
+
+    def test_should_not_call_pricing_api_with_no_pricing_flag(self, mocker, mock_ec2_instances):
+        """Should skip pricing API calls when --no-pricing flag is used."""
+        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [mock_ec2_instances]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        mock_get_price = mocker.patch("remotepy.instance.get_instance_price")
+
+        result = runner.invoke(app, ["list", "--no-pricing"])
+
+        assert result.exit_code == 0
+        mock_get_price.assert_not_called()
 
 
 class TestLaunchTemplateUtilities:

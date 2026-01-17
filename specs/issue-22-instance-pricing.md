@@ -1,6 +1,6 @@
 # Issue 22: Add Instance Pricing
 
-**Status:** Not started
+**Status:** COMPLETED
 **Priority:** Low (v0.5.0)
 **GitHub Issue:** #32
 
@@ -58,8 +58,8 @@ db-server     i-0123456789abcdef1  running  r5.large  $0.126   $90.72
 
 ## Acceptance Criteria
 
-- [ ] Add pricing column to `remote list` output
-- [ ] Cache pricing data to reduce API calls
-- [ ] Handle missing/unavailable pricing gracefully
-- [ ] Add `--no-pricing` flag to skip pricing lookup
-- [ ] Add tests with mocked pricing responses
+- [x] Add pricing column to `remote list` output
+- [x] Cache pricing data to reduce API calls
+- [x] Handle missing/unavailable pricing gracefully
+- [x] Add `--no-pricing` flag to skip pricing lookup
+- [x] Add tests with mocked pricing responses
