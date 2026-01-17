@@ -36,13 +36,13 @@ class ConfigManager:
         except (configparser.Error, OSError, PermissionError) as e:
             # Config file might be corrupted or inaccessible
             # Log the specific error but don't crash the application
-            print(f"Warning: Could not read config file: {e}")
+            typer.secho(f"Warning: Could not read config file: {e}", fg=typer.colors.YELLOW)
         except (KeyError, TypeError, AttributeError):
             # Handle malformed config structure
-            print("Warning: Config file structure is invalid")
+            typer.secho("Warning: Config file structure is invalid", fg=typer.colors.YELLOW)
         except Exception as e:
             # Handle any other unexpected errors
-            print(f"Warning: Unexpected error reading config: {e}")
+            typer.secho(f"Warning: Unexpected error reading config: {e}", fg=typer.colors.YELLOW)
 
         # No configuration found
         return None
