@@ -20,7 +20,11 @@ def create(
     description: str = typer.Option("", "--description", "-d", help="Description"),
 ) -> None:
     """
-    Snapshot a volume
+    Create an EBS snapshot from a volume.
+
+    Examples:
+        remote snapshot create -v vol-123456 -n my-snapshot
+        remote snapshot create -v vol-123456 -n backup -d "Daily backup"
     """
 
     snapshot = get_ec2_client().create_snapshot(
@@ -41,7 +45,10 @@ def create(
 @app.command("list")
 def list_snapshots(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
     """
-    List the snapshots
+    List EBS snapshots for an instance.
+
+    Shows snapshots for all volumes attached to the instance.
+    Uses the default instance from config if no name is provided.
     """
 
     if not instance_name:

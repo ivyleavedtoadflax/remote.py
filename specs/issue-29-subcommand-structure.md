@@ -214,9 +214,9 @@ $ remote instance --help
 
 ## Acceptance Criteria
 
-- [ ] Add `remote instance` subcommand group
-- [ ] Ensure `remote start` and `remote instance start` both work
-- [ ] Add help text for instance subcommand group
-- [ ] Update documentation with both command forms
-- [ ] Add tests for both command paths
-- [ ] Document migration path for future versions
+- [x] Add `remote instance` subcommand group
+- [x] Ensure `remote start` and `remote instance start` both work
+- [x] Add help text for instance subcommand group
+- [x] Update documentation with both command forms
+- [x] Add tests for both command paths
+- [x] Document migration path for future versions

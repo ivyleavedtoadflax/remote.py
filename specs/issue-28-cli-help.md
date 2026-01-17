@@ -1,6 +1,6 @@
 # Issue 28: Improve CLI Help Documentation
 
-**Status:** Not started
+**Status:** COMPLETED
 **Priority:** Medium
 **Files:** `remotepy/__main__.py`, `remotepy/instance.py`, `remotepy/ami.py`, `remotepy/ecs.py`, `remotepy/config.py`, `remotepy/snapshot.py`, `remotepy/volume.py`
 
@@ -204,11 +204,11 @@ $ remote --help
 
 ## Acceptance Criteria
 
-- [ ] Add app-level description to main Typer app
-- [ ] Add help text to all subcommand group registrations
-- [ ] Add/improve descriptions for all commands
-- [ ] Add examples to complex commands (launch, connect, ami create)
-- [ ] Standardize docstring format across all commands
-- [ ] Fix the empty `type` command description
-- [ ] Add epilog with usage hint
-- [ ] Test all --help outputs for consistency
+- [x] Add app-level description to main Typer app
+- [x] Add help text to all subcommand group registrations
+- [x] Add/improve descriptions for all commands
+- [x] Add examples to complex commands (launch, connect, ami create)
+- [x] Standardize docstring format across all commands
+- [x] Fix the empty `type` command description
+- [x] Add epilog with usage hint
+- [x] Test all --help outputs for consistency
