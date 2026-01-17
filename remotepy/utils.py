@@ -1,5 +1,5 @@
 from configparser import ConfigParser
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, cast
 
@@ -362,7 +362,7 @@ def get_instance_info(
                 if status == "running" and "LaunchTime" in instance:
                     try:
                         launch_time = instance["LaunchTime"].timestamp()
-                        launch_time = datetime.utcfromtimestamp(launch_time)
+                        launch_time = datetime.fromtimestamp(launch_time, tz=timezone.utc)
                         launch_time = launch_time.strftime("%Y-%m-%d %H:%M:%S UTC")
                     except (AttributeError, ValueError):
                         launch_time = None
