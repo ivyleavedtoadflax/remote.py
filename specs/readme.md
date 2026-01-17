@@ -110,3 +110,4 @@ Can be done in parallel with other work.
 | 23 | Rename package to `remote` | [issue-23-rename-package.md](./issue-23-rename-package.md) |
 | 24 | Pydantic config validation | [issue-24-pydantic-config.md](./issue-24-pydantic-config.md) |
 | 25 | Contributing guide | [issue-25-contributing-guide.md](./issue-25-contributing-guide.md) |
+| 30 | Remove root-level instance commands | [issue-30-remove-root-instance-commands.md](./issue-30-remove-root-instance-commands.md) |
