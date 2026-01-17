@@ -1,6 +1,6 @@
 # Issue 27: Improve Config Workflow
 
-**Status:** Not started
+**Status:** COMPLETED
 **Priority:** Medium
 **Files:** `remotepy/config.py`, `remotepy/settings.py`
 
@@ -280,13 +280,13 @@ echo "Default instance: $INSTANCE"
 
 ## Acceptance Criteria
 
-- [ ] Add `remote config set <key> <value>` command
-- [ ] Add `remote config get <key>` command (returns just value, no formatting)
-- [ ] Add `remote config unset <key>` command
-- [ ] Add `remote config init` guided setup wizard
-- [ ] Add `remote config validate` command
-- [ ] Add `remote config keys` command to list valid keys
-- [ ] Update ConfigManager to support additional keys
-- [ ] Keep `add` command working for backwards compatibility
-- [ ] Add validation for known config keys
-- [ ] Add tests for new commands
+- [x] Add `remote config set <key> <value>` command
+- [x] Add `remote config get <key>` command (returns just value, no formatting)
+- [x] Add `remote config unset <key>` command
+- [x] Add `remote config init` guided setup wizard
+- [x] Add `remote config validate` command
+- [x] Add `remote config keys` command to list valid keys
+- [x] Update ConfigManager to support additional keys
+- [x] Keep `add` command working for backwards compatibility
+- [x] Add validation for known config keys
+- [x] Add tests for new commands

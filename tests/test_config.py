@@ -439,3 +439,217 @@ class TestSettingsConfiguration:
             assert "config.ini" in str(config_path)
             assert ".config" in str(config_path)
             assert "remote.py" in str(config_path)
+
+
+class TestConfigSetCommand:
+    """Test the config set command."""
+
+    def test_set_valid_key(self, mocker, tmpdir):
+        """Should set a valid config key."""
+        config_path = str(tmpdir / "config.ini")
+
+        result = runner.invoke(config.app, ["set", "ssh_user", "ec2-user", "-c", config_path])
+
+        assert result.exit_code == 0
+        assert "Set ssh_user = ec2-user" in result.stdout
+
+        # Verify value was written
+        import configparser
+
+        cfg = configparser.ConfigParser()
+        cfg.read(config_path)
+        assert cfg["DEFAULT"]["ssh_user"] == "ec2-user"
+
+    def test_set_invalid_key(self, tmpdir):
+        """Should reject unknown config keys."""
+        config_path = str(tmpdir / "config.ini")
+
+        result = runner.invoke(config.app, ["set", "invalid_key", "value", "-c", config_path])
+
+        assert result.exit_code == 1
+        assert "Unknown config key" in result.stdout
+
+
+class TestConfigGetCommand:
+    """Test the config get command."""
+
+    def test_get_existing_value(self, tmpdir):
+        """Should return existing config value."""
+        config_path = str(tmpdir / "config.ini")
+
+        # Create config file with value
+        import configparser
+
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"ssh_user": "ubuntu"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = runner.invoke(config.app, ["get", "ssh_user", "-c", config_path])
+
+        assert result.exit_code == 0
+        assert "ubuntu" in result.stdout
+
+    def test_get_missing_value(self, tmpdir):
+        """Should exit with code 1 for missing value."""
+        config_path = str(tmpdir / "config.ini")
+
+        # Create empty config file
+        import configparser
+
+        cfg = configparser.ConfigParser()
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = runner.invoke(config.app, ["get", "missing_key", "-c", config_path])
+
+        assert result.exit_code == 1
+
+
+class TestConfigUnsetCommand:
+    """Test the config unset command."""
+
+    def test_unset_existing_key(self, tmpdir):
+        """Should remove existing config key."""
+        config_path = str(tmpdir / "config.ini")
+
+        # Create config file with value
+        import configparser
+
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"ssh_user": "ubuntu"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = runner.invoke(config.app, ["unset", "ssh_user", "-c", config_path])
+
+        assert result.exit_code == 0
+        assert "Removed ssh_user" in result.stdout
+
+        # Verify value was removed
+        cfg = configparser.ConfigParser()
+        cfg.read(config_path)
+        assert "ssh_user" not in cfg["DEFAULT"]
+
+    def test_unset_missing_key(self, tmpdir):
+        """Should exit with code 1 for missing key."""
+        config_path = str(tmpdir / "config.ini")
+
+        # Create empty config file
+        import configparser
+
+        cfg = configparser.ConfigParser()
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = runner.invoke(config.app, ["unset", "missing_key", "-c", config_path])
+
+        assert result.exit_code == 1
+        assert "not found" in result.stdout
+
+
+class TestConfigInitCommand:
+    """Test the config init command."""
+
+    def test_init_creates_config(self, tmpdir):
+        """Should create config file with prompted values."""
+        config_path = str(tmpdir / "config.ini")
+
+        result = runner.invoke(
+            config.app, ["init", "-c", config_path], input="my-server\nec2-user\n~/.ssh/key.pem\n"
+        )
+
+        assert result.exit_code == 0
+        assert "Config written" in result.stdout
+
+        # Verify config was created
+        import configparser
+
+        cfg = configparser.ConfigParser()
+        cfg.read(config_path)
+        assert cfg["DEFAULT"]["instance_name"] == "my-server"
+        assert cfg["DEFAULT"]["ssh_user"] == "ec2-user"
+        assert cfg["DEFAULT"]["ssh_key_path"] == "~/.ssh/key.pem"
+
+    def test_init_skips_empty_values(self, tmpdir):
+        """Should skip empty optional values."""
+        config_path = str(tmpdir / "config.ini")
+
+        result = runner.invoke(
+            config.app,
+            ["init", "-c", config_path],
+            input="\nubuntu\n\n",  # Empty instance_name and ssh_key
+        )
+
+        assert result.exit_code == 0
+
+        # Verify only ssh_user was written
+        import configparser
+
+        cfg = configparser.ConfigParser()
+        cfg.read(config_path)
+        assert "instance_name" not in cfg["DEFAULT"]
+        assert cfg["DEFAULT"]["ssh_user"] == "ubuntu"
+        assert "ssh_key_path" not in cfg["DEFAULT"]
+
+
+class TestConfigValidateCommand:
+    """Test the config validate command."""
+
+    def test_validate_valid_config(self, tmpdir):
+        """Should report valid config."""
+        config_path = str(tmpdir / "config.ini")
+
+        # Create valid config file
+        import configparser
+
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"ssh_user": "ubuntu"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = runner.invoke(config.app, ["validate", "-c", config_path])
+
+        assert result.exit_code == 0
+        assert "Config is valid" in result.stdout
+
+    def test_validate_missing_config(self, tmpdir):
+        """Should report missing config file."""
+        config_path = str(tmpdir / "nonexistent.ini")
+
+        result = runner.invoke(config.app, ["validate", "-c", config_path])
+
+        assert result.exit_code == 1
+        assert "not found" in result.stdout
+
+    def test_validate_missing_ssh_key(self, tmpdir):
+        """Should report missing SSH key file."""
+        config_path = str(tmpdir / "config.ini")
+
+        # Create config with missing SSH key path
+        import configparser
+
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"ssh_key_path": "/nonexistent/key.pem"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = runner.invoke(config.app, ["validate", "-c", config_path])
+
+        assert result.exit_code == 1
+        assert "SSH key not found" in result.stdout
+
+
+class TestConfigKeysCommand:
+    """Test the config keys command."""
+
+    def test_keys_lists_all_valid_keys(self):
+        """Should list all valid configuration keys."""
+        result = runner.invoke(config.app, ["keys"])
+
+        assert result.exit_code == 0
+        assert "instance_name" in result.stdout
+        assert "ssh_user" in result.stdout
+        assert "ssh_key_path" in result.stdout
+        assert "aws_region" in result.stdout
+        assert "default_launch_template" in result.stdout
