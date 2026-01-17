@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **BREAKING**: Minimum Python version is now 3.12 (was 3.8.1)
+- **BREAKING**: Minimum Python version is now 3.10 (was 3.8.1)
 - Migrated from Poetry to uv package manager
 - Replaced flake8/black with Ruff for linting and formatting
 - Comprehensive test suite improvements with factory pattern and enhanced organization
