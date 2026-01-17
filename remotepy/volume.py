@@ -6,7 +6,7 @@ import typer
 import wasabi
 
 from remotepy.utils import (
-    ec2_client,
+    get_ec2_client,
     get_instance_id,
     get_instance_name,
     get_volume_name,
@@ -27,7 +27,7 @@ def list(instance_name: str | None = typer.Argument(None, help="Instance name"))
     typer.secho(f"Listing volumes attached to instance {instance_name}", fg=typer.colors.YELLOW)
 
     instance_id = get_instance_id(instance_name)
-    volumes = ec2_client.describe_volumes()
+    volumes = get_ec2_client().describe_volumes()
 
     # Format table using wasabi
 

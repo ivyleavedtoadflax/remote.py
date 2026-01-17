@@ -6,7 +6,7 @@ import typer
 import wasabi
 
 from remotepy.utils import (
-    ec2_client,
+    get_ec2_client,
     get_instance_id,
     get_instance_name,
     get_volume_ids,
@@ -25,7 +25,7 @@ def create(
     Snapshot a volume
     """
 
-    snapshot = ec2_client.create_snapshot(
+    snapshot = get_ec2_client().create_snapshot(
         VolumeId=volume_id,
         Description=description,
         TagSpecifications=[
@@ -59,7 +59,7 @@ def list(instance_name: str | None = typer.Argument(None, help="Instance name"))
     data: builtins.list[builtins.list[str]] = []
 
     for volume_id in volume_ids:
-        snapshots = ec2_client.describe_snapshots(
+        snapshots = get_ec2_client().describe_snapshots(
             Filters=[{"Name": "volume-id", "Values": [volume_id]}]
         )
 

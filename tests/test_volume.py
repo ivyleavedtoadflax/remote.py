@@ -37,7 +37,8 @@ def mock_volume_response():
 
 
 def test_list_volumes_with_instance_name(mocker, mock_volume_response):
-    mock_ec2_client = mocker.patch("remotepy.volume.ec2_client", autospec=True)
+    mock_ec2 = mocker.patch("remotepy.volume.get_ec2_client")
+    mock_ec2_client = mock_ec2.return_value
     mock_get_instance_id = mocker.patch(
         "remotepy.volume.get_instance_id", return_value="i-0123456789abcdef0"
     )
@@ -60,7 +61,8 @@ def test_list_volumes_with_instance_name(mocker, mock_volume_response):
 
 
 def test_list_volumes_without_instance_name(mocker, mock_volume_response):
-    mock_ec2_client = mocker.patch("remotepy.volume.ec2_client", autospec=True)
+    mock_ec2 = mocker.patch("remotepy.volume.get_ec2_client")
+    mock_ec2_client = mock_ec2.return_value
     mock_get_instance_name = mocker.patch(
         "remotepy.volume.get_instance_name", return_value="default-instance"
     )
@@ -80,7 +82,8 @@ def test_list_volumes_without_instance_name(mocker, mock_volume_response):
 
 
 def test_list_volumes_no_attachments(mocker):
-    mock_ec2_client = mocker.patch("remotepy.volume.ec2_client", autospec=True)
+    mock_ec2 = mocker.patch("remotepy.volume.get_ec2_client")
+    mock_ec2_client = mock_ec2.return_value
     mock_get_instance_id = mocker.patch(
         "remotepy.volume.get_instance_id", return_value="i-0123456789abcdef0"
     )
@@ -112,7 +115,8 @@ def test_list_volumes_no_attachments(mocker):
 
 
 def test_list_volumes_multiple_attachments(mocker):
-    mock_ec2_client = mocker.patch("remotepy.volume.ec2_client", autospec=True)
+    mock_ec2 = mocker.patch("remotepy.volume.get_ec2_client")
+    mock_ec2_client = mock_ec2.return_value
     mocker.patch("remotepy.volume.get_instance_id", return_value="i-0123456789abcdef0")
     mocker.patch("remotepy.volume.get_volume_name", side_effect=["vol1-name", "vol2-name"])
 
@@ -160,7 +164,8 @@ def test_list_volumes_multiple_attachments(mocker):
 
 
 def test_list_command_alias_ls(mocker, mock_volume_response):
-    mock_ec2_client = mocker.patch("remotepy.volume.ec2_client", autospec=True)
+    mock_ec2 = mocker.patch("remotepy.volume.get_ec2_client")
+    mock_ec2_client = mock_ec2.return_value
     mock_get_instance_id = mocker.patch(
         "remotepy.volume.get_instance_id", return_value="i-0123456789abcdef0"
     )
