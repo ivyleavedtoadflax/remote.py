@@ -1,6 +1,6 @@
 # Issue 16: Deprecated datetime.utcfromtimestamp() Usage
 
-**Status:** Not started
+**Status:** COMPLETED
 **Priority:** Medium
 **File:** `remotepy/utils.py:353`
 
@@ -24,6 +24,6 @@ launch_time = datetime.fromtimestamp(timestamp, tz=timezone.utc)
 
 ## Acceptance Criteria
 
-- [ ] Replace deprecated datetime call
-- [ ] Ensure tests pass with Python 3.12+
-- [ ] Verify no deprecation warnings in test output
+- [x] Replace deprecated datetime call
+- [x] Ensure tests pass with Python 3.12+
+- [x] Verify no deprecation warnings in test output
