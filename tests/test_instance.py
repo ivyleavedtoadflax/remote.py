@@ -514,3 +514,142 @@ def test_connect_with_no_strict_host_key_flag(mocker):
 
     # Verify the flag uses 'no' (legacy behavior)
     assert "StrictHostKeyChecking=no" in ssh_command
+
+
+# ============================================================================
+# SSH Error Handling Tests (Issue 14)
+# ============================================================================
+
+
+class TestSSHErrorHandling:
+    """Test SSH subprocess error handling in the connect command."""
+
+    def test_connect_ssh_nonzero_exit_code(self, mocker):
+        """Test that SSH connection failure with non-zero exit code is handled."""
+        mock_ec2 = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remotepy.instance.subprocess.run")
+
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running", "Code": 16},
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        # Mock subprocess.run to return non-zero exit code
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 255
+        mock_subprocess.return_value = mock_result
+
+        result = runner.invoke(app, ["connect", "test-instance"])
+
+        assert result.exit_code == 255
+        assert "SSH connection failed with exit code 255" in result.stdout
+
+    def test_connect_ssh_client_not_found(self, mocker):
+        """Test that missing SSH client is handled gracefully."""
+        mock_ec2 = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remotepy.instance.subprocess.run")
+
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running", "Code": 16},
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        # Mock subprocess.run to raise FileNotFoundError
+        mock_subprocess.side_effect = FileNotFoundError("ssh not found")
+
+        result = runner.invoke(app, ["connect", "test-instance"])
+
+        assert result.exit_code == 1
+        assert "SSH client not found" in result.stdout
+        assert "Please install OpenSSH" in result.stdout
+
+    def test_connect_ssh_os_error(self, mocker):
+        """Test that OS errors during SSH connection are handled."""
+        mock_ec2 = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remotepy.instance.subprocess.run")
+
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running", "Code": 16},
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        # Mock subprocess.run to raise OSError
+        mock_subprocess.side_effect = OSError("Connection refused")
+
+        result = runner.invoke(app, ["connect", "test-instance"])
+
+        assert result.exit_code == 1
+        assert "SSH connection error" in result.stdout
+        assert "Connection refused" in result.stdout
+
+    def test_connect_ssh_success(self, mocker):
+        """Test that successful SSH connection exits cleanly."""
+        mock_ec2 = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remotepy.instance.subprocess.run")
+
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running", "Code": 16},
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        # Mock subprocess.run to return success
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 0
+        mock_subprocess.return_value = mock_result
+
+        result = runner.invoke(app, ["connect", "test-instance"])
+
+        assert result.exit_code == 0
+        assert "SSH connection failed" not in result.stdout

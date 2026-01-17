@@ -305,8 +305,21 @@ def connect(
     # Connect via SSH
 
     dns = get_instance_dns(instance_id)
+    ssh_command = ["ssh"] + arguments + [f"{user}@{dns}"]
 
-    subprocess.run(["ssh"] + arguments + [f"{user}@{dns}"])
+    try:
+        result = subprocess.run(ssh_command)
+        if result.returncode != 0:
+            typer.secho(
+                f"SSH connection failed with exit code {result.returncode}", fg=typer.colors.RED
+            )
+            raise typer.Exit(result.returncode)
+    except FileNotFoundError:
+        typer.secho("SSH client not found. Please install OpenSSH.", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    except OSError as e:
+        typer.secho(f"SSH connection error: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
 
 
 @app.command()

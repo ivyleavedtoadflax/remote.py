@@ -1,6 +1,6 @@
 # Issue 14: SSH Subprocess Error Handling
 
-**Status:** Not started
+**Status:** COMPLETED
 **Priority:** High
 **File:** `remotepy/instance.py:309`
 
@@ -32,7 +32,7 @@ except Exception as e:
 
 ## Acceptance Criteria
 
-- [ ] Catch subprocess errors and provide helpful message
-- [ ] Exit with appropriate code on SSH failure
-- [ ] Handle missing SSH client gracefully
-- [ ] Add test for SSH failure scenarios
+- [x] Catch subprocess errors and provide helpful message
+- [x] Exit with appropriate code on SSH failure
+- [x] Handle missing SSH client gracefully
+- [x] Add test for SSH failure scenarios
