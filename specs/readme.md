@@ -40,9 +40,9 @@
 
 ### Future (v0.5.0+)
 
-| ID | GitHub Issue | Description |
-|----|--------------|-------------|
-| - | #32 | Add instance pricing |
-| - | #26 | Rename package to `remote` |
-| - | #51 | Pydantic config validation |
-| - | #25 | Contributing guide |
+| ID | Issue | Spec |
+|----|-------|------|
+| 22 | Add instance pricing | [issue-22-instance-pricing.md](./issue-22-instance-pricing.md) |
+| 23 | Rename package to `remote` | [issue-23-rename-package.md](./issue-23-rename-package.md) |
+| 24 | Pydantic config validation | [issue-24-pydantic-config.md](./issue-24-pydantic-config.md) |
+| 25 | Contributing guide | [issue-25-contributing-guide.md](./issue-25-contributing-guide.md) |
