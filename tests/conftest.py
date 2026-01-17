@@ -136,7 +136,7 @@ def get_mock_instance(**overrides: Any) -> MockInstance:
         InstanceId="i-0123456789abcdef0",
         InstanceType="t2.micro",
         State=MockInstanceState(Name="running", Code=16),
-        LaunchTime=datetime.datetime(2023, 7, 15, 0, 0, 0, tzinfo=datetime.UTC),
+        LaunchTime=datetime.datetime(2023, 7, 15, 0, 0, 0, tzinfo=datetime.timezone.utc),
         PublicDnsName="ec2-123-45-67-89.compute-1.amazonaws.com",
         Tags=[
             MockTag(Key="Name", Value="test-instance"),
@@ -178,7 +178,7 @@ def get_mock_snapshot(**overrides: Any) -> MockEbsSnapshot:
         VolumeId="vol-0123456789abcdef0",
         State="completed",
         Progress="100%",
-        StartTime=datetime.datetime(2023, 7, 15, 0, 0, 0, tzinfo=datetime.UTC),
+        StartTime=datetime.datetime(2023, 7, 15, 0, 0, 0, tzinfo=datetime.timezone.utc),
         Description="Test snapshot",
         Tags=[MockTag(Key="Name", Value="test-snapshot")],
     )
@@ -191,7 +191,7 @@ def get_mock_ami(**overrides: Any) -> MockAmi:
         ImageId="ami-0123456789abcdef0",
         Name="test-ami",
         State="available",
-        CreationDate=datetime.datetime(2023, 7, 15, 0, 0, 0, tzinfo=datetime.UTC),
+        CreationDate=datetime.datetime(2023, 7, 15, 0, 0, 0, tzinfo=datetime.timezone.utc),
         Description="Test AMI",
         Tags=[MockTag(Key="Name", Value="test-ami")],
     )
@@ -219,7 +219,9 @@ def get_mock_instances_response(**overrides: Any) -> dict[str, Any]:
                         "InstanceId": "i-0123456789abcdef0",
                         "InstanceType": "t2.micro",
                         "State": {"Name": "running", "Code": 16},
-                        "LaunchTime": datetime.datetime(2023, 7, 15, 0, 0, 0, tzinfo=datetime.UTC),
+                        "LaunchTime": datetime.datetime(
+                            2023, 7, 15, 0, 0, 0, tzinfo=datetime.timezone.utc
+                        ),
                         "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
                         "Tags": [
                             {"Key": "Name", "Value": "test-instance-1"},
@@ -234,7 +236,9 @@ def get_mock_instances_response(**overrides: Any) -> dict[str, Any]:
                         "InstanceId": "i-0123456789abcdef1",
                         "InstanceType": "t2.small",
                         "State": {"Name": "stopped", "Code": 80},
-                        "LaunchTime": datetime.datetime(2023, 7, 16, 0, 0, 0, tzinfo=datetime.UTC),
+                        "LaunchTime": datetime.datetime(
+                            2023, 7, 16, 0, 0, 0, tzinfo=datetime.timezone.utc
+                        ),
                         "PublicDnsName": "",
                         "Tags": [
                             {"Key": "Name", "Value": "test-instance-2"},
@@ -326,7 +330,7 @@ def get_mock_snapshots_response(**overrides: Any) -> dict[str, Any]:
                 "VolumeId": "vol-0123456789abcdef0",
                 "State": "completed",
                 "Progress": "100%",
-                "StartTime": datetime.datetime(2023, 7, 15, 0, 0, 0, tzinfo=datetime.UTC),
+                "StartTime": datetime.datetime(2023, 7, 15, 0, 0, 0, tzinfo=datetime.timezone.utc),
                 "Description": "Test snapshot 1",
                 "Tags": [
                     {"Key": "Name", "Value": "test-snapshot-1"},
@@ -337,7 +341,7 @@ def get_mock_snapshots_response(**overrides: Any) -> dict[str, Any]:
                 "VolumeId": "vol-0123456789abcdef1",
                 "State": "pending",
                 "Progress": "50%",
-                "StartTime": datetime.datetime(2023, 7, 16, 0, 0, 0, tzinfo=datetime.UTC),
+                "StartTime": datetime.datetime(2023, 7, 16, 0, 0, 0, tzinfo=datetime.timezone.utc),
                 "Description": "Test snapshot 2",
                 "Tags": [
                     {"Key": "Name", "Value": "test-snapshot-2"},
@@ -359,7 +363,9 @@ def get_mock_amis_response(**overrides: Any) -> dict[str, Any]:
                 "ImageId": "ami-0123456789abcdef0",
                 "Name": "test-ami-1",
                 "State": "available",
-                "CreationDate": datetime.datetime(2023, 7, 15, 0, 0, 0, tzinfo=datetime.UTC),
+                "CreationDate": datetime.datetime(
+                    2023, 7, 15, 0, 0, 0, tzinfo=datetime.timezone.utc
+                ),
                 "Description": "Test AMI 1",
                 "Tags": [
                     {"Key": "Name", "Value": "test-ami-1"},
@@ -369,7 +375,9 @@ def get_mock_amis_response(**overrides: Any) -> dict[str, Any]:
                 "ImageId": "ami-0123456789abcdef1",
                 "Name": "test-ami-2",
                 "State": "pending",
-                "CreationDate": datetime.datetime(2023, 7, 16, 0, 0, 0, tzinfo=datetime.UTC),
+                "CreationDate": datetime.datetime(
+                    2023, 7, 16, 0, 0, 0, tzinfo=datetime.timezone.utc
+                ),
                 "Description": "Test AMI 2",
                 "Tags": [
                     {"Key": "Name", "Value": "test-ami-2"},

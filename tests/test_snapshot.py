@@ -16,14 +16,14 @@ def mock_snapshot_response():
                 "SnapshotId": "snap-0123456789abcdef0",
                 "VolumeId": "vol-0123456789abcdef0",
                 "State": "completed",
-                "StartTime": datetime.datetime(2023, 7, 15, 0, 0, 0, tzinfo=datetime.UTC),
+                "StartTime": datetime.datetime(2023, 7, 15, 0, 0, 0, tzinfo=datetime.timezone.utc),
                 "Description": "Test snapshot",
             },
             {
                 "SnapshotId": "snap-0123456789abcdef1",
                 "VolumeId": "vol-0123456789abcdef0",
                 "State": "pending",
-                "StartTime": datetime.datetime(2023, 7, 16, 0, 0, 0, tzinfo=datetime.UTC),
+                "StartTime": datetime.datetime(2023, 7, 16, 0, 0, 0, tzinfo=datetime.timezone.utc),
                 "Description": "Another test snapshot",
             },
         ]
@@ -149,7 +149,9 @@ def test_list_snapshots_multiple_volumes(mocker):
                         "SnapshotId": "snap-vol1",
                         "VolumeId": "vol-0123456789abcdef0",
                         "State": "completed",
-                        "StartTime": datetime.datetime(2023, 7, 15, 0, 0, 0, tzinfo=datetime.UTC),
+                        "StartTime": datetime.datetime(
+                            2023, 7, 15, 0, 0, 0, tzinfo=datetime.timezone.utc
+                        ),
                         "Description": "Snapshot for vol1",
                     }
                 ]
@@ -161,7 +163,9 @@ def test_list_snapshots_multiple_volumes(mocker):
                         "SnapshotId": "snap-vol2",
                         "VolumeId": "vol-0123456789abcdef1",
                         "State": "pending",
-                        "StartTime": datetime.datetime(2023, 7, 16, 0, 0, 0, tzinfo=datetime.UTC),
+                        "StartTime": datetime.datetime(
+                            2023, 7, 16, 0, 0, 0, tzinfo=datetime.timezone.utc
+                        ),
                         "Description": "Snapshot for vol2",
                     }
                 ]

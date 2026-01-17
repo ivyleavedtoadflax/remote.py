@@ -17,13 +17,17 @@ def mock_ami_response():
                 "ImageId": "ami-0123456789abcdef0",
                 "Name": "test-ami-1",
                 "State": "available",
-                "CreationDate": datetime.datetime(2023, 7, 15, 0, 0, 0, tzinfo=datetime.UTC),
+                "CreationDate": datetime.datetime(
+                    2023, 7, 15, 0, 0, 0, tzinfo=datetime.timezone.utc
+                ),
             },
             {
                 "ImageId": "ami-0123456789abcdef1",
                 "Name": "test-ami-2",
                 "State": "pending",
-                "CreationDate": datetime.datetime(2023, 7, 16, 0, 0, 0, tzinfo=datetime.UTC),
+                "CreationDate": datetime.datetime(
+                    2023, 7, 16, 0, 0, 0, tzinfo=datetime.timezone.utc
+                ),
             },
         ]
     }
