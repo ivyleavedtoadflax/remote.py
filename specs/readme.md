@@ -29,6 +29,7 @@
 | 16 | Deprecated datetime API | [issue-16-datetime-deprecation.md](./issue-16-datetime-deprecation.md) |
 | 17 | Inconsistent output in config.py | [issue-17-config-output.md](./issue-17-config-output.md) |
 | 18 | Standardize exit patterns | [issue-18-exit-patterns.md](./issue-18-exit-patterns.md) |
+| 21 | Replace wasabi with rich | [issue-21-replace-wasabi-with-rich.md](./issue-21-replace-wasabi-with-rich.md) |
 
 ### Low Priority
 
