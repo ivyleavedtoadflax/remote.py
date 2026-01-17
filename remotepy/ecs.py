@@ -14,6 +14,8 @@ def get_all_clusters() -> list[str]:
     """
     Get all ECS clusters.
 
+    Uses pagination to handle large numbers of clusters (>100).
+
     Returns:
         list: A list of all ECS clusters
 
@@ -21,8 +23,14 @@ def get_all_clusters() -> list[str]:
         AWSServiceError: If AWS API call fails
     """
     try:
-        response = ecs_client.list_clusters()
-        return response.get("clusterArns", [])
+        # Use paginator to handle >100 clusters
+        paginator = ecs_client.get_paginator("list_clusters")
+        clusters: list[str] = []
+
+        for page in paginator.paginate():
+            clusters.extend(page.get("clusterArns", []))
+
+        return clusters
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
         error_message = e.response["Error"]["Message"]
@@ -37,6 +45,8 @@ def get_all_services(cluster_name: str) -> list[str]:
     """
     Get all ECS services.
 
+    Uses pagination to handle large numbers of services (>100).
+
     Args:
         cluster_name: The name of the cluster
 
@@ -47,8 +57,14 @@ def get_all_services(cluster_name: str) -> list[str]:
         AWSServiceError: If AWS API call fails
     """
     try:
-        response = ecs_client.list_services(cluster=cluster_name)
-        return response.get("serviceArns", [])
+        # Use paginator to handle >100 services
+        paginator = ecs_client.get_paginator("list_services")
+        services: list[str] = []
+
+        for page in paginator.paginate(cluster=cluster_name):
+            services.extend(page.get("serviceArns", []))
+
+        return services
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
         error_message = e.response["Error"]["Message"]

@@ -125,12 +125,16 @@ def test_get_instance_status_without_id(mocker):
 def test_get_instances(mocker, mock_ec2_instances):
     mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
 
-    mock_ec2_client.describe_instances.return_value = mock_ec2_instances
+    # Mock the paginator
+    mock_paginator = mocker.MagicMock()
+    mock_paginator.paginate.return_value = [mock_ec2_instances]
+    mock_ec2_client.get_paginator.return_value = mock_paginator
 
     result = get_instances()
 
     assert result == mock_ec2_instances["Reservations"]
-    mock_ec2_client.describe_instances.assert_called_once()
+    mock_ec2_client.get_paginator.assert_called_once_with("describe_instances")
+    mock_paginator.paginate.assert_called_once()
 
 
 def test_get_instance_dns(mocker):
@@ -498,9 +502,11 @@ def test_get_instances_client_error(mocker):
     mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
 
     error_response = {"Error": {"Code": "RequestLimitExceeded", "Message": "Rate limit exceeded"}}
-    mock_ec2_client.describe_instances.side_effect = ClientError(
-        error_response, "describe_instances"
-    )
+
+    # Mock paginator that raises error during iteration
+    mock_paginator = mocker.MagicMock()
+    mock_paginator.paginate.side_effect = ClientError(error_response, "describe_instances")
+    mock_ec2_client.get_paginator.return_value = mock_paginator
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_instances()
@@ -512,7 +518,10 @@ def test_get_instances_no_credentials_error(mocker):
     """Test get_instances with NoCredentialsError."""
     mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
 
-    mock_ec2_client.describe_instances.side_effect = NoCredentialsError()
+    # Mock paginator that raises error during iteration
+    mock_paginator = mocker.MagicMock()
+    mock_paginator.paginate.side_effect = NoCredentialsError()
+    mock_ec2_client.get_paginator.return_value = mock_paginator
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_instances()

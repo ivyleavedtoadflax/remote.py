@@ -153,6 +153,8 @@ def get_instances(exclude_terminated: bool = False) -> list[dict[str, Any]]:
     """
     Get all instances, optionally excluding those in a 'terminated' state.
 
+    Uses pagination to handle large numbers of instances (>100).
+
     Args:
         exclude_terminated: Whether to exclude terminated instances
 
@@ -172,15 +174,19 @@ def get_instances(exclude_terminated: bool = False) -> list[dict[str, Any]]:
                 }
             )
 
+        # Use paginator to handle >100 instances
+        paginator = ec2_client.get_paginator("describe_instances")
+        reservations: list[dict[str, Any]] = []
+
         if filters:
-            response = ec2_client.describe_instances(Filters=filters)  # type: ignore[arg-type]
+            page_iterator = paginator.paginate(Filters=filters)  # type: ignore[arg-type]
         else:
-            response = ec2_client.describe_instances()
+            page_iterator = paginator.paginate()
 
-        # Validate response structure
-        validate_aws_response_structure(response, ["Reservations"], "describe_instances")
+        for page in page_iterator:
+            reservations.extend(cast(list[dict[str, Any]], page.get("Reservations", [])))
 
-        return cast(list[dict[str, Any]], list(response["Reservations"]))
+        return reservations
 
     except ClientError as e:
         error_code = e.response["Error"]["Code"]

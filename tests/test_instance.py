@@ -45,13 +45,17 @@ class TestInstanceListCommand:
 
     def test_should_display_instance_details_when_instances_exist(self, mocker, mock_ec2_instances):
         """Should show instance details in tabular format when instances are found."""
-        mocker.patch("remotepy.utils.ec2_client", autospec=True)
-        remotepy.utils.ec2_client.describe_instances.return_value = mock_ec2_instances
+        mock_ec2_client = mocker.patch("remotepy.utils.ec2_client", autospec=True)
+
+        # Mock the paginator
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [mock_ec2_instances]
+        mock_ec2_client.get_paginator.return_value = mock_paginator
 
         result = runner.invoke(app, ["list"])
 
-        # Verify API call was made
-        remotepy.utils.ec2_client.describe_instances.assert_called_once()
+        # Verify paginator was used
+        mock_ec2_client.get_paginator.assert_called_once_with("describe_instances")
 
         # Verify table headers are present
         assert "Name" in result.stdout

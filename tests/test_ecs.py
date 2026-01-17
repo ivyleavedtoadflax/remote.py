@@ -23,7 +23,11 @@ runner = CliRunner()
 
 def test_get_all_clusters(mocker, mock_ecs_clusters):
     mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
-    mock_ecs_client.list_clusters.return_value = mock_ecs_clusters
+
+    # Mock the paginator
+    mock_paginator = mocker.MagicMock()
+    mock_paginator.paginate.return_value = [mock_ecs_clusters]
+    mock_ecs_client.get_paginator.return_value = mock_paginator
 
     result = get_all_clusters()
 
@@ -31,12 +35,17 @@ def test_get_all_clusters(mocker, mock_ecs_clusters):
         "arn:aws:ecs:us-east-1:123456789012:cluster/test-cluster-1",
         "arn:aws:ecs:us-east-1:123456789012:cluster/test-cluster-2",
     ]
-    mock_ecs_client.list_clusters.assert_called_once()
+    mock_ecs_client.get_paginator.assert_called_once_with("list_clusters")
+    mock_paginator.paginate.assert_called_once()
 
 
 def test_get_all_services(mocker, mock_ecs_services):
     mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
-    mock_ecs_client.list_services.return_value = mock_ecs_services
+
+    # Mock the paginator
+    mock_paginator = mocker.MagicMock()
+    mock_paginator.paginate.return_value = [mock_ecs_services]
+    mock_ecs_client.get_paginator.return_value = mock_paginator
 
     result = get_all_services("test-cluster")
 
@@ -44,7 +53,8 @@ def test_get_all_services(mocker, mock_ecs_services):
         "arn:aws:ecs:us-east-1:123456789012:service/test-cluster/test-service-1",
         "arn:aws:ecs:us-east-1:123456789012:service/test-cluster/test-service-2",
     ]
-    mock_ecs_client.list_services.assert_called_once_with(cluster="test-cluster")
+    mock_ecs_client.get_paginator.assert_called_once_with("list_services")
+    mock_paginator.paginate.assert_called_once_with(cluster="test-cluster")
 
 
 def test_scale_service(mocker):
@@ -277,7 +287,11 @@ def test_get_all_clusters_client_error(mocker):
     mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
 
     error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Access denied"}}
-    mock_ecs_client.list_clusters.side_effect = ClientError(error_response, "list_clusters")
+
+    # Mock paginator that raises error during iteration
+    mock_paginator = mocker.MagicMock()
+    mock_paginator.paginate.side_effect = ClientError(error_response, "list_clusters")
+    mock_ecs_client.get_paginator.return_value = mock_paginator
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_all_clusters()
@@ -291,7 +305,10 @@ def test_get_all_clusters_no_credentials_error(mocker):
     """Test get_all_clusters with NoCredentialsError."""
     mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
 
-    mock_ecs_client.list_clusters.side_effect = NoCredentialsError()
+    # Mock paginator that raises error during iteration
+    mock_paginator = mocker.MagicMock()
+    mock_paginator.paginate.side_effect = NoCredentialsError()
+    mock_ecs_client.get_paginator.return_value = mock_paginator
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_all_clusters()
@@ -306,7 +323,11 @@ def test_get_all_services_client_error(mocker):
     mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
 
     error_response = {"Error": {"Code": "ClusterNotFoundException", "Message": "Cluster not found"}}
-    mock_ecs_client.list_services.side_effect = ClientError(error_response, "list_services")
+
+    # Mock paginator that raises error during iteration
+    mock_paginator = mocker.MagicMock()
+    mock_paginator.paginate.side_effect = ClientError(error_response, "list_services")
+    mock_ecs_client.get_paginator.return_value = mock_paginator
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_all_services("nonexistent-cluster")
@@ -320,7 +341,10 @@ def test_get_all_services_no_credentials_error(mocker):
     """Test get_all_services with NoCredentialsError."""
     mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
 
-    mock_ecs_client.list_services.side_effect = NoCredentialsError()
+    # Mock paginator that raises error during iteration
+    mock_paginator = mocker.MagicMock()
+    mock_paginator.paginate.side_effect = NoCredentialsError()
+    mock_ecs_client.get_paginator.return_value = mock_paginator
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_all_services("test-cluster")
