@@ -101,11 +101,6 @@ Can be done in parallel with other work.
 |----|-------|------|
 | 19 | Function shadows builtin | [issue-19-list-function-name.md](./issue-19-list-function-name.md) |
 | 20 | Test coverage edge cases | [issue-20-test-coverage.md](./issue-20-test-coverage.md) |
-
-### Future (v0.5.0+)
-
-| ID | Issue | Spec |
-|----|-------|------|
 | 22 | Add instance pricing | [issue-22-instance-pricing.md](./issue-22-instance-pricing.md) |
 | 23 | Rename package to `remote` | [issue-23-rename-package.md](./issue-23-rename-package.md) |
 | 24 | Pydantic config validation | [issue-24-pydantic-config.md](./issue-24-pydantic-config.md) |

@@ -1,5 +1,9 @@
 # Remote.py
 
+[![Tests](https://github.com/ivyleavedtoadflax/remote.py/actions/workflows/test.yml/badge.svg)](https://github.com/ivyleavedtoadflax/remote.py/actions/workflows/test.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A Python CLI tool for managing AWS resources with a focus on EC2 instances. This is a Python port of the [remote](https://github.com/wellcometrust/remote) tool for controlling remote instances on AWS.
 
 ## Features

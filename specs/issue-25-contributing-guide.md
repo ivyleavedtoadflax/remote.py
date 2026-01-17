@@ -1,6 +1,6 @@
 # Issue 25: Contributing Guide
 
-**Status:** Not started
+**Status:** COMPLETED
 **Priority:** Low (v0.5.0)
 **GitHub Issue:** #25 (partial)
 
