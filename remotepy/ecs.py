@@ -1,3 +1,6 @@
+from functools import lru_cache
+from typing import TYPE_CHECKING, Any
+
 import boto3
 import typer
 from botocore.exceptions import ClientError, NoCredentialsError
@@ -5,7 +8,32 @@ from botocore.exceptions import ClientError, NoCredentialsError
 from remotepy.exceptions import AWSServiceError, ValidationError
 from remotepy.validation import safe_get_array_item, validate_array_index, validate_positive_integer
 
-ecs_client = boto3.client("ecs")
+if TYPE_CHECKING:
+    from mypy_boto3_ecs.client import ECSClient
+
+
+@lru_cache
+def get_ecs_client() -> "ECSClient":
+    """Get or create the ECS client.
+
+    Uses lazy initialization and caches the client for reuse.
+
+    Returns:
+        boto3 ECS client instance
+    """
+    return boto3.client("ecs")
+
+
+# Backwards compatibility: ecs_client is now accessed lazily via __getattr__
+# to avoid creating the client at import time (which breaks tests without AWS region)
+
+
+def __getattr__(name: str) -> Any:
+    """Lazy module attribute access for backwards compatibility."""
+    if name == "ecs_client":
+        return get_ecs_client()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 app = typer.Typer()
 
@@ -14,6 +42,8 @@ def get_all_clusters() -> list[str]:
     """
     Get all ECS clusters.
 
+    Uses pagination to handle large numbers of clusters (>100).
+
     Returns:
         list: A list of all ECS clusters
 
@@ -21,8 +51,14 @@ def get_all_clusters() -> list[str]:
         AWSServiceError: If AWS API call fails
     """
     try:
-        response = ecs_client.list_clusters()
-        return response.get("clusterArns", [])
+        # Use paginator to handle >100 clusters
+        paginator = get_ecs_client().get_paginator("list_clusters")
+        clusters: list[str] = []
+
+        for page in paginator.paginate():
+            clusters.extend(page.get("clusterArns", []))
+
+        return clusters
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
         error_message = e.response["Error"]["Message"]
@@ -37,6 +73,8 @@ def get_all_services(cluster_name: str) -> list[str]:
     """
     Get all ECS services.
 
+    Uses pagination to handle large numbers of services (>100).
+
     Args:
         cluster_name: The name of the cluster
 
@@ -47,8 +85,14 @@ def get_all_services(cluster_name: str) -> list[str]:
         AWSServiceError: If AWS API call fails
     """
     try:
-        response = ecs_client.list_services(cluster=cluster_name)
-        return response.get("serviceArns", [])
+        # Use paginator to handle >100 services
+        paginator = get_ecs_client().get_paginator("list_services")
+        services: list[str] = []
+
+        for page in paginator.paginate(cluster=cluster_name):
+            services.extend(page.get("serviceArns", []))
+
+        return services
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
         error_message = e.response["Error"]["Message"]
@@ -72,7 +116,7 @@ def scale_service(cluster_name: str, service_name: str, desired_count: int) -> N
         AWSServiceError: If AWS API call fails
     """
     try:
-        ecs_client.update_service(
+        get_ecs_client().update_service(
             cluster=cluster_name, service=service_name, desiredCount=desired_count
         )
     except ClientError as e:
@@ -101,7 +145,7 @@ def prompt_for_cluster_name() -> str:
         # Safely access the single cluster
         cluster = safe_get_array_item(clusters, 0, "clusters")
         typer.secho(f"Using cluster: {cluster}", fg=typer.colors.BLUE)
-        return cluster
+        return str(cluster)
     else:
         typer.echo("Please select a cluster from the following list:")
 

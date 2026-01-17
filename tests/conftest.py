@@ -1,5 +1,11 @@
 """Shared test configuration and fixtures."""
 
+# Set AWS_DEFAULT_REGION BEFORE any imports that might trigger boto3 client creation.
+# This must be at the top of conftest.py to ensure it's set before test collection.
+import os
+
+os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
+
 import configparser
 import datetime
 from dataclasses import dataclass, replace
@@ -519,26 +525,26 @@ def assert_error_response_structure(
 def mock_aws_clients(mocker):
     """Mock all AWS clients used in the application with comprehensive responses."""
     # Mock EC2 client with comprehensive default responses
-    mock_ec2 = mocker.patch("remotepy.utils.ec2_client", autospec=True)
-    mock_ec2.describe_instances.return_value = {"Reservations": []}
-    mock_ec2.describe_volumes.return_value = {"Volumes": []}
-    mock_ec2.describe_snapshots.return_value = {"Snapshots": []}
-    mock_ec2.describe_images.return_value = {"Images": []}
-    mock_ec2.describe_launch_templates.return_value = {"LaunchTemplates": []}
-    mock_ec2.describe_instance_status.return_value = {"InstanceStatuses": []}
-    mock_ec2.start_instances.return_value = {"StartingInstances": []}
-    mock_ec2.stop_instances.return_value = {"StoppingInstances": []}
-    mock_ec2.terminate_instances.return_value = {"TerminatingInstances": []}
-    mock_ec2.run_instances.return_value = {"Instances": [{"InstanceId": "i-new123"}]}
-    mock_ec2.create_image.return_value = {"ImageId": "ami-new123"}
-    mock_ec2.create_snapshot.return_value = {"SnapshotId": "snap-new123"}
-    mock_ec2.modify_instance_attribute.return_value = {}
+    mock_ec2 = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2.return_value.describe_instances.return_value = {"Reservations": []}
+    mock_ec2.return_value.describe_volumes.return_value = {"Volumes": []}
+    mock_ec2.return_value.describe_snapshots.return_value = {"Snapshots": []}
+    mock_ec2.return_value.describe_images.return_value = {"Images": []}
+    mock_ec2.return_value.describe_launch_templates.return_value = {"LaunchTemplates": []}
+    mock_ec2.return_value.describe_instance_status.return_value = {"InstanceStatuses": []}
+    mock_ec2.return_value.start_instances.return_value = {"StartingInstances": []}
+    mock_ec2.return_value.stop_instances.return_value = {"StoppingInstances": []}
+    mock_ec2.return_value.terminate_instances.return_value = {"TerminatingInstances": []}
+    mock_ec2.return_value.run_instances.return_value = {"Instances": [{"InstanceId": "i-new123"}]}
+    mock_ec2.return_value.create_image.return_value = {"ImageId": "ami-new123"}
+    mock_ec2.return_value.create_snapshot.return_value = {"SnapshotId": "snap-new123"}
+    mock_ec2.return_value.modify_instance_attribute.return_value = {}
 
     # Mock ECS client with comprehensive default responses
-    mock_ecs = mocker.patch("remotepy.ecs.ecs_client", autospec=True)
-    mock_ecs.list_clusters.return_value = {"clusterArns": []}
-    mock_ecs.list_services.return_value = {"serviceArns": []}
-    mock_ecs.update_service.return_value = {}
+    mock_ecs = mocker.patch("remotepy.ecs.get_ecs_client")
+    mock_ecs.return_value.list_clusters.return_value = {"clusterArns": []}
+    mock_ecs.return_value.list_services.return_value = {"serviceArns": []}
+    mock_ecs.return_value.update_service.return_value = {}
 
     # Mock STS client for account ID
     mock_sts = mocker.patch("boto3.client")
@@ -562,13 +568,13 @@ def populated_aws_clients(
 ):
     """Mock AWS clients with realistic populated data for comprehensive testing."""
     # Mock EC2 client with populated responses
-    mock_ec2 = mocker.patch("remotepy.utils.ec2_client", autospec=True)
-    mock_ec2.describe_instances.return_value = mock_ec2_instances
-    mock_ec2.describe_volumes.return_value = mock_ebs_volumes
-    mock_ec2.describe_snapshots.return_value = mock_ebs_snapshots
-    mock_ec2.describe_images.return_value = mock_amis
-    mock_ec2.describe_launch_templates.return_value = mock_launch_templates
-    mock_ec2.describe_instance_status.return_value = {
+    mock_ec2 = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2.return_value.describe_instances.return_value = mock_ec2_instances
+    mock_ec2.return_value.describe_volumes.return_value = mock_ebs_volumes
+    mock_ec2.return_value.describe_snapshots.return_value = mock_ebs_snapshots
+    mock_ec2.return_value.describe_images.return_value = mock_amis
+    mock_ec2.return_value.describe_launch_templates.return_value = mock_launch_templates
+    mock_ec2.return_value.describe_instance_status.return_value = {
         "InstanceStatuses": [
             {
                 "InstanceId": "i-0123456789abcdef0",
@@ -580,9 +586,9 @@ def populated_aws_clients(
     }
 
     # Mock ECS client with populated responses
-    mock_ecs = mocker.patch("remotepy.ecs.ecs_client", autospec=True)
-    mock_ecs.list_clusters.return_value = mock_ecs_clusters
-    mock_ecs.list_services.return_value = mock_ecs_services
+    mock_ecs = mocker.patch("remotepy.ecs.get_ecs_client")
+    mock_ecs.return_value.list_clusters.return_value = mock_ecs_clusters
+    mock_ecs.return_value.list_services.return_value = mock_ecs_services
 
     # Mock STS client
     mock_sts = mocker.patch("boto3.client")

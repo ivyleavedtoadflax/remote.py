@@ -184,7 +184,7 @@ def test_read_config(mocker):
     result = config.read_config("/test/path")
 
     assert result == mock_config_instance
-    mock_config_instance.read.assert_called_once_with(config.CONFIG_PATH)
+    mock_config_instance.read.assert_called_once_with("/test/path")
 
 
 def test_write_config(test_config, mocker):

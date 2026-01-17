@@ -1,27 +1,29 @@
 import typer
-import wasabi
+from rich.console import Console
+from rich.table import Table
 
 from remotepy.utils import (
-    ec2_client,
+    get_ec2_client,
     get_instance_id,
     get_instance_name,
     get_volume_ids,
 )
 
 app = typer.Typer()
+console = Console(force_terminal=True, width=200)
 
 
 @app.command()
 def create(
-    volume_id: str = typer.Option(None, help="Volume ID"),
-    name: str = typer.Option(None, help="Snapshot name"),
-    description: str = typer.Option(None, help="Description"),
-):
+    volume_id: str = typer.Option(..., "--volume-id", "-v", help="Volume ID (required)"),
+    name: str = typer.Option(..., "--name", "-n", help="Snapshot name (required)"),
+    description: str = typer.Option("", "--description", "-d", help="Description"),
+) -> None:
     """
     Snapshot a volume
     """
 
-    snapshot = ec2_client.create_snapshot(
+    snapshot = get_ec2_client().create_snapshot(
         VolumeId=volume_id,
         Description=description,
         TagSpecifications=[
@@ -37,7 +39,7 @@ def create(
 
 @app.command("ls")
 @app.command("list")
-def list(instance_name: str = typer.Argument(None, help="Instance name")):
+def list_snapshots(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
     """
     List the snapshots
     """
@@ -50,30 +52,31 @@ def list(instance_name: str = typer.Argument(None, help="Instance name")):
     instance_id = get_instance_id(instance_name)
     volume_ids = get_volume_ids(instance_id)
 
-    header = ["SnapshotId", "VolumeId", "State", "StartTime", "Description"]
-    aligns = ["l", "l", "l", "l", "l"]
-    data = []
+    # Format table using rich
+    table = Table(title="Snapshots")
+    table.add_column("SnapshotId", style="green")
+    table.add_column("VolumeId")
+    table.add_column("State")
+    table.add_column("StartTime")
+    table.add_column("Description")
 
     for volume_id in volume_ids:
-        snapshots = ec2_client.describe_snapshots(
+        snapshots = get_ec2_client().describe_snapshots(
             Filters=[{"Name": "volume-id", "Values": [volume_id]}]
         )
 
         for snapshot in snapshots["Snapshots"]:
-            data.append(
-                [
-                    snapshot["SnapshotId"],
-                    snapshot["VolumeId"],
-                    snapshot["State"],
-                    snapshot["StartTime"],
-                    snapshot["Description"],
-                ]
+            state = str(snapshot["State"])
+            state_style = "green" if state == "completed" else "yellow"
+            table.add_row(
+                str(snapshot["SnapshotId"]),
+                str(snapshot["VolumeId"]),
+                f"[{state_style}]{state}[/{state_style}]",
+                str(snapshot["StartTime"]),
+                str(snapshot.get("Description", "")),
             )
 
-    # Format table using wasabi
-
-    formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
-    typer.secho(formatted, fg=typer.colors.YELLOW)
+    console.print(table)
 
 
 if __name__ == "__main__":

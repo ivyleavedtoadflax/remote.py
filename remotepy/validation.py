@@ -235,9 +235,7 @@ def safe_get_array_item(array: list[Any], index: int, context: str, default: Any
     return array[index]
 
 
-def validate_aws_response_structure(
-    response: dict[str, Any], expected_keys: list[str], context: str
-) -> None:
+def validate_aws_response_structure(response: Any, expected_keys: list[str], context: str) -> None:
     """Validate that an AWS API response has the expected structure.
 
     Args:

@@ -1,19 +1,21 @@
 import typer
-import wasabi
+from rich.console import Console
+from rich.table import Table
 
 from remotepy.utils import (
-    ec2_client,
+    get_ec2_client,
     get_instance_id,
     get_instance_name,
     get_volume_name,
 )
 
 app = typer.Typer()
+console = Console(force_terminal=True, width=200)
 
 
 @app.command("ls")
 @app.command("list")
-def list(instance_name: str = typer.Argument(None, help="Instance name")):
+def list_volumes(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
     """
     List the volumes and the instances they are attached to
     """
@@ -23,41 +25,35 @@ def list(instance_name: str = typer.Argument(None, help="Instance name")):
     typer.secho(f"Listing volumes attached to instance {instance_name}", fg=typer.colors.YELLOW)
 
     instance_id = get_instance_id(instance_name)
-    volumes = ec2_client.describe_volumes()
+    volumes = get_ec2_client().describe_volumes()
 
-    # Format table using wasabi
-
-    header = [
-        "Instance Name",
-        "Instance",
-        "Volume Name",
-        "VolumeId",
-        "Size",
-        "State",
-        "AvailabilityZone",
-    ]
-    aligns = ["l", "l", "l", "l", "l", "l", "l"]
-    data = []
+    # Format table using rich
+    table = Table(title="Volumes")
+    table.add_column("Instance Name", style="cyan", no_wrap=True)
+    table.add_column("Instance", no_wrap=True)
+    table.add_column("Volume Name", no_wrap=True)
+    table.add_column("VolumeId", style="green", no_wrap=True)
+    table.add_column("Size", justify="right")
+    table.add_column("State")
+    table.add_column("AvailabilityZone")
 
     # Get the volumes attached to instance
-
     for volume in volumes["Volumes"]:
         for attachment in volume["Attachments"]:
             if attachment["InstanceId"] == instance_id:
-                data.append(
-                    [
-                        instance_name,
-                        instance_id,
-                        get_volume_name(volume["VolumeId"]),
-                        volume["VolumeId"],
-                        volume["Size"],
-                        volume["State"],
-                        volume["AvailabilityZone"],
-                    ]
+                state = volume["State"]
+                state_style = "green" if state == "in-use" else "yellow"
+                table.add_row(
+                    instance_name or "",
+                    instance_id,
+                    get_volume_name(volume["VolumeId"]),
+                    volume["VolumeId"],
+                    str(volume["Size"]),
+                    f"[{state_style}]{state}[/{state_style}]",
+                    volume["AvailabilityZone"],
                 )
 
-    formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
-    typer.secho(formatted, fg=typer.colors.YELLOW)
+    console.print(table)
 
 
 if __name__ == "__main__":

@@ -1,28 +1,31 @@
 import random
 import string
+from typing import Any
 
 import typer
-import wasabi
+from rich.console import Console
+from rich.table import Table
 
 from remotepy.exceptions import ValidationError
 from remotepy.utils import (
-    ec2_client,
     get_account_id,
+    get_ec2_client,
     get_instance_id,
     get_instance_name,
     get_launch_template_id,
 )
-from remotepy.validation import safe_get_array_item
+from remotepy.validation import safe_get_array_item, validate_array_index
 
 app = typer.Typer()
+console = Console(force_terminal=True, width=200)
 
 
 @app.command()
 def create(
-    instance_name: str = typer.Option(None, help="Instance name"),
-    name: str = typer.Option(None, help="AMI name"),
-    description: str = typer.Option(None, help="Description"),
-):
+    instance_name: str | None = typer.Option(None, help="Instance name"),
+    name: str | None = typer.Option(None, help="AMI name"),
+    description: str | None = typer.Option(None, help="Description"),
+) -> None:
     """
     Create an Amazon Machine Image (AMI) from a specified EC2 instance.
 
@@ -53,10 +56,14 @@ def create(
         instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
 
-    ami = ec2_client.create_image(
+    # Ensure required fields have values
+    ami_name = name if name else f"ami-{instance_name}"
+    ami_description = description if description else ""
+
+    ami = get_ec2_client().create_image(
         InstanceId=instance_id,
-        Name=name,
-        Description=description,
+        Name=ami_name,
+        Description=ami_description,
         NoReboot=True,
     )
 
@@ -65,7 +72,7 @@ def create(
 
 @app.command("ls")
 @app.command("list")
-def list():
+def list_amis() -> None:
     """
     List all Amazon Machine Images (AMIs) owned by the current account.
 
@@ -78,31 +85,32 @@ def list():
     """
     account_id = get_account_id()
 
-    amis = ec2_client.describe_images(
+    amis = get_ec2_client().describe_images(
         Owners=[account_id],
     )
 
-    header = ["ImageId", "Name", "State", "CreationDate"]
-    aligns = ["l", "l", "l", "l"]
-    data = []
+    # Format table using rich
+    table = Table(title="Amazon Machine Images")
+    table.add_column("ImageId", style="green")
+    table.add_column("Name", style="cyan")
+    table.add_column("State")
+    table.add_column("CreationDate")
 
     for ami in amis["Images"]:
-        data.append(
-            [
-                ami["ImageId"],
-                ami["Name"],
-                ami["State"],
-                ami["CreationDate"],
-            ]
+        state = ami["State"]
+        state_style = "green" if state == "available" else "yellow"
+        table.add_row(
+            ami["ImageId"],
+            ami["Name"],
+            f"[{state_style}]{state}[/{state_style}]",
+            str(ami["CreationDate"]),
         )
 
-    # Format table using wasabi
-    formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
-    typer.secho(formatted, fg=typer.colors.YELLOW)
+    console.print(table)
 
 
 @app.command()
-def list_launch_templates():
+def list_launch_templates() -> dict[str, Any]:
     """
     List all launch templates available in the AWS EC2.
 
@@ -116,35 +124,34 @@ def list_launch_templates():
     Example usage:
         python remotepy/instance.py list_launch_templates
     """
-    launch_templates = ec2_client.describe_launch_templates()
+    launch_templates = get_ec2_client().describe_launch_templates()
 
-    header = ["Number", "LaunchTemplateId", "LaunchTemplateName", "Version"]
-    aligns = ["l"] * len(header)
-    data = []
+    # Format table using rich
+    table = Table(title="Launch Templates")
+    table.add_column("Number", justify="right")
+    table.add_column("LaunchTemplateId", style="green")
+    table.add_column("LaunchTemplateName", style="cyan")
+    table.add_column("Version", justify="right")
 
     for i, launch_template in enumerate(launch_templates["LaunchTemplates"], 1):
-        data.append(
-            (
-                i,
-                launch_template["LaunchTemplateId"],
-                launch_template["LaunchTemplateName"],
-                launch_template["LatestVersionNumber"],
-            )
+        table.add_row(
+            str(i),
+            launch_template["LaunchTemplateId"],
+            launch_template["LaunchTemplateName"],
+            str(launch_template["LatestVersionNumber"]),
         )
 
-    # Format table using wasabi
-    formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
-    typer.secho(formatted, fg=typer.colors.YELLOW)
+    console.print(table)
 
-    return launch_templates
+    return dict(launch_templates)
 
 
 @app.command()
 def launch(
-    name: str = typer.Option(None, help="Name of the instance to be launched"),
-    launch_template: str = typer.Option(None, help="Launch template name"),
+    name: str | None = typer.Option(None, help="Name of the instance to be launched"),
+    launch_template: str | None = typer.Option(None, help="Launch template name"),
     version: str = typer.Option("$Latest", help="Launch template version"),
-):
+) -> None:
     """
     Launch an AWS EC2 instance based on a launch template.
 
@@ -165,6 +172,10 @@ def launch(
     version: The version of the launch template to use. Default is the latest version.
     """
 
+    # Variables to track launch template details
+    launch_template_name: str = ""
+    launch_template_id: str = ""
+
     # if no launch template is specified, list all the launch templates
     if not launch_template:
         typer.secho("Please specify a launch template", fg=typer.colors.RED)
@@ -172,13 +183,21 @@ def launch(
         launch_templates = list_launch_templates()["LaunchTemplates"]
         typer.secho("Select a launch template by number", fg=typer.colors.YELLOW)
         launch_template_number = typer.prompt("Launch template", type=str)
-        launch_template = launch_templates[int(launch_template_number) - 1]
-        launch_template_name = launch_template["LaunchTemplateName"]
-        launch_template_id = launch_template["LaunchTemplateId"]
+        # Validate user input and safely access array
+        try:
+            template_index = validate_array_index(
+                launch_template_number, len(launch_templates), "launch templates"
+            )
+            selected_template = launch_templates[template_index]
+        except ValidationError as e:
+            typer.secho(f"Error: {e}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+        launch_template_name = str(selected_template["LaunchTemplateName"])
+        launch_template_id = str(selected_template["LaunchTemplateId"])
 
         typer.secho(f"Launch template {launch_template_name} selected", fg=typer.colors.YELLOW)
         typer.secho(
-            f"Defaulting to latest version: {launch_template['LatestVersionNumber']}",
+            f"Defaulting to latest version: {selected_template['LatestVersionNumber']}",
             fg=typer.colors.YELLOW,
         )
         typer.secho(f"Launching instance based on launch template {launch_template_name}")
@@ -196,7 +215,7 @@ def launch(
         )
 
     # Launch the instance with the specified launch template, version, and name
-    instance = ec2_client.run_instances(
+    instance = get_ec2_client().run_instances(
         LaunchTemplate={"LaunchTemplateId": launch_template_id, "Version": version},
         MaxCount=1,
         MinCount=1,
