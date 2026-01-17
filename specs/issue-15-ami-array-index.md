@@ -1,6 +1,6 @@
 # Issue 15: Unvalidated Array Index in AMI Launch
 
-**Status:** Not started
+**Status:** COMPLETED
 **Priority:** High
 **File:** `remotepy/ami.py:186`
 
@@ -33,6 +33,6 @@ instance_id = instance_ids[0]
 
 ## Acceptance Criteria
 
-- [ ] Add bounds checking before array access
-- [ ] Provide helpful error if no instances returned
-- [ ] Add test for empty instance list scenario
+- [x] Add bounds checking before array access
+- [x] Provide helpful error if no instances returned
+- [x] Add test for empty instance list scenario
