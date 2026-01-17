@@ -1,6 +1,6 @@
 # Issue 23: Rename Package to `remote`
 
-**Status:** Not started
+**Status:** COMPLETED
 **Priority:** Low (v0.5.0)
 **GitHub Issue:** #26
 
@@ -59,10 +59,10 @@ find . -name "*.py" -exec sed -i 's/import remotepy/import remote/g' {} \;
 
 ## Acceptance Criteria
 
-- [ ] Rename `remotepy/` directory to `remote/`
-- [ ] Update all imports in source files
-- [ ] Update all imports in test files
-- [ ] Update pyproject.toml entry points
-- [ ] Update CLAUDE.md and documentation
-- [ ] All tests pass after rename
-- [ ] Package installs and runs correctly
+- [x] Rename `remotepy/` directory to `remote/`
+- [x] Update all imports in source files
+- [x] Update all imports in test files
+- [x] Update pyproject.toml entry points
+- [x] Update CLAUDE.md and documentation
+- [x] All tests pass after rename
+- [x] Package installs and runs correctly

@@ -1,7 +1,7 @@
 from typer.testing import CliRunner
 
-from remotepy.instance import app
-from remotepy.utils import get_launch_template_id
+from remote.instance import app
+from remote.utils import get_launch_template_id
 
 runner = CliRunner()
 
@@ -16,7 +16,7 @@ class TestInstanceStatusCommand:
 
     def test_should_report_error_when_instance_not_found(self, mocker):
         """Should exit with error code 1 when instance doesn't exist."""
-        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
         mock_ec2_client.return_value.describe_instances.return_value = {"Reservations": []}
 
         result = runner.invoke(app, ["status", "test"])
@@ -30,7 +30,7 @@ class TestInstanceListCommand:
 
     def test_should_show_table_headers_when_no_instances_exist(self, mocker):
         """Should display table headers even when no instances are found."""
-        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
         # Mock the paginator for get_instances() which uses pagination
         mock_paginator = mocker.MagicMock()
         mock_paginator.paginate.return_value = [{"Reservations": []}]
@@ -46,7 +46,7 @@ class TestInstanceListCommand:
 
     def test_should_display_instance_details_when_instances_exist(self, mocker, mock_ec2_instances):
         """Should show instance details in tabular format when instances are found."""
-        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
         # Mock the paginator
         mock_paginator = mocker.MagicMock()
@@ -54,8 +54,8 @@ class TestInstanceListCommand:
         mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
         # Mock pricing to avoid actual API calls
-        mocker.patch("remotepy.instance.get_instance_price", return_value=0.0104)
-        mocker.patch("remotepy.instance.get_monthly_estimate", return_value=7.59)
+        mocker.patch("remote.instance.get_instance_price", return_value=0.0104)
+        mocker.patch("remote.instance.get_monthly_estimate", return_value=7.59)
 
         result = runner.invoke(app, ["list"])
 
@@ -78,7 +78,7 @@ class TestInstanceListCommand:
 
     def test_should_show_pricing_columns_by_default(self, mocker):
         """Should display pricing columns when --no-pricing is not specified."""
-        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
         mock_paginator = mocker.MagicMock()
         mock_paginator.paginate.return_value = [{"Reservations": []}]
         mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
@@ -91,7 +91,7 @@ class TestInstanceListCommand:
 
     def test_should_hide_pricing_columns_with_no_pricing_flag(self, mocker):
         """Should not display pricing columns when --no-pricing is specified."""
-        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
         mock_paginator = mocker.MagicMock()
         mock_paginator.paginate.return_value = [{"Reservations": []}]
         mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
@@ -104,14 +104,14 @@ class TestInstanceListCommand:
 
     def test_should_display_pricing_data_for_instances(self, mocker, mock_ec2_instances):
         """Should show pricing information for each instance type."""
-        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
         mock_paginator = mocker.MagicMock()
         mock_paginator.paginate.return_value = [mock_ec2_instances]
         mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
         # Mock pricing functions
-        mocker.patch("remotepy.instance.get_instance_price", return_value=0.0104)
-        mocker.patch("remotepy.instance.get_monthly_estimate", return_value=7.59)
+        mocker.patch("remote.instance.get_instance_price", return_value=0.0104)
+        mocker.patch("remote.instance.get_monthly_estimate", return_value=7.59)
 
         result = runner.invoke(app, ["list"])
 
@@ -122,14 +122,14 @@ class TestInstanceListCommand:
 
     def test_should_handle_unavailable_pricing_gracefully(self, mocker, mock_ec2_instances):
         """Should display dash when pricing is unavailable."""
-        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
         mock_paginator = mocker.MagicMock()
         mock_paginator.paginate.return_value = [mock_ec2_instances]
         mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
         # Mock pricing to return None (unavailable)
-        mocker.patch("remotepy.instance.get_instance_price", return_value=None)
-        mocker.patch("remotepy.instance.get_monthly_estimate", return_value=None)
+        mocker.patch("remote.instance.get_instance_price", return_value=None)
+        mocker.patch("remote.instance.get_monthly_estimate", return_value=None)
 
         result = runner.invoke(app, ["list"])
 
@@ -139,12 +139,12 @@ class TestInstanceListCommand:
 
     def test_should_not_call_pricing_api_with_no_pricing_flag(self, mocker, mock_ec2_instances):
         """Should skip pricing API calls when --no-pricing flag is used."""
-        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
         mock_paginator = mocker.MagicMock()
         mock_paginator.paginate.return_value = [mock_ec2_instances]
         mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
-        mock_get_price = mocker.patch("remotepy.instance.get_instance_price")
+        mock_get_price = mocker.patch("remote.instance.get_instance_price")
 
         result = runner.invoke(app, ["list", "--no-pricing"])
 
@@ -157,7 +157,7 @@ class TestLaunchTemplateUtilities:
 
     def test_should_return_template_id_when_template_found_by_name(self, mocker):
         """Should return the launch template ID when template is found by name tag."""
-        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
         mock_ec2_client.return_value.describe_launch_templates.return_value = {
             "LaunchTemplates": [{"LaunchTemplateId": "lt-0123456789abcdef0"}]
         }
@@ -172,13 +172,13 @@ class TestLaunchTemplateUtilities:
     def test_should_show_running_instance_status_details(self, mocker):
         """Should display detailed status information for a running instance."""
         mock_get_instance_name = mocker.patch(
-            "remotepy.instance.get_instance_name", return_value="test-instance"
+            "remote.instance.get_instance_name", return_value="test-instance"
         )
         mock_get_instance_id = mocker.patch(
-            "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
+            "remote.instance.get_instance_id", return_value="i-0123456789abcdef0"
         )
         mock_get_instance_status = mocker.patch(
-            "remotepy.instance.get_instance_status",
+            "remote.instance.get_instance_status",
             return_value={
                 "InstanceStatuses": [
                     {
@@ -208,9 +208,9 @@ class TestLaunchTemplateUtilities:
     def test_should_report_non_running_instance_status(self, mocker):
         """Should report when instance exists but is not in running state."""
         mock_get_instance_id = mocker.patch(
-            "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
+            "remote.instance.get_instance_id", return_value="i-0123456789abcdef0"
         )
-        mocker.patch("remotepy.instance.get_instance_status", return_value={"InstanceStatuses": []})
+        mocker.patch("remote.instance.get_instance_status", return_value={"InstanceStatuses": []})
 
         result = runner.invoke(app, ["status", "specific-instance"])
 
@@ -224,13 +224,13 @@ class TestLaunchTemplateUtilities:
 
 def test_start_instance_already_running(mocker):
     mock_get_instance_name = mocker.patch(
-        "remotepy.instance.get_instance_name", return_value="test-instance"
+        "remote.instance.get_instance_name", return_value="test-instance"
     )
     mock_get_instance_id = mocker.patch(
-        "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
+        "remote.instance.get_instance_id", return_value="i-0123456789abcdef0"
     )
     mock_is_instance_running = mocker.patch(
-        "remotepy.instance.is_instance_running", return_value=True
+        "remote.instance.is_instance_running", return_value=True
     )
 
     result = runner.invoke(app, ["start"])
@@ -243,12 +243,12 @@ def test_start_instance_already_running(mocker):
 
 
 def test_start_instance_success(mocker):
-    mock_ec2_client = mocker.patch("remotepy.instance.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
     mock_get_instance_id = mocker.patch(
-        "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
+        "remote.instance.get_instance_id", return_value="i-0123456789abcdef0"
     )
     mock_is_instance_running = mocker.patch(
-        "remotepy.instance.is_instance_running", return_value=False
+        "remote.instance.is_instance_running", return_value=False
     )
 
     result = runner.invoke(app, ["start", "test-instance"])
@@ -263,9 +263,9 @@ def test_start_instance_success(mocker):
 
 
 def test_start_instance_exception(mocker):
-    mock_ec2_client = mocker.patch("remotepy.instance.get_ec2_client")
-    mocker.patch("remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0")
-    mocker.patch("remotepy.instance.is_instance_running", return_value=False)
+    mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+    mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+    mocker.patch("remote.instance.is_instance_running", return_value=False)
 
     from botocore.exceptions import ClientError
 
@@ -282,10 +282,10 @@ def test_start_instance_exception(mocker):
 
 def test_stop_instance_already_stopped(mocker):
     mock_get_instance_id = mocker.patch(
-        "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
+        "remote.instance.get_instance_id", return_value="i-0123456789abcdef0"
     )
     mock_is_instance_running = mocker.patch(
-        "remotepy.instance.is_instance_running", return_value=False
+        "remote.instance.is_instance_running", return_value=False
     )
 
     result = runner.invoke(app, ["stop", "test-instance"])
@@ -297,9 +297,9 @@ def test_stop_instance_already_stopped(mocker):
 
 
 def test_stop_instance_confirmed(mocker):
-    mock_ec2_client = mocker.patch("remotepy.instance.get_ec2_client")
-    mocker.patch("remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0")
-    mocker.patch("remotepy.instance.is_instance_running", return_value=True)
+    mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+    mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+    mocker.patch("remote.instance.is_instance_running", return_value=True)
 
     result = runner.invoke(app, ["stop", "test-instance"], input="y\n")
 
@@ -311,9 +311,9 @@ def test_stop_instance_confirmed(mocker):
 
 
 def test_stop_instance_cancelled(mocker):
-    mock_ec2_client = mocker.patch("remotepy.instance.get_ec2_client")
-    mocker.patch("remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0")
-    mocker.patch("remotepy.instance.is_instance_running", return_value=True)
+    mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+    mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+    mocker.patch("remote.instance.is_instance_running", return_value=True)
 
     result = runner.invoke(app, ["stop", "test-instance"], input="n\n")
 
@@ -323,9 +323,9 @@ def test_stop_instance_cancelled(mocker):
 
 
 def test_stop_instance_exception(mocker):
-    mock_ec2_client = mocker.patch("remotepy.instance.get_ec2_client")
-    mocker.patch("remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0")
-    mocker.patch("remotepy.instance.is_instance_running", return_value=True)
+    mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+    mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+    mocker.patch("remote.instance.is_instance_running", return_value=True)
 
     from botocore.exceptions import ClientError
 
@@ -342,13 +342,13 @@ def test_stop_instance_exception(mocker):
 
 def test_type_command_show_current_type(mocker):
     mock_get_instance_name = mocker.patch(
-        "remotepy.instance.get_instance_name", return_value="test-instance"
+        "remote.instance.get_instance_name", return_value="test-instance"
     )
     mock_get_instance_id = mocker.patch(
-        "remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0"
+        "remote.instance.get_instance_id", return_value="i-0123456789abcdef0"
     )
     mock_get_instance_type = mocker.patch(
-        "remotepy.instance.get_instance_type", return_value="t2.micro"
+        "remote.instance.get_instance_type", return_value="t2.micro"
     )
 
     result = runner.invoke(app, ["type"])
@@ -362,8 +362,8 @@ def test_type_command_show_current_type(mocker):
 
 
 def test_type_command_same_type(mocker):
-    mocker.patch("remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0")
-    mocker.patch("remotepy.instance.get_instance_type", return_value="t2.micro")
+    mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+    mocker.patch("remote.instance.get_instance_type", return_value="t2.micro")
 
     result = runner.invoke(app, ["type", "t2.micro", "test-instance"])
 
@@ -372,9 +372,9 @@ def test_type_command_same_type(mocker):
 
 
 def test_type_command_running_instance_error(mocker):
-    mocker.patch("remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0")
-    mocker.patch("remotepy.instance.get_instance_type", return_value="t2.micro")
-    mocker.patch("remotepy.instance.is_instance_running", return_value=True)
+    mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+    mocker.patch("remote.instance.get_instance_type", return_value="t2.micro")
+    mocker.patch("remote.instance.is_instance_running", return_value=True)
 
     result = runner.invoke(app, ["type", "t2.small", "test-instance"])
 
@@ -383,11 +383,11 @@ def test_type_command_running_instance_error(mocker):
 
 
 def test_type_command_change_success(mocker):
-    mock_ec2_client = mocker.patch("remotepy.instance.get_ec2_client")
-    mocker.patch("remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0")
-    mocker.patch("remotepy.instance.get_instance_type", side_effect=["t2.micro", "t2.small"])
-    mocker.patch("remotepy.instance.is_instance_running", return_value=False)
-    mocker.patch("remotepy.instance.time.sleep")
+    mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+    mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+    mocker.patch("remote.instance.get_instance_type", side_effect=["t2.micro", "t2.small"])
+    mocker.patch("remote.instance.is_instance_running", return_value=False)
+    mocker.patch("remote.instance.time.sleep")
 
     result = runner.invoke(app, ["type", "t2.small", "test-instance"])
 
@@ -399,11 +399,11 @@ def test_type_command_change_success(mocker):
 
 
 def test_terminate_instance_name_mismatch(mocker):
-    mock_ec2_client = mocker.patch("remotepy.instance.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
     mock_get_instance_name = mocker.patch(
-        "remotepy.instance.get_instance_name", return_value="test-instance"
+        "remote.instance.get_instance_name", return_value="test-instance"
     )
-    mocker.patch("remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0")
+    mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
 
     # Mock the describe_instances call that happens in terminate function
     mock_ec2_client.return_value.describe_instances.return_value = {
@@ -418,8 +418,8 @@ def test_terminate_instance_name_mismatch(mocker):
 
 
 def test_terminate_instance_cancelled(mocker):
-    mock_ec2_client = mocker.patch("remotepy.instance.get_ec2_client")
-    mocker.patch("remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0")
+    mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+    mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
 
     mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [{"Instances": [{"Tags": []}]}]
@@ -433,8 +433,8 @@ def test_terminate_instance_cancelled(mocker):
 
 
 def test_terminate_instance_confirmed(mocker):
-    mock_ec2_client = mocker.patch("remotepy.instance.get_ec2_client")
-    mocker.patch("remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0")
+    mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+    mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
 
     mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [{"Instances": [{"Tags": []}]}]
@@ -450,8 +450,8 @@ def test_terminate_instance_confirmed(mocker):
 
 
 def test_terminate_terraform_managed_instance(mocker):
-    mock_ec2_client = mocker.patch("remotepy.instance.get_ec2_client")
-    mocker.patch("remotepy.instance.get_instance_id", return_value="i-0123456789abcdef0")
+    mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+    mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
 
     mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [
@@ -467,7 +467,7 @@ def test_terminate_terraform_managed_instance(mocker):
 
 def test_list_launch_templates_command(mocker):
     mocker.patch(
-        "remotepy.instance.get_launch_templates",
+        "remote.instance.get_launch_templates",
         return_value=[
             {
                 "LaunchTemplateId": "lt-0123456789abcdef0",
@@ -487,10 +487,10 @@ def test_list_launch_templates_command(mocker):
 def test_connect_with_key_option(mocker):
     """Test that --key option adds -i flag to SSH command."""
     # Mock the AWS EC2 client in utils (where get_instance_id and is_instance_running are defined)
-    mock_ec2 = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
 
     # Mock subprocess.run to capture the SSH command
-    mock_subprocess = mocker.patch("remotepy.instance.subprocess.run")
+    mock_subprocess = mocker.patch("remote.instance.subprocess.run")
 
     # Mock describe_instances for get_instance_id
     mock_ec2.return_value.describe_instances.return_value = {
@@ -531,8 +531,8 @@ def test_connect_with_key_option(mocker):
 
 def test_connect_uses_accept_new_by_default(mocker):
     """Test that SSH uses StrictHostKeyChecking=accept-new by default (more secure)."""
-    mock_ec2 = mocker.patch("remotepy.utils.get_ec2_client")
-    mock_subprocess = mocker.patch("remotepy.instance.subprocess.run")
+    mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+    mock_subprocess = mocker.patch("remote.instance.subprocess.run")
 
     mock_ec2.return_value.describe_instances.return_value = {
         "Reservations": [
@@ -563,8 +563,8 @@ def test_connect_uses_accept_new_by_default(mocker):
 
 def test_connect_with_no_strict_host_key_flag(mocker):
     """Test that --no-strict-host-key disables strict host key checking."""
-    mock_ec2 = mocker.patch("remotepy.utils.get_ec2_client")
-    mock_subprocess = mocker.patch("remotepy.instance.subprocess.run")
+    mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+    mock_subprocess = mocker.patch("remote.instance.subprocess.run")
 
     mock_ec2.return_value.describe_instances.return_value = {
         "Reservations": [
@@ -603,8 +603,8 @@ class TestSSHErrorHandling:
 
     def test_connect_ssh_nonzero_exit_code(self, mocker):
         """Test that SSH connection failure with non-zero exit code is handled."""
-        mock_ec2 = mocker.patch("remotepy.utils.get_ec2_client")
-        mock_subprocess = mocker.patch("remotepy.instance.subprocess.run")
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
 
         mock_ec2.return_value.describe_instances.return_value = {
             "Reservations": [
@@ -636,8 +636,8 @@ class TestSSHErrorHandling:
 
     def test_connect_ssh_client_not_found(self, mocker):
         """Test that missing SSH client is handled gracefully."""
-        mock_ec2 = mocker.patch("remotepy.utils.get_ec2_client")
-        mock_subprocess = mocker.patch("remotepy.instance.subprocess.run")
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
 
         mock_ec2.return_value.describe_instances.return_value = {
             "Reservations": [
@@ -668,8 +668,8 @@ class TestSSHErrorHandling:
 
     def test_connect_ssh_os_error(self, mocker):
         """Test that OS errors during SSH connection are handled."""
-        mock_ec2 = mocker.patch("remotepy.utils.get_ec2_client")
-        mock_subprocess = mocker.patch("remotepy.instance.subprocess.run")
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
 
         mock_ec2.return_value.describe_instances.return_value = {
             "Reservations": [
@@ -700,8 +700,8 @@ class TestSSHErrorHandling:
 
     def test_connect_ssh_success(self, mocker):
         """Test that successful SSH connection exits cleanly."""
-        mock_ec2 = mocker.patch("remotepy.utils.get_ec2_client")
-        mock_subprocess = mocker.patch("remotepy.instance.subprocess.run")
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
 
         mock_ec2.return_value.describe_instances.return_value = {
             "Reservations": [

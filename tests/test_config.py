@@ -5,8 +5,8 @@ from unittest.mock import mock_open
 import pytest
 from typer.testing import CliRunner
 
-from remotepy import config
-from remotepy.config import ConfigManager
+from remote import config
+from remote.config import ConfigManager
 
 runner = CliRunner()
 
@@ -59,7 +59,7 @@ class TestConfigManager:
         assert manager._file_config is None
 
     def test_file_config_loads_existing_file(self, mocker):
-        mock_settings = mocker.patch("remotepy.config.Settings")
+        mock_settings = mocker.patch("remote.config.Settings")
         mock_path = mocker.MagicMock()
         mock_path.exists.return_value = True
         mock_settings.get_config_path.return_value = mock_path
@@ -74,7 +74,7 @@ class TestConfigManager:
         mock_config_instance.read.assert_called_once_with(mock_path)
 
     def test_file_config_nonexistent_file(self, mocker):
-        mock_settings = mocker.patch("remotepy.config.Settings")
+        mock_settings = mocker.patch("remote.config.Settings")
         mock_path = mocker.MagicMock()
         mock_path.exists.return_value = False
         mock_settings.get_config_path.return_value = mock_path
@@ -127,9 +127,9 @@ class TestConfigManager:
         assert result is None
 
     def test_set_instance_name_with_default_path(self, mocker):
-        mock_settings = mocker.patch("remotepy.config.Settings")
+        mock_settings = mocker.patch("remote.config.Settings")
         mock_settings.get_config_path.return_value = Path("/test/config.ini")
-        mock_write_config = mocker.patch("remotepy.config.write_config")
+        mock_write_config = mocker.patch("remote.config.write_config")
 
         manager = ConfigManager()
         manager._file_config = configparser.ConfigParser()
@@ -140,7 +140,7 @@ class TestConfigManager:
         assert manager.file_config["DEFAULT"]["instance_name"] == "new-instance"
 
     def test_set_instance_name_with_custom_path(self, mocker):
-        mock_write_config = mocker.patch("remotepy.config.write_config")
+        mock_write_config = mocker.patch("remote.config.write_config")
 
         manager = ConfigManager()
         manager._file_config = configparser.ConfigParser()
@@ -151,7 +151,7 @@ class TestConfigManager:
         assert manager.file_config["DEFAULT"]["instance_name"] == "new-instance"
 
     def test_set_instance_name_creates_default_section(self, mocker):
-        mocker.patch("remotepy.config.write_config")
+        mocker.patch("remote.config.write_config")
 
         manager = ConfigManager()
         manager._file_config = configparser.ConfigParser()
@@ -188,7 +188,7 @@ def test_read_config(mocker):
 
 
 def test_write_config(test_config, mocker):
-    mock_create_config_dir = mocker.patch("remotepy.config.create_config_dir")
+    mock_create_config_dir = mocker.patch("remote.config.create_config_dir")
     mock_open_file = mocker.patch("builtins.open", mock_open())
 
     cfg = configparser.ConfigParser()
@@ -202,7 +202,7 @@ def test_write_config(test_config, mocker):
 
 
 def test_show_command(mocker):
-    mock_read_config = mocker.patch("remotepy.config.read_config")
+    mock_read_config = mocker.patch("remote.config.read_config")
     mock_config = mocker.MagicMock()
     mock_config.__getitem__.return_value = {"instance_name": "test-instance", "region": "us-east-1"}
     mock_read_config.return_value = mock_config
@@ -215,7 +215,7 @@ def test_show_command(mocker):
 
 
 def test_show_command_with_custom_path(mocker):
-    mock_read_config = mocker.patch("remotepy.config.read_config")
+    mock_read_config = mocker.patch("remote.config.read_config")
     mock_config = mocker.MagicMock()
     mock_config.__getitem__.return_value = {}
     mock_read_config.return_value = mock_config
@@ -227,7 +227,7 @@ def test_show_command_with_custom_path(mocker):
 
 
 def test_add_with_instance_name(mocker):
-    mock_config_manager = mocker.patch("remotepy.config.config_manager")
+    mock_config_manager = mocker.patch("remote.config.config_manager")
 
     result = runner.invoke(config.app, ["add", "my-instance"])
 
@@ -237,7 +237,7 @@ def test_add_with_instance_name(mocker):
 
 
 def test_add_with_custom_config_path(mocker):
-    mock_config_manager = mocker.patch("remotepy.config.config_manager")
+    mock_config_manager = mocker.patch("remote.config.config_manager")
 
     result = runner.invoke(config.app, ["add", "my-instance", "--config", "/custom/path"])
 
@@ -246,20 +246,20 @@ def test_add_with_custom_config_path(mocker):
 
 
 def test_add_no_instances(mocker):
-    mocker.patch("remotepy.config.get_instances", return_value=[])
+    mocker.patch("remote.config.get_instances", return_value=[])
     result = runner.invoke(config.app, ["add"], input="1\n")
     assert "Invalid number. No changes made" in result.stdout
 
 
 def test_add_interactive_valid_selection(mocker, mock_instances_data):
     mock_get_instances = mocker.patch(
-        "remotepy.config.get_instances", return_value=mock_instances_data
+        "remote.config.get_instances", return_value=mock_instances_data
     )
     mock_get_instance_ids = mocker.patch(
-        "remotepy.config.get_instance_ids", return_value=["i-123", "i-456"]
+        "remote.config.get_instance_ids", return_value=["i-123", "i-456"]
     )
     mock_get_instance_info = mocker.patch(
-        "remotepy.config.get_instance_info",
+        "remote.config.get_instance_info",
         return_value=(
             ["test-instance-1", "test-instance-2"],
             ["dns1", "dns2"],
@@ -268,7 +268,7 @@ def test_add_interactive_valid_selection(mocker, mock_instances_data):
             ["time1", "time2"],
         ),
     )
-    mock_config_manager = mocker.patch("remotepy.config.config_manager")
+    mock_config_manager = mocker.patch("remote.config.config_manager")
 
     result = runner.invoke(config.app, ["add"], input="1\n")
 
@@ -283,10 +283,10 @@ def test_add_interactive_valid_selection(mocker, mock_instances_data):
 
 
 def test_add_interactive_invalid_selection_too_high(mocker, mock_instances_data):
-    mocker.patch("remotepy.config.get_instances", return_value=mock_instances_data)
-    mocker.patch("remotepy.config.get_instance_ids", return_value=["i-123", "i-456"])
+    mocker.patch("remote.config.get_instances", return_value=mock_instances_data)
+    mocker.patch("remote.config.get_instance_ids", return_value=["i-123", "i-456"])
     mocker.patch(
-        "remotepy.config.get_instance_info",
+        "remote.config.get_instance_info",
         return_value=(
             ["test-instance-1", "test-instance-2"],
             ["dns1", "dns2"],
@@ -295,7 +295,7 @@ def test_add_interactive_invalid_selection_too_high(mocker, mock_instances_data)
             ["time1", "time2"],
         ),
     )
-    mock_config_manager = mocker.patch("remotepy.config.config_manager")
+    mock_config_manager = mocker.patch("remote.config.config_manager")
 
     result = runner.invoke(config.app, ["add"], input="5\n")
 
@@ -305,10 +305,10 @@ def test_add_interactive_invalid_selection_too_high(mocker, mock_instances_data)
 
 
 def test_add_interactive_invalid_selection_zero(mocker, mock_instances_data):
-    mocker.patch("remotepy.config.get_instances", return_value=mock_instances_data)
-    mocker.patch("remotepy.config.get_instance_ids", return_value=["i-123", "i-456"])
+    mocker.patch("remote.config.get_instances", return_value=mock_instances_data)
+    mocker.patch("remote.config.get_instance_ids", return_value=["i-123", "i-456"])
     mocker.patch(
-        "remotepy.config.get_instance_info",
+        "remote.config.get_instance_info",
         return_value=(
             ["test-instance-1", "test-instance-2"],
             ["dns1", "dns2"],
@@ -317,7 +317,7 @@ def test_add_interactive_invalid_selection_zero(mocker, mock_instances_data):
             ["time1", "time2"],
         ),
     )
-    mock_config_manager = mocker.patch("remotepy.config.config_manager")
+    mock_config_manager = mocker.patch("remote.config.config_manager")
 
     result = runner.invoke(config.app, ["add"], input="0\n")
 
@@ -327,10 +327,10 @@ def test_add_interactive_invalid_selection_zero(mocker, mock_instances_data):
 
 
 def test_add_interactive_valid_selection_second_instance(mocker, mock_instances_data):
-    mocker.patch("remotepy.config.get_instances", return_value=mock_instances_data)
-    mocker.patch("remotepy.config.get_instance_ids", return_value=["i-123", "i-456"])
+    mocker.patch("remote.config.get_instances", return_value=mock_instances_data)
+    mocker.patch("remote.config.get_instance_ids", return_value=["i-123", "i-456"])
     mocker.patch(
-        "remotepy.config.get_instance_info",
+        "remote.config.get_instance_info",
         return_value=(
             ["test-instance-1", "test-instance-2"],
             ["dns1", "dns2"],
@@ -339,7 +339,7 @@ def test_add_interactive_valid_selection_second_instance(mocker, mock_instances_
             ["time1", "time2"],
         ),
     )
-    mock_config_manager = mocker.patch("remotepy.config.config_manager")
+    mock_config_manager = mocker.patch("remote.config.config_manager")
 
     result = runner.invoke(config.app, ["add"], input="2\n")
 
@@ -364,7 +364,7 @@ class TestConfigurationEdgeCases:
         config_path = tmpdir.join("config.ini")
         config_path.write("this is not valid ini format [[[")
 
-        mock_settings = mocker.patch("remotepy.config.Settings")
+        mock_settings = mocker.patch("remote.config.Settings")
         mock_settings.return_value.get_config_path.return_value = str(config_path)
 
         config_manager = ConfigManager()
@@ -376,9 +376,9 @@ class TestConfigurationEdgeCases:
         """Should create config directory when it doesn't exist."""
         nonexistent_path = tmpdir.join("nonexistent", "config.ini")
 
-        mock_settings = mocker.patch("remotepy.config.Settings")
+        mock_settings = mocker.patch("remote.config.Settings")
         mock_settings.return_value.get_config_path.return_value = str(nonexistent_path)
-        mock_write_config = mocker.patch("remotepy.config.write_config")
+        mock_write_config = mocker.patch("remote.config.write_config")
 
         config_manager = ConfigManager()
         config_manager.set_instance_name("test-instance")
@@ -401,7 +401,7 @@ class TestConfigurationEdgeCases:
 
     def test_should_validate_instance_name_format(self, mocker):
         """Should validate instance name format when setting."""
-        mock_write_config = mocker.patch("remotepy.config.write_config")
+        mock_write_config = mocker.patch("remote.config.write_config")
         config_manager = ConfigManager()
 
         # Test with valid instance name
@@ -419,7 +419,7 @@ class TestSettingsConfiguration:
 
     def test_should_use_testing_mode_in_test_environment(self):
         """Should correctly identify testing mode."""
-        from remotepy.settings import Settings
+        from remote.settings import Settings
 
         test_settings = Settings(testing_mode=True)
         assert test_settings.testing_mode is True
@@ -429,7 +429,7 @@ class TestSettingsConfiguration:
 
     def test_should_handle_config_path_generation(self, mocker, tmpdir):
         """Should generate correct config paths."""
-        from remotepy.settings import Settings
+        from remote.settings import Settings
 
         with mocker.patch("pathlib.Path.home", return_value=tmpdir):
             settings = Settings()

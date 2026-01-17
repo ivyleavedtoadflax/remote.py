@@ -2,12 +2,12 @@ import importlib.metadata
 
 import typer
 
-from remotepy.ami import app as ami_app
-from remotepy.config import app as config_app
-from remotepy.ecs import app as ecs_app
-from remotepy.instance import app as instance_app
-from remotepy.snapshot import app as snapshot_app
-from remotepy.volume import app as volume_app
+from remote.ami import app as ami_app
+from remote.config import app as config_app
+from remote.ecs import app as ecs_app
+from remote.instance import app as instance_app
+from remote.snapshot import app as snapshot_app
+from remote.volume import app as volume_app
 
 # Create main app
 app = typer.Typer(

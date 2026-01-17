@@ -1,14 +1,12 @@
 from typer.testing import CliRunner
 
-from remotepy.__main__ import app
+from remote.__main__ import app
 
 runner = CliRunner()
 
 
 def test_version_command(mocker):
-    mock_version = mocker.patch(
-        "remotepy.__main__.importlib.metadata.version", return_value="0.2.5"
-    )
+    mock_version = mocker.patch("remote.__main__.importlib.metadata.version", return_value="0.2.5")
 
     result = runner.invoke(app, ["version"])
 
@@ -20,7 +18,7 @@ def test_version_command(mocker):
 def test_main_app_imports():
     """Test that all sub-apps are properly imported and added to main app."""
     # Test that the main app structure exists
-    from remotepy.__main__ import app as main_app
+    from remote.__main__ import app as main_app
 
     # The main app is its own Typer instance with instance commands copied to root
     assert main_app is not None
@@ -34,7 +32,7 @@ def test_main_app_structure():
     """Test the overall structure of the main app."""
     # Test that imports work correctly
     # Test that the main module imports exist
-    from remotepy import ami, config, ecs, instance, snapshot, volume
+    from remote import ami, config, ecs, instance, snapshot, volume
 
     # Verify that we can access the apps
     assert hasattr(ami, "app")

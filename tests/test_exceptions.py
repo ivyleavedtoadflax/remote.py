@@ -1,6 +1,6 @@
-"""Tests for custom exception classes in remotepy.exceptions module."""
+"""Tests for custom exception classes in remote.exceptions module."""
 
-from remotepy.exceptions import (
+from remote.exceptions import (
     AWSServiceError,
     InstanceNotFoundError,
     InvalidInputError,

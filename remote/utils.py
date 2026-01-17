@@ -293,7 +293,7 @@ def get_instance_name(cfg: ConfigParser | None = None) -> str:
     Raises:
         typer.Exit: If no instance name is configured
     """
-    from remotepy.config import config_manager
+    from remote.config import config_manager
 
     instance_name = config_manager.get_instance_name()
 
@@ -301,9 +301,7 @@ def get_instance_name(cfg: ConfigParser | None = None) -> str:
         return instance_name
     else:
         typer.secho("No default instance configured.", fg=typer.colors.RED)
-        typer.secho(
-            "Run `remotepy config add` to set up your default instance.", fg=typer.colors.RED
-        )
+        typer.secho("Run `remote config add` to set up your default instance.", fg=typer.colors.RED)
         raise typer.Exit(1)
 
 

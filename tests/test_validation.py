@@ -1,11 +1,11 @@
-"""Tests for input validation functions in remotepy.validation module."""
+"""Tests for input validation functions in remote.validation module."""
 
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from remotepy.exceptions import InvalidInputError, ValidationError
-from remotepy.validation import (
+from remote.exceptions import InvalidInputError, ValidationError
+from remote.validation import (
     safe_get_array_item,
     safe_get_nested_value,
     validate_array_index,

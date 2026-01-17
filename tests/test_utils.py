@@ -4,13 +4,13 @@ import pytest
 from botocore.exceptions import ClientError, NoCredentialsError
 from click.exceptions import Exit
 
-from remotepy.exceptions import (
+from remote.exceptions import (
     AWSServiceError,
     InstanceNotFoundError,
     MultipleInstancesFoundError,
     ResourceNotFoundError,
 )
-from remotepy.utils import (
+from remote.utils import (
     get_account_id,
     get_instance_dns,
     get_instance_id,
@@ -32,7 +32,7 @@ from remotepy.utils import (
 
 
 def test_get_account_id(mocker):
-    mock_boto3_client = mocker.patch("remotepy.utils.boto3.client")
+    mock_boto3_client = mocker.patch("remote.utils.boto3.client")
     mock_sts_client = mock_boto3_client.return_value
     mock_sts_client.get_caller_identity.return_value = {"Account": "123456789012"}
 
@@ -44,7 +44,7 @@ def test_get_account_id(mocker):
 
 
 def test_get_instance_id_single_instance(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [{"Instances": [{"InstanceId": "i-0123456789abcdef0"}]}]
@@ -65,7 +65,7 @@ def test_get_instance_id_single_instance(mocker):
 
 
 def test_get_instance_id_multiple_instances(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [
@@ -80,7 +80,7 @@ def test_get_instance_id_multiple_instances(mocker):
 
 
 def test_get_instance_id_not_found(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     mock_ec2_client.return_value.describe_instances.return_value = {"Reservations": []}
 
@@ -90,7 +90,7 @@ def test_get_instance_id_not_found(mocker):
 
 
 def test_get_instance_status_with_id(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     expected_response = {
         "InstanceStatuses": [
@@ -111,7 +111,7 @@ def test_get_instance_status_with_id(mocker):
 
 
 def test_get_instance_status_without_id(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     expected_response = {"InstanceStatuses": []}
     mock_ec2_client.return_value.describe_instance_status.return_value = expected_response
@@ -123,7 +123,7 @@ def test_get_instance_status_without_id(mocker):
 
 
 def test_get_instances(mocker, mock_ec2_instances):
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     # Mock the paginator
     mock_paginator = mocker.MagicMock()
@@ -138,7 +138,7 @@ def test_get_instances(mocker, mock_ec2_instances):
 
 
 def test_get_instance_dns(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [
@@ -155,7 +155,7 @@ def test_get_instance_dns(mocker):
 
 
 def test_get_instance_name_success(mocker):
-    mock_config_manager = mocker.patch("remotepy.config.config_manager")
+    mock_config_manager = mocker.patch("remote.config.config_manager")
     mock_config_manager.get_instance_name.return_value = "test-instance"
 
     result = get_instance_name()
@@ -165,7 +165,7 @@ def test_get_instance_name_success(mocker):
 
 
 def test_get_instance_name_no_config(mocker):
-    mock_config_manager = mocker.patch("remotepy.config.config_manager")
+    mock_config_manager = mocker.patch("remote.config.config_manager")
     mock_config_manager.get_instance_name.return_value = None
 
     with pytest.raises(Exit) as exc_info:
@@ -262,7 +262,7 @@ def test_get_instance_ids(mock_ec2_instances):
 
 
 def test_is_instance_running_true(mocker):
-    mock_get_instance_status = mocker.patch("remotepy.utils.get_instance_status")
+    mock_get_instance_status = mocker.patch("remote.utils.get_instance_status")
     mock_get_instance_status.return_value = {
         "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
     }
@@ -274,7 +274,7 @@ def test_is_instance_running_true(mocker):
 
 
 def test_is_instance_running_false(mocker):
-    mock_get_instance_status = mocker.patch("remotepy.utils.get_instance_status")
+    mock_get_instance_status = mocker.patch("remote.utils.get_instance_status")
     mock_get_instance_status.return_value = {
         "InstanceStatuses": [{"InstanceState": {"Name": "stopped"}}]
     }
@@ -285,7 +285,7 @@ def test_is_instance_running_false(mocker):
 
 
 def test_is_instance_running_no_status(mocker):
-    mock_get_instance_status = mocker.patch("remotepy.utils.get_instance_status")
+    mock_get_instance_status = mocker.patch("remote.utils.get_instance_status")
     mock_get_instance_status.return_value = {"InstanceStatuses": []}
 
     result = is_instance_running("i-0123456789abcdef0")
@@ -294,7 +294,7 @@ def test_is_instance_running_no_status(mocker):
 
 
 def test_is_instance_stopped_true(mocker):
-    mock_get_instance_status = mocker.patch("remotepy.utils.get_instance_status")
+    mock_get_instance_status = mocker.patch("remote.utils.get_instance_status")
     mock_get_instance_status.return_value = {
         "InstanceStatuses": [{"InstanceState": {"Name": "stopped"}}]
     }
@@ -305,7 +305,7 @@ def test_is_instance_stopped_true(mocker):
 
 
 def test_is_instance_stopped_false(mocker):
-    mock_get_instance_status = mocker.patch("remotepy.utils.get_instance_status")
+    mock_get_instance_status = mocker.patch("remote.utils.get_instance_status")
     mock_get_instance_status.return_value = {
         "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
     }
@@ -316,7 +316,7 @@ def test_is_instance_stopped_false(mocker):
 
 
 def test_get_instance_type(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [{"Instances": [{"InstanceType": "t2.micro"}]}]
@@ -331,7 +331,7 @@ def test_get_instance_type(mocker):
 
 
 def test_get_volume_ids(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     mock_ec2_client.return_value.describe_volumes.return_value = {
         "Volumes": [
@@ -349,7 +349,7 @@ def test_get_volume_ids(mocker):
 
 
 def test_get_volume_name_with_name_tag(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     mock_ec2_client.return_value.describe_volumes.return_value = {
         "Volumes": [
@@ -371,7 +371,7 @@ def test_get_volume_name_with_name_tag(mocker):
 
 
 def test_get_volume_name_without_name_tag(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     mock_ec2_client.return_value.describe_volumes.return_value = {
         "Volumes": [
@@ -389,7 +389,7 @@ def test_get_volume_name_without_name_tag(mocker):
 
 
 def test_get_volume_name_no_tags(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     mock_ec2_client.return_value.describe_volumes.return_value = {
         "Volumes": [{}]  # No Tags field
@@ -401,7 +401,7 @@ def test_get_volume_name_no_tags(mocker):
 
 
 def test_get_snapshot_status(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     mock_ec2_client.return_value.describe_snapshots.return_value = {
         "Snapshots": [{"State": "completed"}]
@@ -416,7 +416,7 @@ def test_get_snapshot_status(mocker):
 
 
 def test_get_launch_template_id(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     mock_ec2_client.return_value.describe_launch_templates.return_value = {
         "LaunchTemplates": [{"LaunchTemplateId": "lt-0123456789abcdef0"}]
@@ -435,7 +435,7 @@ def test_get_launch_template_id(mocker):
 
 def test_get_account_id_client_error(mocker):
     """Test get_account_id with ClientError."""
-    mock_boto3_client = mocker.patch("remotepy.utils.boto3.client")
+    mock_boto3_client = mocker.patch("remote.utils.boto3.client")
     mock_sts_client = mock_boto3_client.return_value
 
     error_response = {"Error": {"Code": "AccessDenied", "Message": "Access denied"}}
@@ -453,7 +453,7 @@ def test_get_account_id_client_error(mocker):
 
 def test_get_account_id_no_credentials_error(mocker):
     """Test get_account_id with NoCredentialsError."""
-    mock_boto3_client = mocker.patch("remotepy.utils.boto3.client")
+    mock_boto3_client = mocker.patch("remote.utils.boto3.client")
     mock_sts_client = mock_boto3_client.return_value
 
     mock_sts_client.get_caller_identity.side_effect = NoCredentialsError()
@@ -468,7 +468,7 @@ def test_get_account_id_no_credentials_error(mocker):
 
 def test_get_instance_id_client_error(mocker):
     """Test get_instance_id with ClientError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Unauthorized"}}
     mock_ec2_client.return_value.describe_instances.side_effect = ClientError(
@@ -485,7 +485,7 @@ def test_get_instance_id_client_error(mocker):
 
 def test_get_instance_id_no_credentials_error(mocker):
     """Test get_instance_id with NoCredentialsError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     mock_ec2_client.return_value.describe_instances.side_effect = NoCredentialsError()
 
@@ -499,7 +499,7 @@ def test_get_instance_id_no_credentials_error(mocker):
 
 def test_get_instance_id_no_instances_in_reservation(mocker):
     """Test get_instance_id when reservation has no instances."""
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [
@@ -518,7 +518,7 @@ def test_get_instance_id_no_instances_in_reservation(mocker):
 
 def test_get_instance_status_client_error(mocker):
     """Test get_instance_status with ClientError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     error_response = {
         "Error": {"Code": "InvalidInstanceID.NotFound", "Message": "Instance not found"}
@@ -536,7 +536,7 @@ def test_get_instance_status_client_error(mocker):
 
 def test_get_instance_status_no_credentials_error(mocker):
     """Test get_instance_status with NoCredentialsError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     mock_ec2_client.return_value.describe_instance_status.side_effect = NoCredentialsError()
 
@@ -548,7 +548,7 @@ def test_get_instance_status_no_credentials_error(mocker):
 
 def test_get_instances_client_error(mocker):
     """Test get_instances with ClientError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     error_response = {"Error": {"Code": "RequestLimitExceeded", "Message": "Rate limit exceeded"}}
 
@@ -565,7 +565,7 @@ def test_get_instances_client_error(mocker):
 
 def test_get_instances_no_credentials_error(mocker):
     """Test get_instances with NoCredentialsError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     # Mock paginator that raises error during iteration
     mock_paginator = mocker.MagicMock()
@@ -580,7 +580,7 @@ def test_get_instances_no_credentials_error(mocker):
 
 def test_get_instance_dns_instance_not_found_error(mocker):
     """Test get_instance_dns with instance not found."""
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     error_response = {
         "Error": {"Code": "InvalidInstanceID.NotFound", "Message": "Instance not found"}
@@ -598,7 +598,7 @@ def test_get_instance_dns_instance_not_found_error(mocker):
 
 def test_get_instance_dns_other_client_error(mocker):
     """Test get_instance_dns with other ClientError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Unauthorized"}}
     mock_ec2_client.return_value.describe_instances.side_effect = ClientError(
@@ -613,7 +613,7 @@ def test_get_instance_dns_other_client_error(mocker):
 
 def test_get_instance_type_instance_not_found_error(mocker):
     """Test get_instance_type with instance not found."""
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     error_response = {
         "Error": {"Code": "InvalidInstanceID.NotFound", "Message": "Instance not found"}
@@ -631,7 +631,7 @@ def test_get_instance_type_instance_not_found_error(mocker):
 
 def test_get_instance_type_other_client_error(mocker):
     """Test get_instance_type with other ClientError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Unauthorized"}}
     mock_ec2_client.return_value.describe_instances.side_effect = ClientError(
@@ -646,7 +646,7 @@ def test_get_instance_type_other_client_error(mocker):
 
 def test_get_volume_ids_client_error(mocker):
     """Test get_volume_ids with ClientError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     error_response = {
         "Error": {"Code": "InvalidInstanceID.NotFound", "Message": "Instance not found"}
@@ -664,7 +664,7 @@ def test_get_volume_ids_client_error(mocker):
 
 def test_get_volume_ids_no_credentials_error(mocker):
     """Test get_volume_ids with NoCredentialsError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     mock_ec2_client.return_value.describe_volumes.side_effect = NoCredentialsError()
 
@@ -676,7 +676,7 @@ def test_get_volume_ids_no_credentials_error(mocker):
 
 def test_get_volume_name_volume_not_found_error(mocker):
     """Test get_volume_name with volume not found."""
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     error_response = {"Error": {"Code": "InvalidVolumeID.NotFound", "Message": "Volume not found"}}
     mock_ec2_client.return_value.describe_volumes.side_effect = ClientError(
@@ -692,7 +692,7 @@ def test_get_volume_name_volume_not_found_error(mocker):
 
 def test_get_volume_name_other_client_error(mocker):
     """Test get_volume_name with other ClientError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Unauthorized"}}
     mock_ec2_client.return_value.describe_volumes.side_effect = ClientError(
@@ -707,7 +707,7 @@ def test_get_volume_name_other_client_error(mocker):
 
 def test_get_snapshot_status_snapshot_not_found_error(mocker):
     """Test get_snapshot_status with snapshot not found."""
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     error_response = {
         "Error": {"Code": "InvalidSnapshotID.NotFound", "Message": "Snapshot not found"}
@@ -725,7 +725,7 @@ def test_get_snapshot_status_snapshot_not_found_error(mocker):
 
 def test_get_snapshot_status_other_client_error(mocker):
     """Test get_snapshot_status with other ClientError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Unauthorized"}}
     mock_ec2_client.return_value.describe_snapshots.side_effect = ClientError(
@@ -740,7 +740,7 @@ def test_get_snapshot_status_other_client_error(mocker):
 
 def test_get_launch_template_id_client_error(mocker):
     """Test get_launch_template_id with ClientError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Unauthorized"}}
     mock_ec2_client.return_value.describe_launch_templates.side_effect = ClientError(
@@ -757,7 +757,7 @@ def test_get_launch_template_id_client_error(mocker):
 
 def test_get_launch_template_id_validation_error(mocker):
     """Test get_launch_template_id with empty template name."""
-    from remotepy.exceptions import ValidationError
+    from remote.exceptions import ValidationError
 
     with pytest.raises(ValidationError) as exc_info:
         get_launch_template_id("")
@@ -767,7 +767,7 @@ def test_get_launch_template_id_validation_error(mocker):
 
 def test_get_launch_template_id_no_templates_found(mocker):
     """Test get_launch_template_id when no templates found."""
-    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
     mock_ec2_client.return_value.describe_launch_templates.return_value = {"LaunchTemplates": []}
 
@@ -788,7 +788,7 @@ class TestPaginationEdgeCases:
 
     def test_get_instances_empty_pagination_response(self, mocker):
         """Test get_instances with empty pagination response (no instances)."""
-        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
         # Mock paginator that returns a single empty page
         mock_paginator = mocker.MagicMock()
@@ -803,7 +803,7 @@ class TestPaginationEdgeCases:
 
     def test_get_instances_multiple_pages(self, mocker):
         """Test get_instances handles multiple pages correctly."""
-        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
         # Create mock data for multiple pages
         page1_reservations = [
@@ -839,7 +839,7 @@ class TestPaginationEdgeCases:
 
     def test_get_instances_multiple_empty_pages(self, mocker):
         """Test get_instances with multiple empty pages."""
-        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
         # Mock paginator returning multiple empty pages
         mock_paginator = mocker.MagicMock()
@@ -856,7 +856,7 @@ class TestPaginationEdgeCases:
 
     def test_get_instances_pages_with_mixed_content(self, mocker):
         """Test get_instances with mix of empty and populated pages."""
-        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
         # Mock paginator with mix of empty and populated pages
         mock_paginator = mocker.MagicMock()
@@ -878,7 +878,7 @@ class TestPaginationEdgeCases:
 
     def test_get_instances_with_exclude_terminated_filter(self, mocker):
         """Test get_instances pagination with exclude_terminated filter."""
-        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
         # Mock paginator
         mock_paginator = mocker.MagicMock()
@@ -910,12 +910,12 @@ class TestClientCaching:
 
     def test_get_ec2_client_caching(self, mocker):
         """Test that get_ec2_client returns cached client on subsequent calls."""
-        from remotepy.utils import get_ec2_client
+        from remote.utils import get_ec2_client
 
         # Clear the cache before testing
         get_ec2_client.cache_clear()
 
-        mock_boto3_client = mocker.patch("remotepy.utils.boto3.client")
+        mock_boto3_client = mocker.patch("remote.utils.boto3.client")
         mock_client_instance = mocker.MagicMock()
         mock_boto3_client.return_value = mock_client_instance
 
@@ -940,12 +940,12 @@ class TestClientCaching:
 
     def test_get_sts_client_caching(self, mocker):
         """Test that get_sts_client returns cached client on subsequent calls."""
-        from remotepy.utils import get_sts_client
+        from remote.utils import get_sts_client
 
         # Clear the cache before testing
         get_sts_client.cache_clear()
 
-        mock_boto3_client = mocker.patch("remotepy.utils.boto3.client")
+        mock_boto3_client = mocker.patch("remote.utils.boto3.client")
         mock_client_instance = mocker.MagicMock()
         mock_boto3_client.return_value = mock_client_instance
 
@@ -966,12 +966,12 @@ class TestClientCaching:
 
     def test_get_ec2_client_cache_clear_creates_new_client(self, mocker):
         """Test that clearing cache causes a new client to be created."""
-        from remotepy.utils import get_ec2_client
+        from remote.utils import get_ec2_client
 
         # Clear the cache before testing
         get_ec2_client.cache_clear()
 
-        mock_boto3_client = mocker.patch("remotepy.utils.boto3.client")
+        mock_boto3_client = mocker.patch("remote.utils.boto3.client")
         mock_client_1 = mocker.MagicMock()
         mock_client_2 = mocker.MagicMock()
         mock_boto3_client.side_effect = [mock_client_1, mock_client_2]

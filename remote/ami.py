@@ -6,9 +6,9 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from remotepy.config import config_manager
-from remotepy.exceptions import ResourceNotFoundError, ValidationError
-from remotepy.utils import (
+from remote.config import config_manager
+from remote.exceptions import ResourceNotFoundError, ValidationError
+from remote.utils import (
     get_account_id,
     get_ec2_client,
     get_instance_id,
@@ -17,7 +17,7 @@ from remotepy.utils import (
     get_launch_template_versions,
     get_launch_templates,
 )
-from remotepy.validation import safe_get_array_item, validate_array_index
+from remote.validation import safe_get_array_item, validate_array_index
 
 app = typer.Typer()
 console = Console(force_terminal=True, width=200)
