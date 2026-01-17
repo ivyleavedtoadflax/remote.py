@@ -17,7 +17,6 @@ from remotepy.volume import app as volume_app
 def version() -> None:
     """Show version."""
     typer.echo(importlib.metadata.version("remotepy"))
-    typer.Exit(0)
 
 
 app.add_typer(ami_app, name="ami")

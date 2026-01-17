@@ -2,7 +2,6 @@ import builtins
 import random
 import string
 import subprocess
-import sys
 import time
 from collections.abc import Sequence
 from typing import Any, Literal, cast
@@ -263,7 +262,7 @@ def connect(
                         f"Instance {instance_name} could not be started",
                         fg=typer.colors.RED,
                     )
-                    sys.exit(1)
+                    raise typer.Exit(1)
 
                 time.sleep(10)
 
@@ -357,7 +356,7 @@ def type(
                     fg=typer.colors.RED,
                 )
 
-                sys.exit(1)
+                raise typer.Exit(1)
 
             # Change instance type
 
