@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING, Any, cast
 
 import boto3
 import typer
-import wasabi
 from botocore.exceptions import ClientError, NoCredentialsError
+from rich.console import Console
 
 from .exceptions import (
     AWSServiceError,
@@ -29,7 +29,7 @@ if TYPE_CHECKING:
     from mypy_boto3_ec2.client import EC2Client
     from mypy_boto3_sts.client import STSClient
 
-msg = wasabi.Printer()
+console = Console(force_terminal=True, width=200)
 
 app = typer.Typer()
 
@@ -374,7 +374,7 @@ def get_instance_info(
 
             except (KeyError, TypeError) as e:
                 # Skip malformed instance data but continue processing others
-                msg.warn(f"Skipping malformed instance data: {e}")
+                console.print(f"[yellow]Warning: Skipping malformed instance data: {e}[/yellow]")
                 continue
 
     return names, public_dnss, statuses, instance_types, launch_times
@@ -440,7 +440,7 @@ def is_instance_running(instance_id: str) -> bool | None:
         raise
     except (KeyError, TypeError, AttributeError) as e:
         # For data structure errors, log and return None
-        msg.warn(f"Unexpected instance status structure: {e}")
+        console.print(f"[yellow]Warning: Unexpected instance status structure: {e}[/yellow]")
         return None
 
 
@@ -479,7 +479,7 @@ def is_instance_stopped(instance_id: str) -> bool | None:
         raise
     except (KeyError, TypeError, AttributeError) as e:
         # For data structure errors, log and return None
-        msg.warn(f"Unexpected instance status structure: {e}")
+        console.print(f"[yellow]Warning: Unexpected instance status structure: {e}[/yellow]")
         return None
 
 

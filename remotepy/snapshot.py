@@ -1,9 +1,6 @@
-import builtins
-from collections.abc import Sequence
-from typing import Literal, cast
-
 import typer
-import wasabi
+from rich.console import Console
+from rich.table import Table
 
 from remotepy.utils import (
     get_ec2_client,
@@ -13,6 +10,7 @@ from remotepy.utils import (
 )
 
 app = typer.Typer()
+console = Console(force_terminal=True, width=200)
 
 
 @app.command()
@@ -54,9 +52,13 @@ def list_snapshots(instance_name: str | None = typer.Argument(None, help="Instan
     instance_id = get_instance_id(instance_name)
     volume_ids = get_volume_ids(instance_id)
 
-    header = ["SnapshotId", "VolumeId", "State", "StartTime", "Description"]
-    aligns = cast(Sequence[Literal["l", "r", "c"]], ["l", "l", "l", "l", "l"])
-    data: builtins.list[builtins.list[str]] = []
+    # Format table using rich
+    table = Table(title="Snapshots")
+    table.add_column("SnapshotId", style="green")
+    table.add_column("VolumeId")
+    table.add_column("State")
+    table.add_column("StartTime")
+    table.add_column("Description")
 
     for volume_id in volume_ids:
         snapshots = get_ec2_client().describe_snapshots(
@@ -64,20 +66,17 @@ def list_snapshots(instance_name: str | None = typer.Argument(None, help="Instan
         )
 
         for snapshot in snapshots["Snapshots"]:
-            data.append(
-                [
-                    str(snapshot["SnapshotId"]),
-                    str(snapshot["VolumeId"]),
-                    str(snapshot["State"]),
-                    str(snapshot["StartTime"]),
-                    str(snapshot.get("Description", "")),
-                ]
+            state = str(snapshot["State"])
+            state_style = "green" if state == "completed" else "yellow"
+            table.add_row(
+                str(snapshot["SnapshotId"]),
+                str(snapshot["VolumeId"]),
+                f"[{state_style}]{state}[/{state_style}]",
+                str(snapshot["StartTime"]),
+                str(snapshot.get("Description", "")),
             )
 
-    # Format table using wasabi
-
-    formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
-    typer.secho(formatted, fg=typer.colors.YELLOW)
+    console.print(table)
 
 
 if __name__ == "__main__":

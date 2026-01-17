@@ -1,11 +1,10 @@
-import builtins
 import random
 import string
-from collections.abc import Sequence
-from typing import Any, Literal, cast
+from typing import Any
 
 import typer
-import wasabi
+from rich.console import Console
+from rich.table import Table
 
 from remotepy.exceptions import ValidationError
 from remotepy.utils import (
@@ -18,6 +17,7 @@ from remotepy.utils import (
 from remotepy.validation import safe_get_array_item, validate_array_index
 
 app = typer.Typer()
+console = Console(force_terminal=True, width=200)
 
 
 @app.command()
@@ -89,23 +89,24 @@ def list_amis() -> None:
         Owners=[account_id],
     )
 
-    header = ["ImageId", "Name", "State", "CreationDate"]
-    aligns = cast(Sequence[Literal["l", "r", "c"]], ["l", "l", "l", "l"])
-    data: builtins.list[builtins.list[str]] = []
+    # Format table using rich
+    table = Table(title="Amazon Machine Images")
+    table.add_column("ImageId", style="green")
+    table.add_column("Name", style="cyan")
+    table.add_column("State")
+    table.add_column("CreationDate")
 
     for ami in amis["Images"]:
-        data.append(
-            [
-                ami["ImageId"],
-                ami["Name"],
-                ami["State"],
-                ami["CreationDate"],
-            ]
+        state = ami["State"]
+        state_style = "green" if state == "available" else "yellow"
+        table.add_row(
+            ami["ImageId"],
+            ami["Name"],
+            f"[{state_style}]{state}[/{state_style}]",
+            str(ami["CreationDate"]),
         )
 
-    # Format table using wasabi
-    formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
-    typer.secho(formatted, fg=typer.colors.YELLOW)
+    console.print(table)
 
 
 @app.command()
@@ -125,23 +126,22 @@ def list_launch_templates() -> dict[str, Any]:
     """
     launch_templates = get_ec2_client().describe_launch_templates()
 
-    header = ["Number", "LaunchTemplateId", "LaunchTemplateName", "Version"]
-    aligns = cast(Sequence[Literal["l", "r", "c"]], ["l"] * len(header))
-    data: builtins.list[tuple[int, str, str, int]] = []
+    # Format table using rich
+    table = Table(title="Launch Templates")
+    table.add_column("Number", justify="right")
+    table.add_column("LaunchTemplateId", style="green")
+    table.add_column("LaunchTemplateName", style="cyan")
+    table.add_column("Version", justify="right")
 
     for i, launch_template in enumerate(launch_templates["LaunchTemplates"], 1):
-        data.append(
-            (
-                i,
-                launch_template["LaunchTemplateId"],
-                launch_template["LaunchTemplateName"],
-                launch_template["LatestVersionNumber"],
-            )
+        table.add_row(
+            str(i),
+            launch_template["LaunchTemplateId"],
+            launch_template["LaunchTemplateName"],
+            str(launch_template["LatestVersionNumber"]),
         )
 
-    # Format table using wasabi
-    formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
-    typer.secho(formatted, fg=typer.colors.YELLOW)
+    console.print(table)
 
     return dict(launch_templates)
 

@@ -3,12 +3,12 @@ import random
 import string
 import subprocess
 import time
-from collections.abc import Sequence
-from typing import Any, Literal, cast
+from typing import Any
 
 import typer
-import wasabi
 from botocore.exceptions import ClientError, NoCredentialsError
+from rich.console import Console
+from rich.table import Table
 
 from remotepy.exceptions import (
     AWSServiceError,
@@ -28,11 +28,23 @@ from remotepy.utils import (
     get_instances,
     get_launch_template_id,
     is_instance_running,
-    msg,
 )
 from remotepy.validation import safe_get_array_item, safe_get_nested_value, validate_array_index
 
 app = typer.Typer()
+console = Console(force_terminal=True, width=200)
+
+
+def _get_status_style(status: str) -> str:
+    """Get the rich style for a status value."""
+    status_lower = status.lower()
+    if status_lower == "running":
+        return "green"
+    elif status_lower == "stopped":
+        return "red"
+    elif status_lower in ("pending", "stopping", "shutting-down"):
+        return "yellow"
+    return "white"
 
 
 @app.command("ls")
@@ -46,21 +58,29 @@ def list_instances() -> None:
 
     names, public_dnss, statuses, instance_types, launch_times = get_instance_info(instances)
 
-    # Format table using wasabi
+    # Format table using rich
+    table = Table(title="EC2 Instances")
+    table.add_column("Name", style="cyan")
+    table.add_column("InstanceId", style="green")
+    table.add_column("PublicDnsName")
+    table.add_column("Status")
+    table.add_column("Type")
+    table.add_column("Launch Time")
 
-    header = ["Name", "InstanceId", "PublicDnsName", "Status", "Type", "Launch Time"]
-    aligns = cast(Sequence[Literal["l", "r", "c"]], ["l", "l", "l", "l", "l", "l"])
-    data = [
-        (name, id, dns, status, it, lt)
-        for name, id, dns, status, it, lt in zip(
-            names, ids, public_dnss, statuses, instance_types, launch_times, strict=False
+    for name, instance_id, dns, status, it, lt in zip(
+        names, ids, public_dnss, statuses, instance_types, launch_times, strict=False
+    ):
+        status_style = _get_status_style(status)
+        table.add_row(
+            name or "",
+            instance_id or "",
+            dns or "",
+            f"[{status_style}]{status}[/{status_style}]",
+            it or "",
+            lt or "",
         )
-    ]
 
-    # Return the status in a nicely formatted table
-
-    formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
-    typer.secho(formatted, fg=typer.colors.YELLOW)
+    console.print(table)
 
 
 @app.command()
@@ -99,30 +119,26 @@ def status(instance_name: str | None = typer.Argument(None, help="Instance name"
                 )
                 reachability = first_detail.get("Status", "unknown")
 
-            # Format table using wasabi
-            header = [
-                "Name",
-                "InstanceId",
-                "InstanceState",
-                "SystemStatus",
-                "InstanceStatus",
-                "Reachability",
-            ]
-            aligns = cast(Sequence[Literal["l", "r", "c"]], ["l", "l", "l", "l", "l", "l"])
-            data = [
-                [
-                    instance_name,
-                    instance_id_value,
-                    state_name,
-                    system_status,
-                    instance_status,
-                    reachability,
-                ]
-            ]
+            # Format table using rich
+            table = Table(title="Instance Status")
+            table.add_column("Name", style="cyan")
+            table.add_column("InstanceId", style="green")
+            table.add_column("InstanceState")
+            table.add_column("SystemStatus")
+            table.add_column("InstanceStatus")
+            table.add_column("Reachability")
 
-            # Return the status in a nicely formatted table
-            formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
-            typer.secho(formatted, fg=typer.colors.YELLOW)
+            state_style = _get_status_style(state_name)
+            table.add_row(
+                instance_name or "",
+                instance_id_value,
+                f"[{state_style}]{state_name}[/{state_style}]",
+                system_status,
+                instance_status,
+                reachability,
+            )
+
+            console.print(table)
         else:
             typer.secho(f"{instance_name} is not in running state", fg=typer.colors.RED)
 
@@ -374,7 +390,7 @@ def type(
 
                 wait = 5
 
-                with msg.loading("Confirming type change..."):
+                with console.status("Confirming type change..."):
                     while wait > 0:
                         time.sleep(5)
                         wait -= 1
@@ -433,23 +449,22 @@ def list_launch_templates() -> dict[str, Any]:
     """
     launch_templates = get_ec2_client().describe_launch_templates()
 
-    header = ["Number", "LaunchTemplateId", "LaunchTemplateName", "Version"]
-    aligns = cast(Sequence[Literal["l", "r", "c"]], ["l"] * len(header))
-    data: builtins.list[tuple[int, str, str, int]] = []
+    # Format table using rich
+    table = Table(title="Launch Templates")
+    table.add_column("Number", justify="right")
+    table.add_column("LaunchTemplateId", style="green")
+    table.add_column("LaunchTemplateName", style="cyan")
+    table.add_column("Version", justify="right")
 
     for i, launch_template in enumerate(launch_templates["LaunchTemplates"], 1):
-        data.append(
-            (
-                i,
-                launch_template["LaunchTemplateId"],
-                launch_template["LaunchTemplateName"],
-                launch_template["LatestVersionNumber"],
-            )
+        table.add_row(
+            str(i),
+            launch_template["LaunchTemplateId"],
+            launch_template["LaunchTemplateName"],
+            str(launch_template["LatestVersionNumber"]),
         )
 
-    # Format table using wasabi
-    formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
-    typer.secho(formatted, fg=typer.colors.YELLOW)
+    console.print(table)
 
     return dict(launch_templates)
 

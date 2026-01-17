@@ -1,15 +1,15 @@
 import configparser
 import os
-from collections.abc import Sequence
-from typing import Literal, cast
 
 import typer
-import wasabi
+from rich.console import Console
+from rich.table import Table
 
 from remotepy.settings import Settings
 from remotepy.utils import get_instance_ids, get_instance_info, get_instances
 
 app = typer.Typer()
+console = Console(force_terminal=True, width=200)
 
 
 class ConfigManager:
@@ -105,13 +105,17 @@ def show(config_path: str = typer.Option(CONFIG_PATH, "--config", "-c")) -> None
     cfg = read_config(config_path=config_path)
     default_section = cfg["DEFAULT"]
 
-    header = ["Section", "Name", "Value"]
-    aligns = cast(Sequence[Literal["l", "r", "c"]], ["l", "l"])
-    data = [["DEFAULT", k, v] for k, v in default_section.items()]
-    formatter = wasabi.table(data, header=header, divider=True, aligns=aligns)
+    # Format table using rich
+    table = Table(title="Configuration")
+    table.add_column("Section")
+    table.add_column("Name", style="cyan")
+    table.add_column("Value", style="green")
+
+    for k, v in default_section.items():
+        table.add_row("DEFAULT", k, v)
 
     typer.secho(f"Printing config file: {config_path}", fg=typer.colors.YELLOW)
-    typer.secho(formatter, fg=typer.colors.YELLOW)
+    console.print(table)
 
 
 @app.command()
@@ -148,18 +152,19 @@ def add(
         # Get other details like name, type etc for these instances
         names, _, _, instance_types, _ = get_instance_info(instances)
 
-        # Prepare a formatted string to display these instance details as a
-        # table
-        header = ["Number", "Name", "InstanceId", "Type"]
-        aligns = cast(Sequence[Literal["l", "r", "c"]], ["l", "l", "l", "l"])
-        data = [
-            (i, name, id, it)
-            for i, (name, id, it) in enumerate(zip(names, ids, instance_types, strict=False), 1)
-        ]
+        # Format table using rich
+        table = Table(title="Select Instance")
+        table.add_column("Number", justify="right")
+        table.add_column("Name", style="cyan")
+        table.add_column("InstanceId", style="green")
+        table.add_column("Type")
 
-        # Print the instances table
-        formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
-        typer.secho(formatted, fg=typer.colors.YELLOW)
+        for i, (name, instance_id, it) in enumerate(
+            zip(names, ids, instance_types, strict=False), 1
+        ):
+            table.add_row(str(i), name or "", instance_id, it or "")
+
+        console.print(table)
 
         # Prompt the user to select an instance from the table
         instance_number = typer.prompt("Select a instance by number", type=int)
