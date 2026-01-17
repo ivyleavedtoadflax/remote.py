@@ -17,7 +17,13 @@ A Python CLI tool for managing AWS resources with a focus on EC2 instances. This
 
 ### Installation
 
-The package can be installed directly from GitHub using pipx (recommended):
+The package can be installed directly from GitHub using uv (recommended):
+
+```bash
+uv tool install git+https://github.com/ivyleavedtoadflax/remote.py.git
+```
+
+Or with pipx:
 
 ```bash
 pipx install git+https://github.com/ivyleavedtoadflax/remote.py.git
@@ -57,6 +63,12 @@ Connect to the instance with SSH:
 
 ```bash
 remote connect
+```
+
+Connect with a specific SSH key:
+
+```bash
+remote connect --key ~/.ssh/my-key.pem
 ```
 
 Connect with port forwarding and verbose output:
