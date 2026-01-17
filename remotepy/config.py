@@ -71,7 +71,7 @@ CONFIG_PATH = str(Settings.get_config_path())
 
 def read_config(config_path):
     cfg = configparser.ConfigParser()
-    cfg.read(CONFIG_PATH)
+    cfg.read(config_path)
 
     return cfg
 
