@@ -1,3 +1,6 @@
+from functools import lru_cache
+from typing import TYPE_CHECKING
+
 import boto3
 import typer
 from botocore.exceptions import ClientError, NoCredentialsError
@@ -5,7 +8,24 @@ from botocore.exceptions import ClientError, NoCredentialsError
 from remotepy.exceptions import AWSServiceError, ValidationError
 from remotepy.validation import safe_get_array_item, validate_array_index, validate_positive_integer
 
-ecs_client = boto3.client("ecs")
+if TYPE_CHECKING:
+    from mypy_boto3_ecs.client import ECSClient
+
+
+@lru_cache
+def get_ecs_client() -> "ECSClient":
+    """Get or create the ECS client.
+
+    Uses lazy initialization and caches the client for reuse.
+
+    Returns:
+        boto3 ECS client instance
+    """
+    return boto3.client("ecs")
+
+
+# Backwards compatibility alias - to be deprecated in v0.5.0
+ecs_client = get_ecs_client()
 
 app = typer.Typer()
 

@@ -1,6 +1,7 @@
 from configparser import ConfigParser
 from datetime import datetime
-from typing import Any, cast
+from functools import lru_cache
+from typing import TYPE_CHECKING, Any, cast
 
 import boto3
 import typer
@@ -24,11 +25,41 @@ from .validation import (
     validate_volume_id,
 )
 
+if TYPE_CHECKING:
+    from mypy_boto3_ec2.client import EC2Client
+    from mypy_boto3_sts.client import STSClient
+
 msg = wasabi.Printer()
 
 app = typer.Typer()
 
-ec2_client = boto3.client("ec2")
+
+@lru_cache
+def get_ec2_client() -> "EC2Client":
+    """Get or create the EC2 client.
+
+    Uses lazy initialization and caches the client for reuse.
+
+    Returns:
+        boto3 EC2 client instance
+    """
+    return boto3.client("ec2")
+
+
+@lru_cache
+def get_sts_client() -> "STSClient":
+    """Get or create the STS client.
+
+    Uses lazy initialization and caches the client for reuse.
+
+    Returns:
+        boto3 STS client instance
+    """
+    return boto3.client("sts")
+
+
+# Backwards compatibility alias - to be deprecated in v0.5.0
+ec2_client = get_ec2_client()
 
 
 def get_account_id() -> str:
