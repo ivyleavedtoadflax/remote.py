@@ -13,6 +13,7 @@ from remotepy.volume import app as volume_app
 app = typer.Typer(
     name="remote",
     help="Remote.py - AWS EC2 instance management CLI",
+    epilog="Run 'remote COMMAND --help' for more information on a command.",
     no_args_is_help=True,
 )
 

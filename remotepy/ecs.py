@@ -226,7 +226,9 @@ def prompt_for_services_name(cluster_name: str) -> list[str]:
 @app.command(name="list-clusters")
 def list_clusters() -> None:
     """
-    List ECS clusters
+    List all ECS clusters.
+
+    Displays cluster ARNs for all clusters in the current region.
     """
     clusters = get_all_clusters()
 
@@ -237,10 +239,9 @@ def list_clusters() -> None:
 @app.command(name="list-services")
 def list_services(cluster_name: str = typer.Argument(None, help="Cluster name")) -> None:
     """
-    List ECS services
+    List ECS services in a cluster.
 
-    Args:
-    cluster_name (str): The name of the cluster
+    If no cluster is specified, prompts for selection.
     """
 
     if not cluster_name:
@@ -259,7 +260,10 @@ def scale(
     desired_count: int = typer.Option(None, "-n", "--count", help="Desired count of tasks"),
 ) -> None:
     """
-    Scale ECS services
+    Scale ECS service task count.
+
+    If no cluster or service is specified, prompts for selection.
+    Prompts for confirmation before scaling.
     """
 
     if not cluster_name:

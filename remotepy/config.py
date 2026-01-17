@@ -98,7 +98,9 @@ def write_config(cfg: configparser.ConfigParser, config_path: str) -> configpars
 @app.command()
 def show(config_path: str = typer.Option(CONFIG_PATH, "--config", "-c")) -> None:
     """
-    Print the current config file
+    Show current configuration settings.
+
+    Displays all settings from the config file in a table format.
     """
 
     # Print out the config file
@@ -124,20 +126,14 @@ def add(
     config_path: str = typer.Option(CONFIG_PATH, "--config", "-c"),
 ) -> None:
     """
-    Add a new default instance to the config file.
+    Set the default instance.
 
-    This function allows you to add a new default instance either by providing the name directly or
-    by selecting it from a list of currently running instances. Terminated instances are not included
-    in this list. If a name is directly provided, the function checks if an instance with this name
-    exists before setting it as the default.
+    If no instance name is provided, lists available instances for selection.
+    Terminated instances are not included in the list.
 
-    Arguments:
-    config_path -- The path to the configuration file.
-    instance_name -- The name of the instance to add. This is an optional argument.
-                     If not provided, the function will prompt the user to select an instance from a list.
-
-    Returns:
-    None. But it modifies the configuration file with the new default instance.
+    Examples:
+        remote config add                    # Select from list
+        remote config add my-server          # Set specific instance
     """
 
     if instance_name is None:

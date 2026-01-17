@@ -27,29 +27,15 @@ def create(
     description: str | None = typer.Option(None, help="Description"),
 ) -> None:
     """
-    Create an Amazon Machine Image (AMI) from a specified EC2 instance.
+    Create an AMI from an EC2 instance.
 
-    The function takes as input the name of an EC2 instance, the desired name for the AMI, and a description.
-    It sends a request to the AWS EC2 service to create an AMI from the specified instance.
-    If the AMI creation is successful, it returns the ID of the created AMI.
+    Creates an Amazon Machine Image without rebooting the instance.
+    Uses the default instance from config if no instance name is provided.
 
-    Parameters:
-    instance_name: str, optional
-        The name of the EC2 instance from which to create the AMI.
-        If not specified, the name of the current instance is used.
-
-    name: str, optional
-        The desired name for the AMI.
-
-    description: str, optional
-        A description for the AMI.
-
-    Returns:
-    None
-
-    Example usage:
-        python remotepy/instance.py create_ami --instance_name my-instance --name my-ami --description "My first AMI"
-
+    Examples:
+        remote ami create                                 # From default instance
+        remote ami create --instance-name my-server       # From specific instance
+        remote ami create --name my-ami --description "Production snapshot"
     """
 
     if not instance_name:
@@ -74,14 +60,9 @@ def create(
 @app.command("list")
 def list_amis() -> None:
     """
-    List all Amazon Machine Images (AMIs) owned by the current account.
+    List all AMIs owned by the current account.
 
-    This function queries AWS EC2 to get details of all AMIs that are owned by the current AWS account.
-    It formats the response data into a tabular form and displays it in the console.
-    The returned table includes the following columns: ImageId, Name, State, and CreationDate.
-
-    Example usage:
-        python remotepy/instance.py list_amis
+    Displays image ID, name, state, and creation date.
     """
     account_id = get_account_id()
 
@@ -112,17 +93,9 @@ def list_amis() -> None:
 @app.command()
 def list_launch_templates() -> dict[str, Any]:
     """
-    List all launch templates available in the AWS EC2.
+    List all available EC2 launch templates.
 
-    This function queries AWS EC2 to get details of all available launch templates.
-    It formats the response data into a tabular form and displays it in the console.
-    The returned table includes the following columns: Number, LaunchTemplateId, LaunchTemplateName, and Version.
-
-    Returns:
-        dict: The full response from the AWS EC2 describe_launch_templates call.
-
-    Example usage:
-        python remotepy/instance.py list_launch_templates
+    Displays template ID, name, and latest version number.
     """
     launch_templates = get_ec2_client().describe_launch_templates()
 
@@ -153,23 +126,15 @@ def launch(
     version: str = typer.Option("$Latest", help="Launch template version"),
 ) -> None:
     """
-    Launch an AWS EC2 instance based on a launch template.
+    Launch a new EC2 instance from a launch template.
 
-    This function will launch an instance using the specified launch template and version.
-    If no launch template is provided, the function will list all available launch templates and
-    prompt the user to select one.
+    If no launch template is provided, lists available templates for selection.
+    If no name is provided, suggests a name based on the template name.
 
-    The name of the instance can be specified with the --name option. If not provided,
-    the function will prompt the user for the name and provide a suggested name based on
-    the launch template name appended with a random alphanumeric string.
-
-    Example usage:
-    python remotepy/instance.py launch --launch_template my-launch-template --version 2
-
-    Parameters:
-    name: The name of the instance to be launched. This will be used as a tag for the instance.
-    launch_template: The name of the launch template to use.
-    version: The version of the launch template to use. Default is the latest version.
+    Examples:
+        remote ami launch                                    # Interactive selection
+        remote ami launch --launch-template my-template      # Use specific template
+        remote ami launch --name my-server --launch-template my-template
     """
 
     # Variables to track launch template details

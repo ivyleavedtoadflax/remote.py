@@ -51,7 +51,9 @@ def _get_status_style(status: str) -> str:
 @app.command("list")
 def list_instances() -> None:
     """
-    List all instances with id, dns and status
+    List all EC2 instances.
+
+    Displays a table with instance name, ID, public DNS, status, type, and launch time.
     """
     instances = get_instances()
     ids = get_instance_ids(instances)
@@ -86,7 +88,10 @@ def list_instances() -> None:
 @app.command()
 def status(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
     """
-    Get the status of an instance
+    Get detailed status of an instance.
+
+    Shows instance state, system status, and reachability information.
+    Uses the default instance from config if no name is provided.
     """
     try:
         if not instance_name:
@@ -156,7 +161,9 @@ def status(instance_name: str | None = typer.Argument(None, help="Instance name"
 @app.command()
 def start(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
     """
-    Start the instance
+    Start an EC2 instance.
+
+    Uses the default instance from config if no name is provided.
     """
 
     if not instance_name:
@@ -187,7 +194,10 @@ def start(instance_name: str | None = typer.Argument(None, help="Instance name")
 @app.command()
 def stop(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
     """
-    Stop the instance
+    Stop an EC2 instance.
+
+    Prompts for confirmation before stopping.
+    Uses the default instance from config if no name is provided.
     """
 
     if not instance_name:
@@ -242,7 +252,17 @@ def connect(
     ),
 ) -> None:
     """
-    Connect to the instance with ssh
+    Connect to an EC2 instance via SSH.
+
+    If the instance is not running, prompts to start it first.
+    Uses the default instance from config if no name is provided.
+
+    Examples:
+        remote connect                           # Connect to default instance
+        remote connect my-server                 # Connect to specific instance
+        remote connect -u ec2-user               # Connect as ec2-user
+        remote connect -p 8080:80                # With port forwarding
+        remote connect -k ~/.ssh/my-key.pem     # With specific SSH key
     """
 
     if not instance_name:
@@ -345,6 +365,18 @@ def type(
     ),
     instance_name: str | None = typer.Argument(None, help="Instance name"),
 ) -> None:
+    """
+    View or change an instance's type.
+
+    Without TYPE argument, displays the current instance type.
+    With TYPE argument, changes the instance type (instance must be stopped).
+
+    Examples:
+        remote type                    # Show default instance type
+        remote type my-server          # Show specific instance type
+        remote type t3.large           # Change default instance to t3.large
+        remote type t3.large my-server # Change specific instance type
+    """
     if not instance_name:
         instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
@@ -435,17 +467,9 @@ def type(
 @app.command()
 def list_launch_templates() -> dict[str, Any]:
     """
-    List all launch templates available in the AWS EC2.
+    List all available EC2 launch templates.
 
-    This function queries AWS EC2 to get details of all available launch templates.
-    It formats the response data into a tabular form and displays it in the console.
-    The returned table includes the following columns: Number, LaunchTemplateId, LaunchTemplateName, and Version.
-
-    Returns:
-        dict: The full response from the AWS EC2 describe_launch_templates call.
-
-    Example usage:
-        python remotepy/instance.py list_launch_templates
+    Displays template ID, name, and latest version number.
     """
     launch_templates = get_ec2_client().describe_launch_templates()
 
@@ -476,23 +500,15 @@ def launch(
     version: str = typer.Option("$Latest", help="Launch template version"),
 ) -> None:
     """
-    Launch an AWS EC2 instance based on a launch template.
+    Launch a new EC2 instance from a launch template.
 
-    This function will launch an instance using the specified launch template and version.
-    If no launch template is provided, the function will list all available launch templates and
-    prompt the user to select one.
+    If no launch template is provided, lists available templates for selection.
+    If no name is provided, suggests a name based on the template name.
 
-    The name of the instance can be specified with the --name option. If not provided,
-    the function will prompt the user for the name and provide a suggested name based on
-    the launch template name appended with a random alphanumeric string.
-
-    Example usage:
-    python remotepy/instance.py launch --launch_template my-launch-template --version 2
-
-    Parameters:
-    name: The name of the instance to be launched. This will be used as a tag for the instance.
-    launch_template: The name of the launch template to use.
-    version: The version of the launch template to use. Default is the latest version.
+    Examples:
+        remote launch                                    # Interactive selection
+        remote launch --launch-template my-template      # Use specific template
+        remote launch --name my-server --launch-template my-template
     """
 
     # Variables to track launch template details
@@ -578,7 +594,11 @@ def launch(
 @app.command()
 def terminate(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
     """
-    Terminate the instance
+    Terminate an EC2 instance.
+
+    WARNING: This permanently deletes the instance and all associated data.
+    Requires confirmation by re-entering the instance name.
+    Uses the default instance from config if no name is provided.
     """
 
     if not instance_name:

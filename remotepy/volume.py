@@ -17,7 +17,10 @@ console = Console(force_terminal=True, width=200)
 @app.command("list")
 def list_volumes(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
     """
-    List the volumes and the instances they are attached to
+    List EBS volumes attached to an instance.
+
+    Shows volume ID, size, state, and availability zone.
+    Uses the default instance from config if no name is provided.
     """
 
     if not instance_name:
