@@ -776,3 +776,219 @@ def test_get_launch_template_id_no_templates_found(mocker):
 
     assert exc_info.value.resource_type == "Launch Template"
     assert exc_info.value.resource_id == "nonexistent-template"
+
+
+# ============================================================================
+# Issue 20: Edge Case Tests for Pagination and Caching
+# ============================================================================
+
+
+class TestPaginationEdgeCases:
+    """Tests for pagination edge cases in get_instances."""
+
+    def test_get_instances_empty_pagination_response(self, mocker):
+        """Test get_instances with empty pagination response (no instances)."""
+        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+
+        # Mock paginator that returns a single empty page
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [{"Reservations": []}]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        result = get_instances()
+
+        assert result == []
+        mock_ec2_client.return_value.get_paginator.assert_called_once_with("describe_instances")
+        mock_paginator.paginate.assert_called_once()
+
+    def test_get_instances_multiple_pages(self, mocker):
+        """Test get_instances handles multiple pages correctly."""
+        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+
+        # Create mock data for multiple pages
+        page1_reservations = [
+            {"Instances": [{"InstanceId": "i-page1instance1", "State": {"Name": "running"}}]},
+            {"Instances": [{"InstanceId": "i-page1instance2", "State": {"Name": "stopped"}}]},
+        ]
+        page2_reservations = [
+            {"Instances": [{"InstanceId": "i-page2instance1", "State": {"Name": "running"}}]},
+        ]
+        page3_reservations = [
+            {"Instances": [{"InstanceId": "i-page3instance1", "State": {"Name": "pending"}}]},
+            {"Instances": [{"InstanceId": "i-page3instance2", "State": {"Name": "running"}}]},
+        ]
+
+        # Mock paginator that returns multiple pages
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [
+            {"Reservations": page1_reservations},
+            {"Reservations": page2_reservations},
+            {"Reservations": page3_reservations},
+        ]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        result = get_instances()
+
+        # Should contain all reservations from all pages
+        assert len(result) == 5
+        assert result[0]["Instances"][0]["InstanceId"] == "i-page1instance1"
+        assert result[1]["Instances"][0]["InstanceId"] == "i-page1instance2"
+        assert result[2]["Instances"][0]["InstanceId"] == "i-page2instance1"
+        assert result[3]["Instances"][0]["InstanceId"] == "i-page3instance1"
+        assert result[4]["Instances"][0]["InstanceId"] == "i-page3instance2"
+
+    def test_get_instances_multiple_empty_pages(self, mocker):
+        """Test get_instances with multiple empty pages."""
+        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+
+        # Mock paginator returning multiple empty pages
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [
+            {"Reservations": []},
+            {"Reservations": []},
+            {"Reservations": []},
+        ]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        result = get_instances()
+
+        assert result == []
+
+    def test_get_instances_pages_with_mixed_content(self, mocker):
+        """Test get_instances with mix of empty and populated pages."""
+        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+
+        # Mock paginator with mix of empty and populated pages
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [
+            {"Reservations": []},  # Empty page
+            {
+                "Reservations": [
+                    {"Instances": [{"InstanceId": "i-only-one", "State": {"Name": "running"}}]}
+                ]
+            },  # Populated page
+            {"Reservations": []},  # Empty page
+        ]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        result = get_instances()
+
+        assert len(result) == 1
+        assert result[0]["Instances"][0]["InstanceId"] == "i-only-one"
+
+    def test_get_instances_with_exclude_terminated_filter(self, mocker):
+        """Test get_instances pagination with exclude_terminated filter."""
+        mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
+
+        # Mock paginator
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [
+            {
+                "Reservations": [
+                    {"Instances": [{"InstanceId": "i-running", "State": {"Name": "running"}}]}
+                ]
+            }
+        ]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        result = get_instances(exclude_terminated=True)
+
+        # Verify the filter was passed correctly
+        mock_paginator.paginate.assert_called_once_with(
+            Filters=[
+                {
+                    "Name": "instance-state-name",
+                    "Values": ["pending", "running", "shutting-down", "stopping", "stopped"],
+                }
+            ]
+        )
+        assert len(result) == 1
+
+
+class TestClientCaching:
+    """Tests for AWS client caching behavior."""
+
+    def test_get_ec2_client_caching(self, mocker):
+        """Test that get_ec2_client returns cached client on subsequent calls."""
+        from remotepy.utils import get_ec2_client
+
+        # Clear the cache before testing
+        get_ec2_client.cache_clear()
+
+        mock_boto3_client = mocker.patch("remotepy.utils.boto3.client")
+        mock_client_instance = mocker.MagicMock()
+        mock_boto3_client.return_value = mock_client_instance
+
+        # First call should create the client
+        client1 = get_ec2_client()
+
+        # Second call should return the same cached client
+        client2 = get_ec2_client()
+
+        # Third call should still return the same cached client
+        client3 = get_ec2_client()
+
+        # boto3.client should only be called once due to caching
+        mock_boto3_client.assert_called_once_with("ec2")
+
+        # All calls should return the same instance
+        assert client1 is client2
+        assert client2 is client3
+
+        # Clean up cache for other tests
+        get_ec2_client.cache_clear()
+
+    def test_get_sts_client_caching(self, mocker):
+        """Test that get_sts_client returns cached client on subsequent calls."""
+        from remotepy.utils import get_sts_client
+
+        # Clear the cache before testing
+        get_sts_client.cache_clear()
+
+        mock_boto3_client = mocker.patch("remotepy.utils.boto3.client")
+        mock_client_instance = mocker.MagicMock()
+        mock_boto3_client.return_value = mock_client_instance
+
+        # First call should create the client
+        client1 = get_sts_client()
+
+        # Second call should return the same cached client
+        client2 = get_sts_client()
+
+        # boto3.client should only be called once due to caching
+        mock_boto3_client.assert_called_once_with("sts")
+
+        # All calls should return the same instance
+        assert client1 is client2
+
+        # Clean up cache for other tests
+        get_sts_client.cache_clear()
+
+    def test_get_ec2_client_cache_clear_creates_new_client(self, mocker):
+        """Test that clearing cache causes a new client to be created."""
+        from remotepy.utils import get_ec2_client
+
+        # Clear the cache before testing
+        get_ec2_client.cache_clear()
+
+        mock_boto3_client = mocker.patch("remotepy.utils.boto3.client")
+        mock_client_1 = mocker.MagicMock()
+        mock_client_2 = mocker.MagicMock()
+        mock_boto3_client.side_effect = [mock_client_1, mock_client_2]
+
+        # First call creates first client
+        client1 = get_ec2_client()
+        assert client1 is mock_client_1
+
+        # Clear the cache
+        get_ec2_client.cache_clear()
+
+        # Next call should create a new client
+        client2 = get_ec2_client()
+        assert client2 is mock_client_2
+
+        # boto3.client should be called twice
+        assert mock_boto3_client.call_count == 2
+
+        # Clean up
+        get_ec2_client.cache_clear()
