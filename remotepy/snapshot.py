@@ -41,7 +41,7 @@ def create(
 
 @app.command("ls")
 @app.command("list")
-def list(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
+def list_snapshots(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
     """
     List the snapshots
     """

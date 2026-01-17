@@ -72,7 +72,7 @@ def create(
 
 @app.command("ls")
 @app.command("list")
-def list() -> None:
+def list_amis() -> None:
     """
     List all Amazon Machine Images (AMIs) owned by the current account.
 

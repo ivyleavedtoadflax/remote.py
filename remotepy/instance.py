@@ -37,7 +37,7 @@ app = typer.Typer()
 
 @app.command("ls")
 @app.command("list")
-def list() -> None:
+def list_instances() -> None:
     """
     List all instances with id, dns and status
     """
