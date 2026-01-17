@@ -58,8 +58,22 @@ def get_sts_client() -> "STSClient":
     return boto3.client("sts")
 
 
-# Backwards compatibility alias - to be deprecated in v0.5.0
-ec2_client = get_ec2_client()
+# Backwards compatibility: ec2_client is now accessed lazily via __getattr__
+# to avoid creating the client at import time (which breaks tests without AWS region)
+# The module-level ec2_client attribute is still available for backwards compatibility
+# but is deprecated and will be removed in v0.5.0
+
+
+def __getattr__(name: str) -> Any:
+    """Lazy module attribute access for backwards compatibility.
+
+    Provides lazy access to ec2_client for backwards compatibility.
+    This pattern allows the client to be created on first access rather
+    than at module import time, which is necessary for testing.
+    """
+    if name == "ec2_client":
+        return get_ec2_client()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def get_account_id() -> str:
@@ -107,7 +121,7 @@ def get_instance_id(instance_name: str) -> str:
     instance_name = validate_instance_name(instance_name)
 
     try:
-        response = ec2_client.describe_instances(
+        response = get_ec2_client().describe_instances(
             Filters=[
                 {"Name": "tag:Name", "Values": [instance_name]},
                 {
@@ -162,9 +176,9 @@ def get_instance_status(instance_id: str | None = None) -> dict[str, Any]:
         if instance_id:
             # Validate input if provided
             instance_id = validate_instance_id(instance_id)
-            response = ec2_client.describe_instance_status(InstanceIds=[instance_id])
+            response = get_ec2_client().describe_instance_status(InstanceIds=[instance_id])
         else:
-            response = ec2_client.describe_instance_status()
+            response = get_ec2_client().describe_instance_status()
         return dict(response)
 
     except ClientError as e:
@@ -206,7 +220,7 @@ def get_instances(exclude_terminated: bool = False) -> list[dict[str, Any]]:
             )
 
         # Use paginator to handle >100 instances
-        paginator = ec2_client.get_paginator("describe_instances")
+        paginator = get_ec2_client().get_paginator("describe_instances")
         reservations: list[dict[str, Any]] = []
 
         if filters:
@@ -246,7 +260,7 @@ def get_instance_dns(instance_id: str) -> str:
     instance_id = validate_instance_id(instance_id)
 
     try:
-        response = ec2_client.describe_instances(InstanceIds=[instance_id])
+        response = get_ec2_client().describe_instances(InstanceIds=[instance_id])
 
         # Validate response structure
         validate_aws_response_structure(response, ["Reservations"], "describe_instances")
@@ -488,7 +502,7 @@ def get_instance_type(instance_id: str) -> str:
     instance_id = validate_instance_id(instance_id)
 
     try:
-        response = ec2_client.describe_instances(InstanceIds=[instance_id])
+        response = get_ec2_client().describe_instances(InstanceIds=[instance_id])
 
         # Validate response structure
         validate_aws_response_structure(response, ["Reservations"], "describe_instances")
@@ -525,7 +539,7 @@ def get_volume_ids(instance_id: str) -> list[str]:
     instance_id = validate_instance_id(instance_id)
 
     try:
-        response = ec2_client.describe_volumes(
+        response = get_ec2_client().describe_volumes(
             Filters=[{"Name": "attachment.instance-id", "Values": [instance_id]}]
         )
 
@@ -567,7 +581,7 @@ def get_volume_name(volume_id: str) -> str:
     volume_id = validate_volume_id(volume_id)
 
     try:
-        response = ec2_client.describe_volumes(VolumeIds=[volume_id])
+        response = get_ec2_client().describe_volumes(VolumeIds=[volume_id])
 
         # Validate response structure
         validate_aws_response_structure(response, ["Volumes"], "describe_volumes")
@@ -608,7 +622,7 @@ def get_snapshot_status(snapshot_id: str) -> str:
     snapshot_id = validate_snapshot_id(snapshot_id)
 
     try:
-        response = ec2_client.describe_snapshots(SnapshotIds=[snapshot_id])
+        response = get_ec2_client().describe_snapshots(SnapshotIds=[snapshot_id])
 
         # Validate response structure
         validate_aws_response_structure(response, ["Snapshots"], "describe_snapshots")
@@ -650,7 +664,7 @@ def get_launch_template_id(launch_template_name: str) -> str:
         raise ValidationError("Launch template name cannot be empty")
 
     try:
-        response = ec2_client.describe_launch_templates(
+        response = get_ec2_client().describe_launch_templates(
             Filters=[{"Name": "tag:Name", "Values": [launch_template_name]}]
         )
 

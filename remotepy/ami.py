@@ -9,8 +9,8 @@ import wasabi
 
 from remotepy.exceptions import ValidationError
 from remotepy.utils import (
-    ec2_client,
     get_account_id,
+    get_ec2_client,
     get_instance_id,
     get_instance_name,
     get_launch_template_id,
@@ -60,7 +60,7 @@ def create(
     ami_name = name if name else f"ami-{instance_name}"
     ami_description = description if description else ""
 
-    ami = ec2_client.create_image(
+    ami = get_ec2_client().create_image(
         InstanceId=instance_id,
         Name=ami_name,
         Description=ami_description,
@@ -85,7 +85,7 @@ def list() -> None:
     """
     account_id = get_account_id()
 
-    amis = ec2_client.describe_images(
+    amis = get_ec2_client().describe_images(
         Owners=[account_id],
     )
 
@@ -123,7 +123,7 @@ def list_launch_templates() -> dict[str, Any]:
     Example usage:
         python remotepy/instance.py list_launch_templates
     """
-    launch_templates = ec2_client.describe_launch_templates()
+    launch_templates = get_ec2_client().describe_launch_templates()
 
     header = ["Number", "LaunchTemplateId", "LaunchTemplateName", "Version"]
     aligns = cast(Sequence[Literal["l", "r", "c"]], ["l"] * len(header))
@@ -207,7 +207,7 @@ def launch(
         )
 
     # Launch the instance with the specified launch template, version, and name
-    instance = ec2_client.run_instances(
+    instance = get_ec2_client().run_instances(
         LaunchTemplate={"LaunchTemplateId": launch_template_id, "Version": version},
         MaxCount=1,
         MinCount=1,

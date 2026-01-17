@@ -44,16 +44,16 @@ def test_get_account_id(mocker):
 
 
 def test_get_instance_id_single_instance(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
-    mock_ec2_client.describe_instances.return_value = {
+    mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [{"Instances": [{"InstanceId": "i-0123456789abcdef0"}]}]
     }
 
     result = get_instance_id("test-instance")
 
     assert result == "i-0123456789abcdef0"
-    mock_ec2_client.describe_instances.assert_called_once_with(
+    mock_ec2_client.return_value.describe_instances.assert_called_once_with(
         Filters=[
             {"Name": "tag:Name", "Values": ["test-instance"]},
             {
@@ -65,9 +65,9 @@ def test_get_instance_id_single_instance(mocker):
 
 
 def test_get_instance_id_multiple_instances(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
-    mock_ec2_client.describe_instances.return_value = {
+    mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [
             {"Instances": [{"InstanceId": "i-0123456789abcdef0"}]},
             {"Instances": [{"InstanceId": "i-0123456789abcdef1"}]},
@@ -80,9 +80,9 @@ def test_get_instance_id_multiple_instances(mocker):
 
 
 def test_get_instance_id_not_found(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
-    mock_ec2_client.describe_instances.return_value = {"Reservations": []}
+    mock_ec2_client.return_value.describe_instances.return_value = {"Reservations": []}
 
     with pytest.raises(InstanceNotFoundError) as exc_info:
         get_instance_id("nonexistent-instance")
@@ -90,7 +90,7 @@ def test_get_instance_id_not_found(mocker):
 
 
 def test_get_instance_status_with_id(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
     expected_response = {
         "InstanceStatuses": [
@@ -100,47 +100,47 @@ def test_get_instance_status_with_id(mocker):
             }
         ]
     }
-    mock_ec2_client.describe_instance_status.return_value = expected_response
+    mock_ec2_client.return_value.describe_instance_status.return_value = expected_response
 
     result = get_instance_status("i-0123456789abcdef0")
 
     assert result == expected_response
-    mock_ec2_client.describe_instance_status.assert_called_once_with(
+    mock_ec2_client.return_value.describe_instance_status.assert_called_once_with(
         InstanceIds=["i-0123456789abcdef0"]
     )
 
 
 def test_get_instance_status_without_id(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
     expected_response = {"InstanceStatuses": []}
-    mock_ec2_client.describe_instance_status.return_value = expected_response
+    mock_ec2_client.return_value.describe_instance_status.return_value = expected_response
 
     result = get_instance_status()
 
     assert result == expected_response
-    mock_ec2_client.describe_instance_status.assert_called_once_with()
+    mock_ec2_client.return_value.describe_instance_status.assert_called_once_with()
 
 
 def test_get_instances(mocker, mock_ec2_instances):
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
     # Mock the paginator
     mock_paginator = mocker.MagicMock()
     mock_paginator.paginate.return_value = [mock_ec2_instances]
-    mock_ec2_client.get_paginator.return_value = mock_paginator
+    mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
     result = get_instances()
 
     assert result == mock_ec2_instances["Reservations"]
-    mock_ec2_client.get_paginator.assert_called_once_with("describe_instances")
+    mock_ec2_client.return_value.get_paginator.assert_called_once_with("describe_instances")
     mock_paginator.paginate.assert_called_once()
 
 
 def test_get_instance_dns(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
-    mock_ec2_client.describe_instances.return_value = {
+    mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [
             {"Instances": [{"PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com"}]}
         ]
@@ -149,7 +149,9 @@ def test_get_instance_dns(mocker):
     result = get_instance_dns("i-0123456789abcdef0")
 
     assert result == "ec2-123-45-67-89.compute-1.amazonaws.com"
-    mock_ec2_client.describe_instances.assert_called_once_with(InstanceIds=["i-0123456789abcdef0"])
+    mock_ec2_client.return_value.describe_instances.assert_called_once_with(
+        InstanceIds=["i-0123456789abcdef0"]
+    )
 
 
 def test_get_instance_name_success(mocker):
@@ -273,22 +275,24 @@ def test_is_instance_stopped_false(mocker):
 
 
 def test_get_instance_type(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
-    mock_ec2_client.describe_instances.return_value = {
+    mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [{"Instances": [{"InstanceType": "t2.micro"}]}]
     }
 
     result = get_instance_type("i-0123456789abcdef0")
 
     assert result == "t2.micro"
-    mock_ec2_client.describe_instances.assert_called_once_with(InstanceIds=["i-0123456789abcdef0"])
+    mock_ec2_client.return_value.describe_instances.assert_called_once_with(
+        InstanceIds=["i-0123456789abcdef0"]
+    )
 
 
 def test_get_volume_ids(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
-    mock_ec2_client.describe_volumes.return_value = {
+    mock_ec2_client.return_value.describe_volumes.return_value = {
         "Volumes": [
             {"VolumeId": "vol-0123456789abcdef0"},
             {"VolumeId": "vol-0123456789abcdef1"},
@@ -298,15 +302,15 @@ def test_get_volume_ids(mocker):
     result = get_volume_ids("i-0123456789abcdef0")
 
     assert result == ["vol-0123456789abcdef0", "vol-0123456789abcdef1"]
-    mock_ec2_client.describe_volumes.assert_called_once_with(
+    mock_ec2_client.return_value.describe_volumes.assert_called_once_with(
         Filters=[{"Name": "attachment.instance-id", "Values": ["i-0123456789abcdef0"]}]
     )
 
 
 def test_get_volume_name_with_name_tag(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
-    mock_ec2_client.describe_volumes.return_value = {
+    mock_ec2_client.return_value.describe_volumes.return_value = {
         "Volumes": [
             {
                 "Tags": [
@@ -320,13 +324,15 @@ def test_get_volume_name_with_name_tag(mocker):
     result = get_volume_name("vol-0123456789abcdef0")
 
     assert result == "test-volume"
-    mock_ec2_client.describe_volumes.assert_called_once_with(VolumeIds=["vol-0123456789abcdef0"])
+    mock_ec2_client.return_value.describe_volumes.assert_called_once_with(
+        VolumeIds=["vol-0123456789abcdef0"]
+    )
 
 
 def test_get_volume_name_without_name_tag(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
-    mock_ec2_client.describe_volumes.return_value = {
+    mock_ec2_client.return_value.describe_volumes.return_value = {
         "Volumes": [
             {
                 "Tags": [
@@ -342,9 +348,9 @@ def test_get_volume_name_without_name_tag(mocker):
 
 
 def test_get_volume_name_no_tags(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
-    mock_ec2_client.describe_volumes.return_value = {
+    mock_ec2_client.return_value.describe_volumes.return_value = {
         "Volumes": [{}]  # No Tags field
     }
 
@@ -354,29 +360,31 @@ def test_get_volume_name_no_tags(mocker):
 
 
 def test_get_snapshot_status(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
-    mock_ec2_client.describe_snapshots.return_value = {"Snapshots": [{"State": "completed"}]}
+    mock_ec2_client.return_value.describe_snapshots.return_value = {
+        "Snapshots": [{"State": "completed"}]
+    }
 
     result = get_snapshot_status("snap-0123456789abcdef0")
 
     assert result == "completed"
-    mock_ec2_client.describe_snapshots.assert_called_once_with(
+    mock_ec2_client.return_value.describe_snapshots.assert_called_once_with(
         SnapshotIds=["snap-0123456789abcdef0"]
     )
 
 
 def test_get_launch_template_id(mocker):
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
-    mock_ec2_client.describe_launch_templates.return_value = {
+    mock_ec2_client.return_value.describe_launch_templates.return_value = {
         "LaunchTemplates": [{"LaunchTemplateId": "lt-0123456789abcdef0"}]
     }
 
     result = get_launch_template_id("test-template")
 
     assert result == "lt-0123456789abcdef0"
-    mock_ec2_client.describe_launch_templates.assert_called_once_with(
+    mock_ec2_client.return_value.describe_launch_templates.assert_called_once_with(
         Filters=[{"Name": "tag:Name", "Values": ["test-template"]}]
     )
 
@@ -419,10 +427,10 @@ def test_get_account_id_no_credentials_error(mocker):
 
 def test_get_instance_id_client_error(mocker):
     """Test get_instance_id with ClientError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
     error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Unauthorized"}}
-    mock_ec2_client.describe_instances.side_effect = ClientError(
+    mock_ec2_client.return_value.describe_instances.side_effect = ClientError(
         error_response, "describe_instances"
     )
 
@@ -436,9 +444,9 @@ def test_get_instance_id_client_error(mocker):
 
 def test_get_instance_id_no_credentials_error(mocker):
     """Test get_instance_id with NoCredentialsError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
-    mock_ec2_client.describe_instances.side_effect = NoCredentialsError()
+    mock_ec2_client.return_value.describe_instances.side_effect = NoCredentialsError()
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_instance_id("test-instance")
@@ -450,9 +458,9 @@ def test_get_instance_id_no_credentials_error(mocker):
 
 def test_get_instance_id_no_instances_in_reservation(mocker):
     """Test get_instance_id when reservation has no instances."""
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
-    mock_ec2_client.describe_instances.return_value = {
+    mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [
             {
                 "Instances": []  # Empty instances list
@@ -469,12 +477,12 @@ def test_get_instance_id_no_instances_in_reservation(mocker):
 
 def test_get_instance_status_client_error(mocker):
     """Test get_instance_status with ClientError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
     error_response = {
         "Error": {"Code": "InvalidInstanceID.NotFound", "Message": "Instance not found"}
     }
-    mock_ec2_client.describe_instance_status.side_effect = ClientError(
+    mock_ec2_client.return_value.describe_instance_status.side_effect = ClientError(
         error_response, "describe_instance_status"
     )
 
@@ -487,9 +495,9 @@ def test_get_instance_status_client_error(mocker):
 
 def test_get_instance_status_no_credentials_error(mocker):
     """Test get_instance_status with NoCredentialsError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
-    mock_ec2_client.describe_instance_status.side_effect = NoCredentialsError()
+    mock_ec2_client.return_value.describe_instance_status.side_effect = NoCredentialsError()
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_instance_status()
@@ -499,14 +507,14 @@ def test_get_instance_status_no_credentials_error(mocker):
 
 def test_get_instances_client_error(mocker):
     """Test get_instances with ClientError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
     error_response = {"Error": {"Code": "RequestLimitExceeded", "Message": "Rate limit exceeded"}}
 
     # Mock paginator that raises error during iteration
     mock_paginator = mocker.MagicMock()
     mock_paginator.paginate.side_effect = ClientError(error_response, "describe_instances")
-    mock_ec2_client.get_paginator.return_value = mock_paginator
+    mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_instances()
@@ -516,12 +524,12 @@ def test_get_instances_client_error(mocker):
 
 def test_get_instances_no_credentials_error(mocker):
     """Test get_instances with NoCredentialsError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
     # Mock paginator that raises error during iteration
     mock_paginator = mocker.MagicMock()
     mock_paginator.paginate.side_effect = NoCredentialsError()
-    mock_ec2_client.get_paginator.return_value = mock_paginator
+    mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_instances()
@@ -531,12 +539,12 @@ def test_get_instances_no_credentials_error(mocker):
 
 def test_get_instance_dns_instance_not_found_error(mocker):
     """Test get_instance_dns with instance not found."""
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
     error_response = {
         "Error": {"Code": "InvalidInstanceID.NotFound", "Message": "Instance not found"}
     }
-    mock_ec2_client.describe_instances.side_effect = ClientError(
+    mock_ec2_client.return_value.describe_instances.side_effect = ClientError(
         error_response, "describe_instances"
     )
 
@@ -549,10 +557,10 @@ def test_get_instance_dns_instance_not_found_error(mocker):
 
 def test_get_instance_dns_other_client_error(mocker):
     """Test get_instance_dns with other ClientError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
     error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Unauthorized"}}
-    mock_ec2_client.describe_instances.side_effect = ClientError(
+    mock_ec2_client.return_value.describe_instances.side_effect = ClientError(
         error_response, "describe_instances"
     )
 
@@ -564,12 +572,12 @@ def test_get_instance_dns_other_client_error(mocker):
 
 def test_get_instance_type_instance_not_found_error(mocker):
     """Test get_instance_type with instance not found."""
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
     error_response = {
         "Error": {"Code": "InvalidInstanceID.NotFound", "Message": "Instance not found"}
     }
-    mock_ec2_client.describe_instances.side_effect = ClientError(
+    mock_ec2_client.return_value.describe_instances.side_effect = ClientError(
         error_response, "describe_instances"
     )
 
@@ -582,10 +590,10 @@ def test_get_instance_type_instance_not_found_error(mocker):
 
 def test_get_instance_type_other_client_error(mocker):
     """Test get_instance_type with other ClientError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
     error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Unauthorized"}}
-    mock_ec2_client.describe_instances.side_effect = ClientError(
+    mock_ec2_client.return_value.describe_instances.side_effect = ClientError(
         error_response, "describe_instances"
     )
 
@@ -597,12 +605,14 @@ def test_get_instance_type_other_client_error(mocker):
 
 def test_get_volume_ids_client_error(mocker):
     """Test get_volume_ids with ClientError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
     error_response = {
         "Error": {"Code": "InvalidInstanceID.NotFound", "Message": "Instance not found"}
     }
-    mock_ec2_client.describe_volumes.side_effect = ClientError(error_response, "describe_volumes")
+    mock_ec2_client.return_value.describe_volumes.side_effect = ClientError(
+        error_response, "describe_volumes"
+    )
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_volume_ids("i-12345678")
@@ -613,9 +623,9 @@ def test_get_volume_ids_client_error(mocker):
 
 def test_get_volume_ids_no_credentials_error(mocker):
     """Test get_volume_ids with NoCredentialsError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
-    mock_ec2_client.describe_volumes.side_effect = NoCredentialsError()
+    mock_ec2_client.return_value.describe_volumes.side_effect = NoCredentialsError()
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_volume_ids("i-12345678")
@@ -625,10 +635,12 @@ def test_get_volume_ids_no_credentials_error(mocker):
 
 def test_get_volume_name_volume_not_found_error(mocker):
     """Test get_volume_name with volume not found."""
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
     error_response = {"Error": {"Code": "InvalidVolumeID.NotFound", "Message": "Volume not found"}}
-    mock_ec2_client.describe_volumes.side_effect = ClientError(error_response, "describe_volumes")
+    mock_ec2_client.return_value.describe_volumes.side_effect = ClientError(
+        error_response, "describe_volumes"
+    )
 
     with pytest.raises(ResourceNotFoundError) as exc_info:
         get_volume_name("vol-1234567890abcdef0")
@@ -639,10 +651,12 @@ def test_get_volume_name_volume_not_found_error(mocker):
 
 def test_get_volume_name_other_client_error(mocker):
     """Test get_volume_name with other ClientError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
     error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Unauthorized"}}
-    mock_ec2_client.describe_volumes.side_effect = ClientError(error_response, "describe_volumes")
+    mock_ec2_client.return_value.describe_volumes.side_effect = ClientError(
+        error_response, "describe_volumes"
+    )
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_volume_name("vol-12345678")
@@ -652,12 +666,12 @@ def test_get_volume_name_other_client_error(mocker):
 
 def test_get_snapshot_status_snapshot_not_found_error(mocker):
     """Test get_snapshot_status with snapshot not found."""
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
     error_response = {
         "Error": {"Code": "InvalidSnapshotID.NotFound", "Message": "Snapshot not found"}
     }
-    mock_ec2_client.describe_snapshots.side_effect = ClientError(
+    mock_ec2_client.return_value.describe_snapshots.side_effect = ClientError(
         error_response, "describe_snapshots"
     )
 
@@ -670,10 +684,10 @@ def test_get_snapshot_status_snapshot_not_found_error(mocker):
 
 def test_get_snapshot_status_other_client_error(mocker):
     """Test get_snapshot_status with other ClientError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
     error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Unauthorized"}}
-    mock_ec2_client.describe_snapshots.side_effect = ClientError(
+    mock_ec2_client.return_value.describe_snapshots.side_effect = ClientError(
         error_response, "describe_snapshots"
     )
 
@@ -685,10 +699,10 @@ def test_get_snapshot_status_other_client_error(mocker):
 
 def test_get_launch_template_id_client_error(mocker):
     """Test get_launch_template_id with ClientError."""
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
     error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Unauthorized"}}
-    mock_ec2_client.describe_launch_templates.side_effect = ClientError(
+    mock_ec2_client.return_value.describe_launch_templates.side_effect = ClientError(
         error_response, "describe_launch_templates"
     )
 
@@ -712,9 +726,9 @@ def test_get_launch_template_id_validation_error(mocker):
 
 def test_get_launch_template_id_no_templates_found(mocker):
     """Test get_launch_template_id when no templates found."""
-    mock_ec2_client = mocker.patch("remotepy.utils.ec2_client")
+    mock_ec2_client = mocker.patch("remotepy.utils.get_ec2_client")
 
-    mock_ec2_client.describe_launch_templates.return_value = {"LaunchTemplates": []}
+    mock_ec2_client.return_value.describe_launch_templates.return_value = {"LaunchTemplates": []}
 
     with pytest.raises(ResourceNotFoundError) as exc_info:
         get_launch_template_id("nonexistent-template")

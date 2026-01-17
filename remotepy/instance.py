@@ -18,7 +18,7 @@ from remotepy.exceptions import (
     ValidationError,
 )
 from remotepy.utils import (
-    ec2_client,
+    get_ec2_client,
     get_instance_dns,
     get_instance_id,
     get_instance_ids,
@@ -154,7 +154,7 @@ def start(instance_name: str | None = typer.Argument(None, help="Instance name")
         return
 
     try:
-        ec2_client.start_instances(InstanceIds=[instance_id])
+        get_ec2_client().start_instances(InstanceIds=[instance_id])
         typer.secho(f"Instance {instance_name} started", fg=typer.colors.GREEN)
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
@@ -191,7 +191,7 @@ def stop(instance_name: str | None = typer.Argument(None, help="Instance name"))
         )
 
         if confirm:
-            ec2_client.stop_instances(InstanceIds=[instance_id])
+            get_ec2_client().stop_instances(InstanceIds=[instance_id])
             typer.secho(f"Instance {instance_name} is stopping", fg=typer.colors.GREEN)
         else:
             typer.secho(f"Instance {instance_name} is still running", fg=typer.colors.YELLOW)
@@ -349,7 +349,7 @@ def type(
             # Change instance type
 
             try:
-                ec2_client.modify_instance_attribute(
+                get_ec2_client().modify_instance_attribute(
                     InstanceId=instance_id,
                     InstanceType={
                         "Value": type,
@@ -419,7 +419,7 @@ def list_launch_templates() -> dict[str, Any]:
     Example usage:
         python remotepy/instance.py list_launch_templates
     """
-    launch_templates = ec2_client.describe_launch_templates()
+    launch_templates = get_ec2_client().describe_launch_templates()
 
     header = ["Number", "LaunchTemplateId", "LaunchTemplateName", "Version"]
     aligns = cast(Sequence[Literal["l", "r", "c"]], ["l"] * len(header))
@@ -513,7 +513,7 @@ def launch(
         )
 
     # Launch the instance with the specified launch template, version, and name
-    instance = ec2_client.run_instances(
+    instance = get_ec2_client().run_instances(
         LaunchTemplate={"LaunchTemplateId": launch_template_id, "Version": version},
         MaxCount=1,
         MinCount=1,
@@ -559,7 +559,7 @@ def terminate(instance_name: str | None = typer.Argument(None, help="Instance na
     instance_id = get_instance_id(instance_name)
 
     # Check if instance is managed by Terraform
-    instance_info = ec2_client.describe_instances(InstanceIds=[instance_id])
+    instance_info = get_ec2_client().describe_instances(InstanceIds=[instance_id])
     # Safely access instance information
     tags: builtins.list[dict[str, str]] = []
     try:
@@ -613,7 +613,7 @@ def terminate(instance_name: str | None = typer.Argument(None, help="Instance na
     )
 
     if confirm:
-        ec2_client.terminate_instances(InstanceIds=[instance_id])
+        get_ec2_client().terminate_instances(InstanceIds=[instance_id])
         typer.secho(f"Instance {instance_name} is being terminated", fg=typer.colors.GREEN)
     else:
         typer.secho(

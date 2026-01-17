@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import boto3
 import typer
@@ -24,8 +24,16 @@ def get_ecs_client() -> "ECSClient":
     return boto3.client("ecs")
 
 
-# Backwards compatibility alias - to be deprecated in v0.5.0
-ecs_client = get_ecs_client()
+# Backwards compatibility: ecs_client is now accessed lazily via __getattr__
+# to avoid creating the client at import time (which breaks tests without AWS region)
+
+
+def __getattr__(name: str) -> Any:
+    """Lazy module attribute access for backwards compatibility."""
+    if name == "ecs_client":
+        return get_ecs_client()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 app = typer.Typer()
 
@@ -44,7 +52,7 @@ def get_all_clusters() -> list[str]:
     """
     try:
         # Use paginator to handle >100 clusters
-        paginator = ecs_client.get_paginator("list_clusters")
+        paginator = get_ecs_client().get_paginator("list_clusters")
         clusters: list[str] = []
 
         for page in paginator.paginate():
@@ -78,7 +86,7 @@ def get_all_services(cluster_name: str) -> list[str]:
     """
     try:
         # Use paginator to handle >100 services
-        paginator = ecs_client.get_paginator("list_services")
+        paginator = get_ecs_client().get_paginator("list_services")
         services: list[str] = []
 
         for page in paginator.paginate(cluster=cluster_name):
@@ -108,7 +116,7 @@ def scale_service(cluster_name: str, service_name: str, desired_count: int) -> N
         AWSServiceError: If AWS API call fails
     """
     try:
-        ecs_client.update_service(
+        get_ecs_client().update_service(
             cluster=cluster_name, service=service_name, desiredCount=desired_count
         )
     except ClientError as e:
