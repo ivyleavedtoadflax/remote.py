@@ -1,6 +1,6 @@
 # Issue 18: Standardize Exit Patterns
 
-**Status:** Not started
+**Status:** COMPLETED
 **Priority:** Medium
 **Files:** Multiple files
 
@@ -32,7 +32,7 @@ raise typer.Exit(1)  # Error
 
 ## Acceptance Criteria
 
-- [ ] Audit all exit points in command handlers
-- [ ] Replace `sys.exit()` with `raise typer.Exit()`
-- [ ] Ensure consistent exit codes (0=success, 1=error)
-- [ ] Update tests if needed
+- [x] Audit all exit points in command handlers
+- [x] Replace `sys.exit()` with `raise typer.Exit()`
+- [x] Ensure consistent exit codes (0=success, 1=error)
+- [x] Update tests if needed
