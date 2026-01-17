@@ -101,7 +101,7 @@ def prompt_for_cluster_name() -> str:
         # Safely access the single cluster
         cluster = safe_get_array_item(clusters, 0, "clusters")
         typer.secho(f"Using cluster: {cluster}", fg=typer.colors.BLUE)
-        return cluster
+        return str(cluster)
     else:
         typer.echo("Please select a cluster from the following list:")
 

@@ -1,5 +1,8 @@
+import builtins
 import random
 import string
+from collections.abc import Sequence
+from typing import Any, Literal, cast
 
 import typer
 import wasabi
@@ -19,10 +22,10 @@ app = typer.Typer()
 
 @app.command()
 def create(
-    instance_name: str = typer.Option(None, help="Instance name"),
-    name: str = typer.Option(None, help="AMI name"),
-    description: str = typer.Option(None, help="Description"),
-):
+    instance_name: str | None = typer.Option(None, help="Instance name"),
+    name: str | None = typer.Option(None, help="AMI name"),
+    description: str | None = typer.Option(None, help="Description"),
+) -> None:
     """
     Create an Amazon Machine Image (AMI) from a specified EC2 instance.
 
@@ -53,10 +56,14 @@ def create(
         instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
 
+    # Ensure required fields have values
+    ami_name = name if name else f"ami-{instance_name}"
+    ami_description = description if description else ""
+
     ami = ec2_client.create_image(
         InstanceId=instance_id,
-        Name=name,
-        Description=description,
+        Name=ami_name,
+        Description=ami_description,
         NoReboot=True,
     )
 
@@ -65,7 +72,7 @@ def create(
 
 @app.command("ls")
 @app.command("list")
-def list():
+def list() -> None:
     """
     List all Amazon Machine Images (AMIs) owned by the current account.
 
@@ -83,8 +90,8 @@ def list():
     )
 
     header = ["ImageId", "Name", "State", "CreationDate"]
-    aligns = ["l", "l", "l", "l"]
-    data = []
+    aligns = cast(Sequence[Literal["l", "r", "c"]], ["l", "l", "l", "l"])
+    data: builtins.list[builtins.list[str]] = []
 
     for ami in amis["Images"]:
         data.append(
@@ -102,7 +109,7 @@ def list():
 
 
 @app.command()
-def list_launch_templates():
+def list_launch_templates() -> dict[str, Any]:
     """
     List all launch templates available in the AWS EC2.
 
@@ -119,8 +126,8 @@ def list_launch_templates():
     launch_templates = ec2_client.describe_launch_templates()
 
     header = ["Number", "LaunchTemplateId", "LaunchTemplateName", "Version"]
-    aligns = ["l"] * len(header)
-    data = []
+    aligns = cast(Sequence[Literal["l", "r", "c"]], ["l"] * len(header))
+    data: builtins.list[tuple[int, str, str, int]] = []
 
     for i, launch_template in enumerate(launch_templates["LaunchTemplates"], 1):
         data.append(
@@ -136,15 +143,15 @@ def list_launch_templates():
     formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
     typer.secho(formatted, fg=typer.colors.YELLOW)
 
-    return launch_templates
+    return dict(launch_templates)
 
 
 @app.command()
 def launch(
-    name: str = typer.Option(None, help="Name of the instance to be launched"),
-    launch_template: str = typer.Option(None, help="Launch template name"),
+    name: str | None = typer.Option(None, help="Name of the instance to be launched"),
+    launch_template: str | None = typer.Option(None, help="Launch template name"),
     version: str = typer.Option("$Latest", help="Launch template version"),
-):
+) -> None:
     """
     Launch an AWS EC2 instance based on a launch template.
 
@@ -165,6 +172,10 @@ def launch(
     version: The version of the launch template to use. Default is the latest version.
     """
 
+    # Variables to track launch template details
+    launch_template_name: str = ""
+    launch_template_id: str = ""
+
     # if no launch template is specified, list all the launch templates
     if not launch_template:
         typer.secho("Please specify a launch template", fg=typer.colors.RED)
@@ -172,13 +183,13 @@ def launch(
         launch_templates = list_launch_templates()["LaunchTemplates"]
         typer.secho("Select a launch template by number", fg=typer.colors.YELLOW)
         launch_template_number = typer.prompt("Launch template", type=str)
-        launch_template = launch_templates[int(launch_template_number) - 1]
-        launch_template_name = launch_template["LaunchTemplateName"]
-        launch_template_id = launch_template["LaunchTemplateId"]
+        selected_template = launch_templates[int(launch_template_number) - 1]
+        launch_template_name = str(selected_template["LaunchTemplateName"])
+        launch_template_id = str(selected_template["LaunchTemplateId"])
 
         typer.secho(f"Launch template {launch_template_name} selected", fg=typer.colors.YELLOW)
         typer.secho(
-            f"Defaulting to latest version: {launch_template['LatestVersionNumber']}",
+            f"Defaulting to latest version: {selected_template['LatestVersionNumber']}",
             fg=typer.colors.YELLOW,
         )
         typer.secho(f"Launching instance based on launch template {launch_template_name}")

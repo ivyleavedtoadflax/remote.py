@@ -1,8 +1,11 @@
+import builtins
 import random
 import string
 import subprocess
 import sys
 import time
+from collections.abc import Sequence
+from typing import Any, Literal, cast
 
 import typer
 import wasabi
@@ -24,6 +27,7 @@ from remotepy.utils import (
     get_instance_status,
     get_instance_type,
     get_instances,
+    get_launch_template_id,
     is_instance_running,
     msg,
 )
@@ -34,7 +38,7 @@ app = typer.Typer()
 
 @app.command("ls")
 @app.command("list")
-def list():
+def list() -> None:
     """
     List all instances with id, dns and status
     """
@@ -46,7 +50,7 @@ def list():
     # Format table using wasabi
 
     header = ["Name", "InstanceId", "PublicDnsName", "Status", "Type", "Launch Time"]
-    aligns = ["l", "l", "l", "l", "l", "l"]
+    aligns = cast(Sequence[Literal["l", "r", "c"]], ["l", "l", "l", "l", "l", "l"])
     data = [
         (name, id, dns, status, it, lt)
         for name, id, dns, status, it, lt in zip(
@@ -61,7 +65,7 @@ def list():
 
 
 @app.command()
-def status(instance_name: str = typer.Argument(None, help="Instance name")):
+def status(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
     """
     Get the status of an instance
     """
@@ -105,7 +109,7 @@ def status(instance_name: str = typer.Argument(None, help="Instance name")):
                 "InstanceStatus",
                 "Reachability",
             ]
-            aligns = ["l", "l", "l", "l", "l", "l"]
+            aligns = cast(Sequence[Literal["l", "r", "c"]], ["l", "l", "l", "l", "l", "l"])
             data = [
                 [
                     instance_name,
@@ -135,7 +139,7 @@ def status(instance_name: str = typer.Argument(None, help="Instance name")):
 
 
 @app.command()
-def start(instance_name: str = typer.Argument(None, help="Instance name")):
+def start(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
     """
     Start the instance
     """
@@ -166,7 +170,7 @@ def start(instance_name: str = typer.Argument(None, help="Instance name")):
 
 
 @app.command()
-def stop(instance_name: str = typer.Argument(None, help="Instance name")):
+def stop(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
     """
     Stop the instance
     """
@@ -206,22 +210,22 @@ def stop(instance_name: str = typer.Argument(None, help="Instance name")):
 
 @app.command()
 def connect(
-    instance_name: str = typer.Argument(None, help="Instance name"),
-    port_forward: str = typer.Option(
+    instance_name: str | None = typer.Argument(None, help="Instance name"),
+    port_forward: str | None = typer.Option(
         None,
         "--port-forward",
         "-p",
         help="Port forwarding configuration (local:remote)",
     ),
     user: str = typer.Option("ubuntu", "--user", "-u", help="User to be used for ssh connection."),
-    key: str = typer.Option(None, "--key", "-k", help="Path to SSH private key file."),
+    key: str | None = typer.Option(None, "--key", "-k", help="Path to SSH private key file."),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose mode"),
     no_strict_host_key: bool = typer.Option(
         False,
         "--no-strict-host-key",
         help="Disable strict host key checking (less secure, use StrictHostKeyChecking=no)",
     ),
-):
+) -> None:
     """
     Connect to the instance with ssh
     """
@@ -307,12 +311,12 @@ def connect(
 
 @app.command()
 def type(
-    type: str = typer.Argument(
+    type: str | None = typer.Argument(
         None,
         help="Type of instance to convert to. If none, will print the current instance type.",
     ),
-    instance_name: str = typer.Argument(None, help="Instance name"),
-):
+    instance_name: str | None = typer.Argument(None, help="Instance name"),
+) -> None:
     if not instance_name:
         instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
@@ -401,7 +405,7 @@ def type(
 
 
 @app.command()
-def list_launch_templates():
+def list_launch_templates() -> dict[str, Any]:
     """
     List all launch templates available in the AWS EC2.
 
@@ -418,8 +422,8 @@ def list_launch_templates():
     launch_templates = ec2_client.describe_launch_templates()
 
     header = ["Number", "LaunchTemplateId", "LaunchTemplateName", "Version"]
-    aligns = ["l"] * len(header)
-    data = []
+    aligns = cast(Sequence[Literal["l", "r", "c"]], ["l"] * len(header))
+    data: builtins.list[tuple[int, str, str, int]] = []
 
     for i, launch_template in enumerate(launch_templates["LaunchTemplates"], 1):
         data.append(
@@ -435,15 +439,15 @@ def list_launch_templates():
     formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
     typer.secho(formatted, fg=typer.colors.YELLOW)
 
-    return launch_templates
+    return dict(launch_templates)
 
 
 @app.command()
 def launch(
-    name: str = typer.Option(None, help="Name of the instance to be launched"),
-    launch_template: str = typer.Option(None, help="Launch template name"),
+    name: str | None = typer.Option(None, help="Name of the instance to be launched"),
+    launch_template: str | None = typer.Option(None, help="Launch template name"),
     version: str = typer.Option("$Latest", help="Launch template version"),
-):
+) -> None:
     """
     Launch an AWS EC2 instance based on a launch template.
 
@@ -464,6 +468,10 @@ def launch(
     version: The version of the launch template to use. Default is the latest version.
     """
 
+    # Variables to track launch template details
+    launch_template_name: str = ""
+    launch_template_id: str = ""
+
     # if no launch template is specified, list all the launch templates
 
     if not launch_template:
@@ -477,19 +485,23 @@ def launch(
             template_index = validate_array_index(
                 launch_template_number, len(launch_templates), "launch templates"
             )
-            launch_template = launch_templates[template_index]
+            selected_template = launch_templates[template_index]
         except ValidationError as e:
             typer.secho(f"Error: {e}", fg=typer.colors.RED)
             raise typer.Exit(1)
-        launch_template_name = launch_template["LaunchTemplateName"]
-        launch_template_id = launch_template["LaunchTemplateId"]
+        launch_template_name = str(selected_template["LaunchTemplateName"])
+        launch_template_id = str(selected_template["LaunchTemplateId"])
 
         typer.secho(f"Launch template {launch_template_name} selected", fg=typer.colors.YELLOW)
         typer.secho(
-            f"Defaulting to latest version: {launch_template['LatestVersionNumber']}",
+            f"Defaulting to latest version: {selected_template['LatestVersionNumber']}",
             fg=typer.colors.YELLOW,
         )
         typer.secho(f"Launching instance based on launch template {launch_template_name}")
+    else:
+        # launch_template was provided as a string
+        launch_template_name = launch_template
+        launch_template_id = get_launch_template_id(launch_template)
 
     # if no name is specified, ask the user for the name
 
@@ -537,7 +549,7 @@ def launch(
 
 
 @app.command()
-def terminate(instance_name: str = typer.Argument(None, help="Instance name")):
+def terminate(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
     """
     Terminate the instance
     """
@@ -549,23 +561,22 @@ def terminate(instance_name: str = typer.Argument(None, help="Instance name")):
     # Check if instance is managed by Terraform
     instance_info = ec2_client.describe_instances(InstanceIds=[instance_id])
     # Safely access instance information
+    tags: builtins.list[dict[str, str]] = []
     try:
         reservations = instance_info.get("Reservations", [])
         if not reservations:
             typer.secho("Warning: No instance information found", fg=typer.colors.YELLOW)
-            tags = []
         else:
             reservation = safe_get_array_item(reservations, 0, "instance reservations")
             instances = reservation.get("Instances", [])
             if not instances:
                 typer.secho("Warning: No instance details found", fg=typer.colors.YELLOW)
-                tags = []
             else:
                 instance = safe_get_array_item(instances, 0, "instances")
                 tags = instance.get("Tags", [])
     except ValidationError as e:
         typer.secho(f"Error accessing instance information: {e}", fg=typer.colors.RED)
-        tags = []  # Continue with empty tags
+        # Continue with empty tags
 
     # If the instance is managed by Terraform, warn user
 

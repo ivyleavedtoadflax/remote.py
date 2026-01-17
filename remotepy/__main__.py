@@ -14,7 +14,7 @@ from remotepy.volume import app as volume_app
 
 
 @app.command()
-def version():
+def version() -> None:
     """Show version."""
     typer.echo(importlib.metadata.version("remotepy"))
     typer.Exit(0)

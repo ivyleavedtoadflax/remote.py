@@ -111,10 +111,11 @@ def test_create_ami_minimal_params(mocker):
     result = runner.invoke(app, ["create"])
 
     assert result.exit_code == 0
+    # When no name/description provided, defaults are used
     mock_ec2_client.create_image.assert_called_once_with(
         InstanceId="i-0123456789abcdef0",
-        Name=None,
-        Description=None,
+        Name="ami-default-instance",  # Default name based on instance name
+        Description="",  # Empty string as default
         NoReboot=True,
     )
 

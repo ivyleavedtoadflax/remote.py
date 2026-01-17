@@ -1,5 +1,6 @@
 from configparser import ConfigParser
 from datetime import datetime
+from typing import Any, cast
 
 import boto3
 import typer
@@ -114,7 +115,7 @@ def get_instance_id(instance_name: str) -> str:
         )
 
 
-def get_instance_status(instance_id: str = None) -> dict:
+def get_instance_status(instance_id: str | None = None) -> dict[str, Any]:
     """Returns the status of the instance.
 
     Args:
@@ -130,9 +131,10 @@ def get_instance_status(instance_id: str = None) -> dict:
         if instance_id:
             # Validate input if provided
             instance_id = validate_instance_id(instance_id)
-            return ec2_client.describe_instance_status(InstanceIds=[instance_id])
+            response = ec2_client.describe_instance_status(InstanceIds=[instance_id])
         else:
-            return ec2_client.describe_instance_status()
+            response = ec2_client.describe_instance_status()
+        return dict(response)
 
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
@@ -147,7 +149,7 @@ def get_instance_status(instance_id: str = None) -> dict:
         )
 
 
-def get_instances(exclude_terminated: bool = False) -> list[dict]:
+def get_instances(exclude_terminated: bool = False) -> list[dict[str, Any]]:
     """
     Get all instances, optionally excluding those in a 'terminated' state.
 
@@ -161,7 +163,7 @@ def get_instances(exclude_terminated: bool = False) -> list[dict]:
         AWSServiceError: If AWS API call fails
     """
     try:
-        filters = []
+        filters: list[dict[str, Any]] = []
         if exclude_terminated:
             filters.append(
                 {
@@ -171,14 +173,14 @@ def get_instances(exclude_terminated: bool = False) -> list[dict]:
             )
 
         if filters:
-            response = ec2_client.describe_instances(Filters=filters)
+            response = ec2_client.describe_instances(Filters=filters)  # type: ignore[arg-type]
         else:
             response = ec2_client.describe_instances()
 
         # Validate response structure
         validate_aws_response_structure(response, ["Reservations"], "describe_instances")
 
-        return response["Reservations"]
+        return cast(list[dict[str, Any]], list(response["Reservations"]))
 
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
@@ -212,10 +214,12 @@ def get_instance_dns(instance_id: str) -> str:
         # Validate response structure
         validate_aws_response_structure(response, ["Reservations"], "describe_instances")
 
-        reservations = ensure_non_empty_array(response["Reservations"], "instance reservations")
-        instances = ensure_non_empty_array(reservations[0].get("Instances", []), "instances")
+        reservations = ensure_non_empty_array(
+            list(response["Reservations"]), "instance reservations"
+        )
+        instances = ensure_non_empty_array(list(reservations[0].get("Instances", [])), "instances")
 
-        return instances[0].get("PublicDnsName", "")
+        return str(instances[0].get("PublicDnsName", ""))
 
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
@@ -226,7 +230,7 @@ def get_instance_dns(instance_id: str) -> str:
         raise AWSServiceError("EC2", "describe_instances", error_code, error_message)
 
 
-def get_instance_name(cfg: ConfigParser = None):
+def get_instance_name(cfg: ConfigParser | None = None) -> str:
     """Returns the name of the instance as defined in the config file.
 
     Args:
@@ -253,8 +257,8 @@ def get_instance_name(cfg: ConfigParser = None):
 
 
 def get_instance_info(
-    instances: list[dict], name_filter: str = None, drop_nameless: bool = False
-) -> tuple[list[str], list[str], list[str], list[str], list[str]]:
+    instances: list[dict[str, Any]], name_filter: str | None = None, drop_nameless: bool = False
+) -> tuple[list[str], list[str], list[str], list[str], list[str | None]]:
     """
     Get all instance names for the given account from aws cli.
 
@@ -327,7 +331,7 @@ def get_instance_info(
     return names, public_dnss, statuses, instance_types, launch_times
 
 
-def get_instance_ids(instances: list[dict]) -> list[str]:
+def get_instance_ids(instances: list[dict[str, Any]]) -> list[str]:
     """Returns a list of instance ids extracted from the output of get_instances().
 
     Args:
@@ -380,7 +384,7 @@ def is_instance_running(instance_id: str) -> bool | None:
         instance_state = first_status.get("InstanceState", {})
         state_name = instance_state.get("Name", "unknown")
 
-        return state_name == "running"
+        return bool(state_name == "running")
 
     except (AWSServiceError, ResourceNotFoundError, ValidationError):
         # Re-raise specific errors
@@ -419,7 +423,7 @@ def is_instance_stopped(instance_id: str) -> bool | None:
         instance_state = first_status.get("InstanceState", {})
         state_name = instance_state.get("Name", "unknown")
 
-        return state_name == "stopped"
+        return bool(state_name == "stopped")
 
     except (AWSServiceError, ResourceNotFoundError, ValidationError):
         # Re-raise specific errors
@@ -452,10 +456,12 @@ def get_instance_type(instance_id: str) -> str:
         # Validate response structure
         validate_aws_response_structure(response, ["Reservations"], "describe_instances")
 
-        reservations = ensure_non_empty_array(response["Reservations"], "instance reservations")
-        instances = ensure_non_empty_array(reservations[0].get("Instances", []), "instances")
+        reservations = ensure_non_empty_array(
+            list(response["Reservations"]), "instance reservations"
+        )
+        instances = ensure_non_empty_array(list(reservations[0].get("Instances", [])), "instances")
 
-        return instances[0]["InstanceType"]
+        return str(instances[0]["InstanceType"])
 
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
@@ -529,13 +535,13 @@ def get_volume_name(volume_id: str) -> str:
         # Validate response structure
         validate_aws_response_structure(response, ["Volumes"], "describe_volumes")
 
-        volumes = ensure_non_empty_array(response["Volumes"], "volumes")
+        volumes = ensure_non_empty_array(list(response["Volumes"]), "volumes")
         volume = volumes[0]
 
         # Look for Name tag
         for tag in volume.get("Tags", []):
             if tag["Key"] == "Name":
-                return tag["Value"]
+                return str(tag["Value"])
 
         return ""  # No name tag found
 
@@ -570,9 +576,9 @@ def get_snapshot_status(snapshot_id: str) -> str:
         # Validate response structure
         validate_aws_response_structure(response, ["Snapshots"], "describe_snapshots")
 
-        snapshots = ensure_non_empty_array(response["Snapshots"], "snapshots")
+        snapshots = ensure_non_empty_array(list(response["Snapshots"]), "snapshots")
 
-        return snapshots[0]["State"]
+        return str(snapshots[0]["State"])
 
     except ClientError as e:
         error_code = e.response["Error"]["Code"]

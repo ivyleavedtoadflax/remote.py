@@ -1,5 +1,7 @@
 import configparser
 import os
+from collections.abc import Sequence
+from typing import Literal, cast
 
 import typer
 import wasabi
@@ -13,7 +15,7 @@ app = typer.Typer()
 class ConfigManager:
     """Configuration manager for config file operations."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._file_config: configparser.ConfigParser | None = None
 
     @property
@@ -69,14 +71,14 @@ config_manager = ConfigManager()
 CONFIG_PATH = str(Settings.get_config_path())
 
 
-def read_config(config_path):
+def read_config(config_path: str) -> configparser.ConfigParser:
     cfg = configparser.ConfigParser()
     cfg.read(config_path)
 
     return cfg
 
 
-def create_config_dir(config_path):
+def create_config_dir(config_path: str) -> None:
     # check whether the config path exists, and create if not.
 
     if not os.path.exists(os.path.dirname(config_path)):
@@ -84,7 +86,7 @@ def create_config_dir(config_path):
         typer.secho(f"Created config directory: {os.path.dirname(config_path)}", fg="green")
 
 
-def write_config(cfg, config_path):
+def write_config(cfg: configparser.ConfigParser, config_path: str) -> configparser.ConfigParser:
     create_config_dir(config_path)
 
     with open(config_path, "w") as configfile:
@@ -94,7 +96,7 @@ def write_config(cfg, config_path):
 
 
 @app.command()
-def show(config_path: str = typer.Option(CONFIG_PATH, "--config", "-c")):
+def show(config_path: str = typer.Option(CONFIG_PATH, "--config", "-c")) -> None:
     """
     Print the current config file
     """
@@ -104,7 +106,7 @@ def show(config_path: str = typer.Option(CONFIG_PATH, "--config", "-c")):
     default_section = cfg["DEFAULT"]
 
     header = ["Section", "Name", "Value"]
-    aligns = ["l", "l"]
+    aligns = cast(Sequence[Literal["l", "r", "c"]], ["l", "l"])
     data = [["DEFAULT", k, v] for k, v in default_section.items()]
     formatter = wasabi.table(data, header=header, divider=True, aligns=aligns)
 
@@ -116,7 +118,7 @@ def show(config_path: str = typer.Option(CONFIG_PATH, "--config", "-c")):
 def add(
     instance_name: str | None = typer.Argument(None),
     config_path: str = typer.Option(CONFIG_PATH, "--config", "-c"),
-):
+) -> None:
     """
     Add a new default instance to the config file.
 
@@ -149,7 +151,7 @@ def add(
         # Prepare a formatted string to display these instance details as a
         # table
         header = ["Number", "Name", "InstanceId", "Type"]
-        aligns = ["l", "l", "l", "l"]
+        aligns = cast(Sequence[Literal["l", "r", "c"]], ["l", "l", "l", "l"])
         data = [
             (i, name, id, it)
             for i, (name, id, it) in enumerate(zip(names, ids, instance_types, strict=False), 1)

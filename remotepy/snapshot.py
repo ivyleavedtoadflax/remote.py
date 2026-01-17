@@ -1,3 +1,7 @@
+import builtins
+from collections.abc import Sequence
+from typing import Literal, cast
+
 import typer
 import wasabi
 
@@ -16,7 +20,7 @@ def create(
     volume_id: str = typer.Option(..., "--volume-id", "-v", help="Volume ID (required)"),
     name: str = typer.Option(..., "--name", "-n", help="Snapshot name (required)"),
     description: str = typer.Option("", "--description", "-d", help="Description"),
-):
+) -> None:
     """
     Snapshot a volume
     """
@@ -37,7 +41,7 @@ def create(
 
 @app.command("ls")
 @app.command("list")
-def list(instance_name: str = typer.Argument(None, help="Instance name")):
+def list(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
     """
     List the snapshots
     """
@@ -51,8 +55,8 @@ def list(instance_name: str = typer.Argument(None, help="Instance name")):
     volume_ids = get_volume_ids(instance_id)
 
     header = ["SnapshotId", "VolumeId", "State", "StartTime", "Description"]
-    aligns = ["l", "l", "l", "l", "l"]
-    data = []
+    aligns = cast(Sequence[Literal["l", "r", "c"]], ["l", "l", "l", "l", "l"])
+    data: builtins.list[builtins.list[str]] = []
 
     for volume_id in volume_ids:
         snapshots = ec2_client.describe_snapshots(
@@ -62,11 +66,11 @@ def list(instance_name: str = typer.Argument(None, help="Instance name")):
         for snapshot in snapshots["Snapshots"]:
             data.append(
                 [
-                    snapshot["SnapshotId"],
-                    snapshot["VolumeId"],
-                    snapshot["State"],
-                    snapshot["StartTime"],
-                    snapshot["Description"],
+                    str(snapshot["SnapshotId"]),
+                    str(snapshot["VolumeId"]),
+                    str(snapshot["State"]),
+                    str(snapshot["StartTime"]),
+                    str(snapshot.get("Description", "")),
                 ]
             )
 
