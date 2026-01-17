@@ -214,6 +214,7 @@ def connect(
         help="Port forwarding configuration (local:remote)",
     ),
     user: str = typer.Option("ubuntu", "--user", "-u", help="User to be used for ssh connection."),
+    key: str = typer.Option(None, "--key", "-k", help="Path to SSH private key file."),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose mode"),
 ):
     """
@@ -278,8 +279,11 @@ def connect(
         "StrictHostKeyChecking=no",
     ]
 
-    # If portforwarding is enabled, add the -L option to ssh
+    # If SSH key is specified, add the -i option
+    if key:
+        arguments.extend(["-i", key])
 
+    # If portforwarding is enabled, add the -L option to ssh
     if port_forward:
         arguments.extend(["-L", port_forward])
 

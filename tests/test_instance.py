@@ -423,9 +423,7 @@ def test_connect_with_key_option(mocker):
     }
 
     # Call connect with --key option
-    result = runner.invoke(
-        app, ["connect", "test-instance", "--key", "/path/to/my-key.pem"]
-    )
+    runner.invoke(app, ["connect", "test-instance", "--key", "/path/to/my-key.pem"])
 
     # Verify subprocess.run was called
     mock_subprocess.assert_called_once()
