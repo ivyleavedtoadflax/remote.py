@@ -400,3 +400,241 @@ def test_launch_negative_template_number(mocker, mock_launch_template_response):
 
     assert result.exit_code == 1
     assert "Error:" in result.stdout
+
+
+def test_list_launch_templates_with_details(mocker):
+    """Test list-templates with --details flag showing version info."""
+    templates = [
+        {
+            "LaunchTemplateId": "lt-123",
+            "LaunchTemplateName": "my-template",
+            "LatestVersionNumber": 2,
+            "CreateTime": "2024-01-01",
+        }
+    ]
+    versions = [
+        {
+            "VersionNumber": 2,
+            "LaunchTemplateData": {
+                "InstanceType": "t3.micro",
+                "ImageId": "ami-12345",
+                "KeyName": "my-key",
+                "SecurityGroupIds": ["sg-123", "sg-456"],
+            },
+        }
+    ]
+    mocker.patch("remotepy.ami.get_launch_templates", return_value=templates)
+    mocker.patch("remotepy.ami.get_launch_template_versions", return_value=versions)
+
+    result = runner.invoke(app, ["list-templates", "--details"])
+
+    assert result.exit_code == 0
+    assert "my-template" in result.stdout
+    assert "lt-" in result.stdout and "123" in result.stdout
+    assert "Latest Version:" in result.stdout
+    assert "t3.micro" in result.stdout
+    assert "ami-" in result.stdout
+    assert "my-key" in result.stdout
+    assert "sg-" in result.stdout
+
+
+def test_list_launch_templates_with_details_no_versions(mocker):
+    """Test list-templates with --details when versions retrieval fails."""
+    from remotepy.exceptions import ResourceNotFoundError
+
+    templates = [
+        {
+            "LaunchTemplateId": "lt-123",
+            "LaunchTemplateName": "my-template",
+            "LatestVersionNumber": 1,
+            "CreateTime": "2024-01-01",
+        }
+    ]
+    mocker.patch("remotepy.ami.get_launch_templates", return_value=templates)
+    mocker.patch(
+        "remotepy.ami.get_launch_template_versions",
+        side_effect=ResourceNotFoundError("Template", "lt-123"),
+    )
+
+    result = runner.invoke(app, ["list-templates", "--details"])
+
+    assert result.exit_code == 0
+    assert "my-template" in result.stdout
+
+
+def test_launch_with_default_template_from_config(mocker):
+    """Test launch using default template from config."""
+    mock_ec2_client = mocker.patch("remotepy.ami.get_ec2_client")
+    mocker.patch("remotepy.ami.get_launch_template_id", return_value="lt-default")
+    mocker.patch("remotepy.ami.config_manager.get_value", return_value="default-template")
+
+    mock_ec2_client.return_value.run_instances.return_value = {
+        "Instances": [{"InstanceId": "i-from-default"}]
+    }
+
+    result = runner.invoke(app, ["launch", "--name", "my-instance"])
+
+    assert result.exit_code == 0
+    assert "Using default template: default-template" in result.stdout
+    assert "i-from-default" in result.stdout
+
+
+def test_launch_no_templates_found(mocker):
+    """Test launch when no templates are available."""
+    mocker.patch("remotepy.ami.get_ec2_client")
+    mocker.patch("remotepy.ami.get_launch_templates", return_value=[])
+    mocker.patch("remotepy.ami.config_manager.get_value", return_value=None)
+
+    result = runner.invoke(app, ["launch"])
+
+    assert result.exit_code == 1
+    assert "No launch templates found" in result.stdout
+
+
+def test_template_versions_success(mocker):
+    """Test template-versions command with valid template."""
+    versions = [
+        {
+            "VersionNumber": 2,
+            "CreateTime": "2024-01-15",
+            "VersionDescription": "Latest version",
+            "DefaultVersion": True,
+        },
+        {
+            "VersionNumber": 1,
+            "CreateTime": "2024-01-01",
+            "VersionDescription": "Initial version",
+            "DefaultVersion": False,
+        },
+    ]
+    mocker.patch("remotepy.ami.get_launch_template_versions", return_value=versions)
+
+    result = runner.invoke(app, ["template-versions", "my-template"])
+
+    assert result.exit_code == 0
+    assert "Versions for my-template" in result.stdout
+    assert "Latest version" in result.stdout
+    assert "Initial version" in result.stdout
+
+
+def test_template_versions_not_found(mocker):
+    """Test template-versions when template doesn't exist."""
+    from remotepy.exceptions import ResourceNotFoundError
+
+    mocker.patch(
+        "remotepy.ami.get_launch_template_versions",
+        side_effect=ResourceNotFoundError("Template", "missing-template"),
+    )
+
+    result = runner.invoke(app, ["template-versions", "missing-template"])
+
+    assert result.exit_code == 1
+    assert "not found" in result.stdout
+
+
+def test_template_versions_empty(mocker):
+    """Test template-versions when no versions exist."""
+    mocker.patch("remotepy.ami.get_launch_template_versions", return_value=[])
+
+    result = runner.invoke(app, ["template-versions", "my-template"])
+
+    assert result.exit_code == 0
+    assert "No versions found" in result.stdout
+
+
+def test_template_info_success(mocker):
+    """Test template-info command showing detailed info."""
+    versions = [
+        {
+            "VersionNumber": 2,
+            "VersionDescription": "Production config",
+            "CreateTime": "2024-01-15",
+            "LaunchTemplateData": {
+                "InstanceType": "t3.large",
+                "ImageId": "ami-prod",
+                "KeyName": "prod-key",
+                "SecurityGroupIds": ["sg-prod"],
+                "NetworkInterfaces": [{"SubnetId": "subnet-123"}],
+                "BlockDeviceMappings": [
+                    {
+                        "DeviceName": "/dev/sda1",
+                        "Ebs": {"VolumeSize": 100, "VolumeType": "gp3"},
+                    }
+                ],
+            },
+        }
+    ]
+    mocker.patch("remotepy.ami.get_launch_template_versions", return_value=versions)
+
+    result = runner.invoke(app, ["template-info", "my-template"])
+
+    assert result.exit_code == 0
+    assert "my-template" in result.stdout
+    assert "t3.large" in result.stdout
+    assert "ami-prod" in result.stdout
+    assert "prod-key" in result.stdout
+    assert "sg-prod" in result.stdout
+    assert "subnet-" in result.stdout and "123" in result.stdout
+    assert "100" in result.stdout
+    assert "gp3" in result.stdout
+
+
+def test_template_info_specific_version(mocker):
+    """Test template-info with specific version number."""
+    versions = [
+        {
+            "VersionNumber": 2,
+            "LaunchTemplateData": {"InstanceType": "t3.large"},
+        },
+        {
+            "VersionNumber": 1,
+            "LaunchTemplateData": {"InstanceType": "t3.micro"},
+        },
+    ]
+    mocker.patch("remotepy.ami.get_launch_template_versions", return_value=versions)
+
+    result = runner.invoke(app, ["template-info", "my-template", "-v", "1"])
+
+    assert result.exit_code == 0
+    assert "t3.micro" in result.stdout
+
+
+def test_template_info_version_not_found(mocker):
+    """Test template-info when specific version doesn't exist."""
+    versions = [
+        {
+            "VersionNumber": 1,
+            "LaunchTemplateData": {"InstanceType": "t3.micro"},
+        }
+    ]
+    mocker.patch("remotepy.ami.get_launch_template_versions", return_value=versions)
+
+    result = runner.invoke(app, ["template-info", "my-template", "-v", "99"])
+
+    assert result.exit_code == 1
+    assert "Version 99 not found" in result.stdout
+
+
+def test_template_info_not_found(mocker):
+    """Test template-info when template doesn't exist."""
+    from remotepy.exceptions import ResourceNotFoundError
+
+    mocker.patch(
+        "remotepy.ami.get_launch_template_versions",
+        side_effect=ResourceNotFoundError("Template", "missing"),
+    )
+
+    result = runner.invoke(app, ["template-info", "missing"])
+
+    assert result.exit_code == 1
+    assert "not found" in result.stdout
+
+
+def test_template_info_no_versions(mocker):
+    """Test template-info when no versions exist."""
+    mocker.patch("remotepy.ami.get_launch_template_versions", return_value=[])
+
+    result = runner.invoke(app, ["template-info", "my-template"])
+
+    assert result.exit_code == 0
+    assert "No versions found" in result.stdout

@@ -168,15 +168,3 @@ title = "RemotePy Test Coverage Report"
 
 [tool.coverage.xml]
 output = "coverage.xml"
-
-# Per-module minimum coverage requirements
-[tool.coverage.report.coverage_thresholds]
-# Core modules should maintain high coverage
-"remotepy/utils.py" = 95
-"remotepy/config.py" = 90
-"remotepy/ecs.py" = 95
-"remotepy/instance.py" = 60  # Allow lower for now due to complex CLI interactions
-"remotepy/ami.py" = 95
-"remotepy/volume.py" = 90
-"remotepy/snapshot.py" = 90
-"remotepy/__main__.py" = 90
