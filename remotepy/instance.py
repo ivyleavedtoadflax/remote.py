@@ -10,6 +10,7 @@ from botocore.exceptions import ClientError, NoCredentialsError
 from rich.console import Console
 from rich.table import Table
 
+from remotepy.config import config_manager
 from remotepy.exceptions import (
     AWSServiceError,
     InstanceNotFoundError,
@@ -27,6 +28,7 @@ from remotepy.utils import (
     get_instance_type,
     get_instances,
     get_launch_template_id,
+    get_launch_templates,
     is_instance_running,
 )
 from remotepy.validation import safe_get_array_item, safe_get_nested_value, validate_array_index
@@ -465,13 +467,17 @@ def type(
 
 
 @app.command()
-def list_launch_templates() -> dict[str, Any]:
+def list_launch_templates() -> list[dict[str, Any]]:
     """
     List all available EC2 launch templates.
 
     Displays template ID, name, and latest version number.
     """
-    launch_templates = get_ec2_client().describe_launch_templates()
+    templates = get_launch_templates()
+
+    if not templates:
+        typer.secho("No launch templates found", fg=typer.colors.YELLOW)
+        return []
 
     # Format table using rich
     table = Table(title="Launch Templates")
@@ -480,17 +486,17 @@ def list_launch_templates() -> dict[str, Any]:
     table.add_column("LaunchTemplateName", style="cyan")
     table.add_column("Version", justify="right")
 
-    for i, launch_template in enumerate(launch_templates["LaunchTemplates"], 1):
+    for i, template in enumerate(templates, 1):
         table.add_row(
             str(i),
-            launch_template["LaunchTemplateId"],
-            launch_template["LaunchTemplateName"],
-            str(launch_template["LatestVersionNumber"]),
+            template["LaunchTemplateId"],
+            template["LaunchTemplateName"],
+            str(template["LatestVersionNumber"]),
         )
 
     console.print(table)
 
-    return dict(launch_templates)
+    return templates
 
 
 @app.command()
@@ -502,11 +508,12 @@ def launch(
     """
     Launch a new EC2 instance from a launch template.
 
-    If no launch template is provided, lists available templates for selection.
+    Uses default template from config if not specified.
+    If no launch template is configured, lists available templates for selection.
     If no name is provided, suggests a name based on the template name.
 
     Examples:
-        remote launch                                    # Interactive selection
+        remote launch                                    # Use default or interactive
         remote launch --launch-template my-template      # Use specific template
         remote launch --name my-server --launch-template my-template
     """
@@ -515,20 +522,48 @@ def launch(
     launch_template_name: str = ""
     launch_template_id: str = ""
 
-    # if no launch template is specified, list all the launch templates
+    # Check for default template from config if not specified
+    if not launch_template:
+        default_template = config_manager.get_value("default_launch_template")
+        if default_template:
+            typer.secho(f"Using default template: {default_template}", fg=typer.colors.YELLOW)
+            launch_template = default_template
 
+    # if no launch template is specified, list all the launch templates
     if not launch_template:
         typer.secho("Please specify a launch template", fg=typer.colors.RED)
         typer.secho("Available launch templates:", fg=typer.colors.YELLOW)
-        launch_templates = list_launch_templates()["LaunchTemplates"]
+        templates = get_launch_templates()
+
+        if not templates:
+            typer.secho("No launch templates found", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        # Display templates
+        table = Table(title="Launch Templates")
+        table.add_column("Number", justify="right")
+        table.add_column("LaunchTemplateId", style="green")
+        table.add_column("LaunchTemplateName", style="cyan")
+        table.add_column("Version", justify="right")
+
+        for i, template in enumerate(templates, 1):
+            table.add_row(
+                str(i),
+                template["LaunchTemplateId"],
+                template["LaunchTemplateName"],
+                str(template["LatestVersionNumber"]),
+            )
+
+        console.print(table)
+
         typer.secho("Select a launch template by number", fg=typer.colors.YELLOW)
         launch_template_number = typer.prompt("Launch template", type=str)
         # Validate user input and safely access array
         try:
             template_index = validate_array_index(
-                launch_template_number, len(launch_templates), "launch templates"
+                launch_template_number, len(templates), "launch templates"
             )
-            selected_template = launch_templates[template_index]
+            selected_template = templates[template_index]
         except ValidationError as e:
             typer.secho(f"Error: {e}", fg=typer.colors.RED)
             raise typer.Exit(1)

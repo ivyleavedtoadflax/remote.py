@@ -387,22 +387,20 @@ def test_terminate_terraform_managed_instance(mocker):
 
 
 def test_list_launch_templates_command(mocker):
-    mock_ec2_client = mocker.patch("remotepy.instance.get_ec2_client")
-
-    mock_ec2_client.return_value.describe_launch_templates.return_value = {
-        "LaunchTemplates": [
+    mocker.patch(
+        "remotepy.instance.get_launch_templates",
+        return_value=[
             {
                 "LaunchTemplateId": "lt-0123456789abcdef0",
                 "LaunchTemplateName": "test-template-1",
                 "LatestVersionNumber": 2,
             }
-        ]
-    }
+        ],
+    )
 
     result = runner.invoke(app, ["list-launch-templates"])
 
     assert result.exit_code == 0
-    mock_ec2_client.return_value.describe_launch_templates.assert_called_once()
     assert "test-template-1" in result.stdout
     assert "lt-0123456789abcdef0" in result.stdout
 
