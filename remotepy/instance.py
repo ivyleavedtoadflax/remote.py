@@ -17,6 +17,7 @@ from remotepy.exceptions import (
     ResourceNotFoundError,
     ValidationError,
 )
+from remotepy.pricing import format_price, get_instance_price, get_monthly_estimate
 from remotepy.utils import (
     get_ec2_client,
     get_instance_dns,
@@ -51,11 +52,20 @@ def _get_status_style(status: str) -> str:
 
 @app.command("ls")
 @app.command("list")
-def list_instances() -> None:
+def list_instances(
+    no_pricing: bool = typer.Option(
+        False, "--no-pricing", help="Skip pricing lookup (faster, no cost columns)"
+    ),
+) -> None:
     """
     List all EC2 instances.
 
-    Displays a table with instance name, ID, public DNS, status, type, and launch time.
+    Displays a table with instance name, ID, public DNS, status, type, launch time,
+    and pricing information (hourly and monthly estimates).
+
+    Examples:
+        remote list                # List with pricing
+        remote list --no-pricing   # List without pricing (faster)
     """
     instances = get_instances()
     ids = get_instance_ids(instances)
@@ -71,18 +81,31 @@ def list_instances() -> None:
     table.add_column("Type")
     table.add_column("Launch Time")
 
+    if not no_pricing:
+        table.add_column("$/hr", justify="right")
+        table.add_column("$/month", justify="right")
+
     for name, instance_id, dns, status, it, lt in zip(
         names, ids, public_dnss, statuses, instance_types, launch_times, strict=False
     ):
         status_style = _get_status_style(status)
-        table.add_row(
+
+        row_data = [
             name or "",
             instance_id or "",
             dns or "",
             f"[{status_style}]{status}[/{status_style}]",
             it or "",
             lt or "",
-        )
+        ]
+
+        if not no_pricing:
+            hourly_price = get_instance_price(it) if it else None
+            monthly_price = get_monthly_estimate(hourly_price)
+            row_data.append(format_price(hourly_price))
+            row_data.append(format_price(monthly_price))
+
+        table.add_row(*row_data)
 
     console.print(table)
 
