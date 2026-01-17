@@ -1,6 +1,6 @@
 # Issue 19: Function Name Shadows Builtin
 
-**Status:** Not started
+**Status:** COMPLETED
 **Priority:** Low
 **File:** `remotepy/instance.py`
 
@@ -26,7 +26,7 @@ def list_instances():
 
 ## Acceptance Criteria
 
-- [ ] Rename function to `list_instances`
-- [ ] Keep CLI command name as "list"
-- [ ] Update any internal references
-- [ ] Verify type hints work correctly
+- [x] Rename function to `list_instances`
+- [x] Keep CLI command name as "list"
+- [x] Update any internal references
+- [x] Verify type hints work correctly
