@@ -6,9 +6,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-01-17
+
+### Added
+
+- `--key` / `-k` option for `connect` command to specify SSH private key file
+- CI/CD pipelines with GitHub Actions for testing and publishing
+- Comprehensive test suite with 227+ tests and 85%+ coverage
+
 ### Changed
 
-- Comprehensive test suite improvements with factory pattern, property-based testing, and enhanced organization
+- **BREAKING**: Minimum Python version is now 3.12 (was 3.8.1)
+- Migrated from Poetry to uv package manager
+- Replaced flake8/black with Ruff for linting and formatting
+- Comprehensive test suite improvements with factory pattern and enhanced organization
+
+### Removed
+
+- Poetry lock file and configuration (replaced by uv)
+- tox.ini (testing now handled by CI/CD)
 
 ## [0.2.5] - 2025-06-25
 
