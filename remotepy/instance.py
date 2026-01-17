@@ -216,6 +216,11 @@ def connect(
     user: str = typer.Option("ubuntu", "--user", "-u", help="User to be used for ssh connection."),
     key: str = typer.Option(None, "--key", "-k", help="Path to SSH private key file."),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose mode"),
+    no_strict_host_key: bool = typer.Option(
+        False,
+        "--no-strict-host-key",
+        help="Disable strict host key checking (less secure, use StrictHostKeyChecking=no)",
+    ),
 ):
     """
     Connect to the instance with ssh
@@ -274,9 +279,12 @@ def connect(
         fg="yellow",
     )
 
+    # Use accept-new by default (secure: accepts new keys, rejects changed keys)
+    # Use no if --no-strict-host-key flag is set (legacy behavior, less secure)
+    strict_host_key_value = "no" if no_strict_host_key else "accept-new"
     arguments = [
         "-o",
-        "StrictHostKeyChecking=no",
+        f"StrictHostKeyChecking={strict_host_key_value}",
     ]
 
     # If SSH key is specified, add the -i option

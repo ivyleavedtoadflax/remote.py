@@ -436,3 +436,67 @@ def test_connect_with_key_option(mocker):
     assert "/path/to/my-key.pem" in ssh_command
     assert "ssh" in ssh_command
     assert "ubuntu@ec2-123-45-67-89.compute-1.amazonaws.com" in ssh_command
+
+
+def test_connect_uses_accept_new_by_default(mocker):
+    """Test that SSH uses StrictHostKeyChecking=accept-new by default (more secure)."""
+    mock_ec2 = mocker.patch("remotepy.utils.ec2_client")
+    mock_subprocess = mocker.patch("remotepy.instance.subprocess.run")
+
+    mock_ec2.describe_instances.return_value = {
+        "Reservations": [
+            {
+                "Instances": [
+                    {
+                        "InstanceId": "i-0123456789abcdef0",
+                        "State": {"Name": "running", "Code": 16},
+                        "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                        "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                    }
+                ]
+            }
+        ]
+    }
+    mock_ec2.describe_instance_status.return_value = {
+        "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+    }
+
+    runner.invoke(app, ["connect", "test-instance"])
+
+    mock_subprocess.assert_called_once()
+    ssh_command = mock_subprocess.call_args[0][0]
+
+    # Verify the default uses accept-new (secure option)
+    assert "StrictHostKeyChecking=accept-new" in ssh_command
+
+
+def test_connect_with_no_strict_host_key_flag(mocker):
+    """Test that --no-strict-host-key disables strict host key checking."""
+    mock_ec2 = mocker.patch("remotepy.utils.ec2_client")
+    mock_subprocess = mocker.patch("remotepy.instance.subprocess.run")
+
+    mock_ec2.describe_instances.return_value = {
+        "Reservations": [
+            {
+                "Instances": [
+                    {
+                        "InstanceId": "i-0123456789abcdef0",
+                        "State": {"Name": "running", "Code": 16},
+                        "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                        "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                    }
+                ]
+            }
+        ]
+    }
+    mock_ec2.describe_instance_status.return_value = {
+        "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+    }
+
+    runner.invoke(app, ["connect", "test-instance", "--no-strict-host-key"])
+
+    mock_subprocess.assert_called_once()
+    ssh_command = mock_subprocess.call_args[0][0]
+
+    # Verify the flag uses 'no' (legacy behavior)
+    assert "StrictHostKeyChecking=no" in ssh_command
