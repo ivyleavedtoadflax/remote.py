@@ -1,6 +1,6 @@
 # Issue 29: Compartmentalize CLI into Consistent Subcommands
 
-**Status:** Not started
+**Status:** COMPLETED
 **Priority:** Medium
 **Files:** `remotepy/__main__.py`, `remotepy/instance.py`
 

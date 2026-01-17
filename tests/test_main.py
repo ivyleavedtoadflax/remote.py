@@ -21,10 +21,9 @@ def test_main_app_imports():
     """Test that all sub-apps are properly imported and added to main app."""
     # Test that the main app structure exists
     from remotepy.__main__ import app as main_app
-    from remotepy.instance import app as instance_app
 
-    # The main app should be the same as instance app (enhanced with sub-apps)
-    assert main_app is instance_app
+    # The main app is its own Typer instance with instance commands copied to root
+    assert main_app is not None
 
     # Test that the app has commands and groups registered
     assert len(app.registered_commands) > 0
@@ -102,3 +101,31 @@ def test_default_instance_commands_work():
     assert result.exit_code == 0
     # Should see instance commands in the main help
     assert "list" in result.stdout or "List" in result.stdout
+
+
+def test_instance_subcommand_exists():
+    """Test that instance subcommand is properly registered."""
+    result = runner.invoke(app, ["instance", "--help"])
+    assert result.exit_code == 0
+    # Should show instance management help
+    assert "Manage EC2 instances" in result.stdout
+    # Should list instance commands
+    assert "list" in result.stdout.lower()
+    assert "start" in result.stdout.lower()
+    assert "stop" in result.stdout.lower()
+    assert "connect" in result.stdout.lower()
+
+
+def test_both_command_paths_show_same_commands():
+    """Test that root and instance subcommand show same instance commands."""
+    root_help = runner.invoke(app, ["--help"])
+    instance_help = runner.invoke(app, ["instance", "--help"])
+
+    assert root_help.exit_code == 0
+    assert instance_help.exit_code == 0
+
+    # Both should show instance commands
+    instance_commands = ["list", "start", "stop", "connect", "status", "launch", "terminate"]
+    for cmd in instance_commands:
+        assert cmd in root_help.stdout.lower(), f"'{cmd}' not found in root help"
+        assert cmd in instance_help.stdout.lower(), f"'{cmd}' not found in instance help"
