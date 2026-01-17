@@ -1,6 +1,6 @@
 # Issue 17: Inconsistent Output Patterns in config.py
 
-**Status:** Not started
+**Status:** COMPLETED
 **Priority:** Medium
 **File:** `remotepy/config.py`
 
@@ -19,6 +19,6 @@ Replace all `print()` calls with `typer.secho()` using appropriate colors:
 
 ## Acceptance Criteria
 
-- [ ] Replace all `print()` with `typer.secho()`
-- [ ] Use consistent color scheme matching rest of codebase
-- [ ] Update any related tests
+- [x] Replace all `print()` with `typer.secho()`
+- [x] Use consistent color scheme matching rest of codebase
+- [x] Update any related tests
