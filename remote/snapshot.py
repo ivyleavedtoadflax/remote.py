@@ -2,7 +2,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from remotepy.utils import (
+from remote.utils import (
     get_ec2_client,
     get_instance_id,
     get_instance_name,

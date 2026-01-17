@@ -5,8 +5,8 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from remotepy.settings import Settings
-from remotepy.utils import get_instance_ids, get_instance_info, get_instances
+from remote.settings import Settings
+from remote.utils import get_instance_ids, get_instance_info, get_instances
 
 app = typer.Typer()
 console = Console(force_terminal=True, width=200)

@@ -5,8 +5,8 @@ import boto3
 import typer
 from botocore.exceptions import ClientError, NoCredentialsError
 
-from remotepy.exceptions import AWSServiceError, ValidationError
-from remotepy.validation import safe_get_array_item, validate_array_index, validate_positive_integer
+from remote.exceptions import AWSServiceError, ValidationError
+from remote.validation import safe_get_array_item, validate_array_index, validate_positive_integer
 
 if TYPE_CHECKING:
     from mypy_boto3_ecs.client import ECSClient

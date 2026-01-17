@@ -3,7 +3,7 @@ import datetime
 import pytest
 from typer.testing import CliRunner
 
-from remotepy.snapshot import app
+from remote.snapshot import app
 
 runner = CliRunner()
 
@@ -31,7 +31,7 @@ def mock_snapshot_response():
 
 
 def test_create_snapshot(mocker):
-    mock_ec2 = mocker.patch("remotepy.snapshot.get_ec2_client")
+    mock_ec2 = mocker.patch("remote.snapshot.get_ec2_client")
     mock_ec2_client = mock_ec2.return_value
 
     mock_ec2_client.create_snapshot.return_value = {"SnapshotId": "snap-0123456789abcdef0"}
@@ -64,7 +64,7 @@ def test_create_snapshot(mocker):
 
 
 def test_create_snapshot_minimal_params(mocker):
-    mock_ec2 = mocker.patch("remotepy.snapshot.get_ec2_client")
+    mock_ec2 = mocker.patch("remote.snapshot.get_ec2_client")
     mock_ec2_client = mock_ec2.return_value
 
     mock_ec2_client.create_snapshot.return_value = {"SnapshotId": "snap-minimal"}
@@ -105,13 +105,13 @@ def test_create_snapshot_missing_name():
 
 
 def test_list_snapshots_with_instance_name(mocker, mock_snapshot_response):
-    mock_ec2 = mocker.patch("remotepy.snapshot.get_ec2_client")
+    mock_ec2 = mocker.patch("remote.snapshot.get_ec2_client")
     mock_ec2_client = mock_ec2.return_value
     mock_get_instance_id = mocker.patch(
-        "remotepy.snapshot.get_instance_id", return_value="i-0123456789abcdef0"
+        "remote.snapshot.get_instance_id", return_value="i-0123456789abcdef0"
     )
     mock_get_volume_ids = mocker.patch(
-        "remotepy.snapshot.get_volume_ids", return_value=["vol-0123456789abcdef0"]
+        "remote.snapshot.get_volume_ids", return_value=["vol-0123456789abcdef0"]
     )
 
     mock_ec2_client.describe_snapshots.return_value = mock_snapshot_response
@@ -133,16 +133,16 @@ def test_list_snapshots_with_instance_name(mocker, mock_snapshot_response):
 
 
 def test_list_snapshots_without_instance_name(mocker, mock_snapshot_response):
-    mock_ec2 = mocker.patch("remotepy.snapshot.get_ec2_client")
+    mock_ec2 = mocker.patch("remote.snapshot.get_ec2_client")
     mock_ec2_client = mock_ec2.return_value
     mock_get_instance_name = mocker.patch(
-        "remotepy.snapshot.get_instance_name", return_value="default-instance"
+        "remote.snapshot.get_instance_name", return_value="default-instance"
     )
     mock_get_instance_id = mocker.patch(
-        "remotepy.snapshot.get_instance_id", return_value="i-0123456789abcdef0"
+        "remote.snapshot.get_instance_id", return_value="i-0123456789abcdef0"
     )
     mock_get_volume_ids = mocker.patch(
-        "remotepy.snapshot.get_volume_ids", return_value=["vol-0123456789abcdef0"]
+        "remote.snapshot.get_volume_ids", return_value=["vol-0123456789abcdef0"]
     )
 
     mock_ec2_client.describe_snapshots.return_value = mock_snapshot_response
@@ -156,11 +156,11 @@ def test_list_snapshots_without_instance_name(mocker, mock_snapshot_response):
 
 
 def test_list_snapshots_multiple_volumes(mocker):
-    mock_ec2 = mocker.patch("remotepy.snapshot.get_ec2_client")
+    mock_ec2 = mocker.patch("remote.snapshot.get_ec2_client")
     mock_ec2_client = mock_ec2.return_value
-    mocker.patch("remotepy.snapshot.get_instance_id", return_value="i-0123456789abcdef0")
+    mocker.patch("remote.snapshot.get_instance_id", return_value="i-0123456789abcdef0")
     mocker.patch(
-        "remotepy.snapshot.get_volume_ids",
+        "remote.snapshot.get_volume_ids",
         return_value=["vol-0123456789abcdef0", "vol-0123456789abcdef1"],
     )
 
@@ -210,10 +210,10 @@ def test_list_snapshots_multiple_volumes(mocker):
 
 
 def test_list_snapshots_no_snapshots(mocker):
-    mock_ec2 = mocker.patch("remotepy.snapshot.get_ec2_client")
+    mock_ec2 = mocker.patch("remote.snapshot.get_ec2_client")
     mock_ec2_client = mock_ec2.return_value
-    mocker.patch("remotepy.snapshot.get_instance_id", return_value="i-0123456789abcdef0")
-    mocker.patch("remotepy.snapshot.get_volume_ids", return_value=["vol-0123456789abcdef0"])
+    mocker.patch("remote.snapshot.get_instance_id", return_value="i-0123456789abcdef0")
+    mocker.patch("remote.snapshot.get_volume_ids", return_value=["vol-0123456789abcdef0"])
 
     mock_ec2_client.describe_snapshots.return_value = {"Snapshots": []}
 
@@ -228,13 +228,13 @@ def test_list_snapshots_no_snapshots(mocker):
 
 
 def test_list_command_alias_ls(mocker, mock_snapshot_response):
-    mock_ec2 = mocker.patch("remotepy.snapshot.get_ec2_client")
+    mock_ec2 = mocker.patch("remote.snapshot.get_ec2_client")
     mock_ec2_client = mock_ec2.return_value
     mock_get_instance_id = mocker.patch(
-        "remotepy.snapshot.get_instance_id", return_value="i-0123456789abcdef0"
+        "remote.snapshot.get_instance_id", return_value="i-0123456789abcdef0"
     )
     mock_get_volume_ids = mocker.patch(
-        "remotepy.snapshot.get_volume_ids", return_value=["vol-0123456789abcdef0"]
+        "remote.snapshot.get_volume_ids", return_value=["vol-0123456789abcdef0"]
     )
 
     mock_ec2_client.describe_snapshots.return_value = mock_snapshot_response

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 from botocore.exceptions import ClientError, NoCredentialsError
 
-from remotepy.pricing import (
+from remote.pricing import (
     HOURS_PER_MONTH,
     REGION_TO_LOCATION,
     clear_price_cache,
@@ -23,7 +23,7 @@ class TestGetPricingClient:
 
     def test_should_create_pricing_client_in_us_east_1(self, mocker):
         """Should create pricing client in us-east-1 region."""
-        mock_boto3 = mocker.patch("remotepy.pricing.boto3")
+        mock_boto3 = mocker.patch("remote.pricing.boto3")
 
         # Clear cache to ensure fresh client creation
         get_pricing_client.cache_clear()
@@ -34,7 +34,7 @@ class TestGetPricingClient:
 
     def test_should_cache_pricing_client(self, mocker):
         """Should return cached client on subsequent calls."""
-        mock_boto3 = mocker.patch("remotepy.pricing.boto3")
+        mock_boto3 = mocker.patch("remote.pricing.boto3")
         mock_client = MagicMock()
         mock_boto3.client.return_value = mock_client
 
@@ -56,7 +56,7 @@ class TestGetCurrentRegion:
         """Should return the region from the boto3 session."""
         mock_session = MagicMock()
         mock_session.region_name = "eu-west-1"
-        mocker.patch("remotepy.pricing.boto3.session.Session", return_value=mock_session)
+        mocker.patch("remote.pricing.boto3.session.Session", return_value=mock_session)
 
         result = get_current_region()
 
@@ -66,7 +66,7 @@ class TestGetCurrentRegion:
         """Should return us-east-1 when session has no region."""
         mock_session = MagicMock()
         mock_session.region_name = None
-        mocker.patch("remotepy.pricing.boto3.session.Session", return_value=mock_session)
+        mocker.patch("remote.pricing.boto3.session.Session", return_value=mock_session)
 
         result = get_current_region()
 
@@ -93,7 +93,7 @@ class TestGetInstancePrice:
 
         mock_client = MagicMock()
         mock_client.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
-        mocker.patch("remotepy.pricing.get_pricing_client", return_value=mock_client)
+        mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
 
         result = get_instance_price("t3.micro", "us-east-1")
 
@@ -110,7 +110,7 @@ class TestGetInstancePrice:
         """Should return None when no pricing data is found."""
         mock_client = MagicMock()
         mock_client.get_products.return_value = {"PriceList": []}
-        mocker.patch("remotepy.pricing.get_pricing_client", return_value=mock_client)
+        mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
 
         result = get_instance_price("invalid-type", "us-east-1")
 
@@ -122,7 +122,7 @@ class TestGetInstancePrice:
         mock_client.get_products.side_effect = ClientError(
             {"Error": {"Code": "ServiceException", "Message": "Error"}}, "GetProducts"
         )
-        mocker.patch("remotepy.pricing.get_pricing_client", return_value=mock_client)
+        mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
 
         result = get_instance_price("t3.micro", "us-east-1")
 
@@ -132,7 +132,7 @@ class TestGetInstancePrice:
         """Should return None when AWS credentials are missing."""
         mock_client = MagicMock()
         mock_client.get_products.side_effect = NoCredentialsError()
-        mocker.patch("remotepy.pricing.get_pricing_client", return_value=mock_client)
+        mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
 
         result = get_instance_price("t3.micro", "us-east-1")
 
@@ -142,7 +142,7 @@ class TestGetInstancePrice:
         """Should return None when price data is malformed."""
         mock_client = MagicMock()
         mock_client.get_products.return_value = {"PriceList": ["not-valid-json"]}
-        mocker.patch("remotepy.pricing.get_pricing_client", return_value=mock_client)
+        mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
 
         result = get_instance_price("t3.micro", "us-east-1")
 
@@ -153,7 +153,7 @@ class TestGetInstancePrice:
         price_data = {"terms": {}}
         mock_client = MagicMock()
         mock_client.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
-        mocker.patch("remotepy.pricing.get_pricing_client", return_value=mock_client)
+        mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
 
         result = get_instance_price("t3.micro", "us-east-1")
 
@@ -163,7 +163,7 @@ class TestGetInstancePrice:
         """Should use current session region when region is not specified."""
         mock_session = MagicMock()
         mock_session.region_name = "eu-west-1"
-        mocker.patch("remotepy.pricing.boto3.session.Session", return_value=mock_session)
+        mocker.patch("remote.pricing.boto3.session.Session", return_value=mock_session)
 
         price_data = {
             "terms": {
@@ -174,7 +174,7 @@ class TestGetInstancePrice:
         }
         mock_client = MagicMock()
         mock_client.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
-        mocker.patch("remotepy.pricing.get_pricing_client", return_value=mock_client)
+        mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
 
         result = get_instance_price("t3.micro")
 
@@ -196,7 +196,7 @@ class TestGetInstancePrice:
         }
         mock_client = MagicMock()
         mock_client.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
-        mocker.patch("remotepy.pricing.get_pricing_client", return_value=mock_client)
+        mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
 
         # Call twice with same parameters
         result1 = get_instance_price("t3.micro", "us-east-1")
@@ -277,7 +277,7 @@ class TestGetInstancePricingInfo:
         }
         mock_client = MagicMock()
         mock_client.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
-        mocker.patch("remotepy.pricing.get_pricing_client", return_value=mock_client)
+        mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
 
         result = get_instance_pricing_info("t3.micro", "us-east-1")
 
@@ -290,7 +290,7 @@ class TestGetInstancePricingInfo:
         """Should return None values when pricing is unavailable."""
         mock_client = MagicMock()
         mock_client.get_products.return_value = {"PriceList": []}
-        mocker.patch("remotepy.pricing.get_pricing_client", return_value=mock_client)
+        mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
 
         result = get_instance_pricing_info("unknown-type", "us-east-1")
 
@@ -314,7 +314,7 @@ class TestClearPriceCache:
         }
         mock_client = MagicMock()
         mock_client.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
-        mocker.patch("remotepy.pricing.get_pricing_client", return_value=mock_client)
+        mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
 
         # First call
         get_instance_price("t3.micro", "us-east-1")

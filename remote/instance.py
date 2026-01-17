@@ -10,15 +10,15 @@ from botocore.exceptions import ClientError, NoCredentialsError
 from rich.console import Console
 from rich.table import Table
 
-from remotepy.config import config_manager
-from remotepy.exceptions import (
+from remote.config import config_manager
+from remote.exceptions import (
     AWSServiceError,
     InstanceNotFoundError,
     ResourceNotFoundError,
     ValidationError,
 )
-from remotepy.pricing import format_price, get_instance_price, get_monthly_estimate
-from remotepy.utils import (
+from remote.pricing import format_price, get_instance_price, get_monthly_estimate
+from remote.utils import (
     get_ec2_client,
     get_instance_dns,
     get_instance_id,
@@ -32,7 +32,7 @@ from remotepy.utils import (
     get_launch_templates,
     is_instance_running,
 )
-from remotepy.validation import safe_get_array_item, safe_get_nested_value, validate_array_index
+from remote.validation import safe_get_array_item, safe_get_nested_value, validate_array_index
 
 app = typer.Typer()
 console = Console(force_terminal=True, width=200)
