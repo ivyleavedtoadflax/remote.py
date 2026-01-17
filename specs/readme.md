@@ -2,15 +2,20 @@
 
 ## Instructions
 
+0. Checkout main
 1. Pick an issue from the recommended order below
 2. Read the linked spec file for details
-3. Implement the fix
-4. Run tests: `uv run pytest`
-5. Run type check: `uv run mypy remotepy/`
-6. Run linter: `uv run ruff check . && uv run ruff format .`
-7. Commit with descriptive message
-8. Push to branch
-9. Update spec file status to COMPLETED
+3. Checkout a branch a branch
+4. Implement the fix
+5. Run tests: `uv run pytest`
+6. Run type check: `uv run mypy remotepy/`
+7. Run linter: `uv run ruff check . && uv run ruff format .`
+8. Update spec file status to COMPLETED
+9. Commit with descriptive message
+10. Push to branch
+11. Wait for CI/CD to pass
+12. Merge to main
+13. Quit
 
 ## Recommended Order
 
