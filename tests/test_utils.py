@@ -212,6 +212,47 @@ def test_get_instance_info_with_no_tags():
     assert launch_times == []
 
 
+def test_get_instance_info_nameless_instance_does_not_block_others():
+    """Test that nameless instances don't block finding valid instances in the same reservation.
+
+    This is a regression test for the bug where a 'break' was used instead of 'continue',
+    causing the loop to exit early when encountering an instance without a Name tag.
+    """
+    instances = [
+        {
+            "Instances": [
+                {
+                    # First instance has no Name tag
+                    "InstanceId": "i-nameless",
+                    "InstanceType": "t2.micro",
+                    "State": {"Name": "running"},
+                    "LaunchTime": datetime.datetime.now(),
+                    "PublicDnsName": "nameless.example.com",
+                    "Tags": [],  # Empty tags - no Name
+                },
+                {
+                    # Second instance has a Name tag - should still be found
+                    "InstanceId": "i-named",
+                    "InstanceType": "t2.small",
+                    "State": {"Name": "running"},
+                    "LaunchTime": datetime.datetime.now(),
+                    "PublicDnsName": "named.example.com",
+                    "Tags": [{"Key": "Name", "Value": "my-named-instance"}],
+                },
+            ]
+        }
+    ]
+
+    names, public_dnss, statuses, instance_types, launch_times = get_instance_info(instances)
+
+    # The named instance should be found even though it comes after a nameless one
+    assert names == ["my-named-instance"]
+    assert public_dnss == ["named.example.com"]
+    assert statuses == ["running"]
+    assert instance_types == ["t2.small"]
+    assert len(launch_times) == 1
+
+
 def test_get_instance_ids(mock_ec2_instances):
     instances = mock_ec2_instances["Reservations"]
 

@@ -1,6 +1,6 @@
 # Issue 13: Logic Bug in get_instance_by_name()
 
-**Status:** Not started
+**Status:** COMPLETED
 **Priority:** High
 **File:** `remotepy/utils.py:333`
 
@@ -19,5 +19,5 @@ Change `break` to `continue` so the loop continues checking remaining instances.
 
 ## Acceptance Criteria
 
-- [ ] Change `break` to `continue` on line 333
-- [ ] Add test case verifying terminated instances don't block finding valid instances
+- [x] Change `break` to `continue` (was at line 347 in `get_instance_info()`)
+- [x] Add test case verifying nameless instances don't block finding valid instances

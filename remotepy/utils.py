@@ -341,10 +341,8 @@ def get_instance_info(
                 tags = {k["Key"]: k["Value"] for k in instance.get("Tags", [])}
 
                 if not tags or "Name" not in tags:
-                    if drop_nameless:
-                        continue
-                    else:
-                        break
+                    # Skip instances without a Name tag and continue to next instance
+                    continue
 
                 instance_name = tags["Name"]
 
