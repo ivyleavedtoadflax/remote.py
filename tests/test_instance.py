@@ -391,3 +391,50 @@ def test_list_launch_templates_command(mocker):
     mock_ec2_client.describe_launch_templates.assert_called_once()
     assert "test-template-1" in result.stdout
     assert "lt-0123456789abcdef0" in result.stdout
+
+
+def test_connect_with_key_option(mocker):
+    """Test that --key option adds -i flag to SSH command."""
+    # Mock the AWS EC2 client in utils
+    mock_ec2 = mocker.patch("remotepy.utils.ec2_client")
+
+    # Mock subprocess.run to capture the SSH command
+    mock_subprocess = mocker.patch("remotepy.instance.subprocess.run")
+
+    # Mock describe_instances for get_instance_id
+    mock_ec2.describe_instances.return_value = {
+        "Reservations": [
+            {
+                "Instances": [
+                    {
+                        "InstanceId": "i-0123456789abcdef0",
+                        "State": {"Name": "running", "Code": 16},
+                        "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                        "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                    }
+                ]
+            }
+        ]
+    }
+
+    # Mock describe_instance_status for is_instance_running
+    mock_ec2.describe_instance_status.return_value = {
+        "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+    }
+
+    # Call connect with --key option
+    result = runner.invoke(
+        app, ["connect", "test-instance", "--key", "/path/to/my-key.pem"]
+    )
+
+    # Verify subprocess.run was called
+    mock_subprocess.assert_called_once()
+
+    # Get the actual SSH command that was called
+    ssh_command = mock_subprocess.call_args[0][0]
+
+    # Verify the key option is included
+    assert "-i" in ssh_command
+    assert "/path/to/my-key.pem" in ssh_command
+    assert "ssh" in ssh_command
+    assert "ubuntu@ec2-123-45-67-89.compute-1.amazonaws.com" in ssh_command
