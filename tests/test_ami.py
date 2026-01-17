@@ -357,3 +357,39 @@ def test_launch_validation_error_accessing_results(mocker):
 
     assert result.exit_code == 1
     assert "Error accessing launch result: Validation error: Array access failed" in result.stdout
+
+
+def test_launch_invalid_template_number(mocker, mock_launch_template_response):
+    """Test launch with invalid template number selection (out of bounds)."""
+    mocker.patch("remotepy.ami.get_ec2_client")
+    mocker.patch("remotepy.ami.list_launch_templates", return_value=mock_launch_template_response)
+
+    # User enters invalid template number (3, but only 2 templates exist)
+    result = runner.invoke(app, ["launch"], input="3\n")
+
+    assert result.exit_code == 1
+    assert "Error:" in result.stdout
+
+
+def test_launch_zero_template_number(mocker, mock_launch_template_response):
+    """Test launch with zero as template number selection."""
+    mocker.patch("remotepy.ami.get_ec2_client")
+    mocker.patch("remotepy.ami.list_launch_templates", return_value=mock_launch_template_response)
+
+    # User enters 0 (invalid since templates are 1-indexed)
+    result = runner.invoke(app, ["launch"], input="0\n")
+
+    assert result.exit_code == 1
+    assert "Error:" in result.stdout
+
+
+def test_launch_negative_template_number(mocker, mock_launch_template_response):
+    """Test launch with negative template number selection."""
+    mocker.patch("remotepy.ami.get_ec2_client")
+    mocker.patch("remotepy.ami.list_launch_templates", return_value=mock_launch_template_response)
+
+    # User enters negative number
+    result = runner.invoke(app, ["launch"], input="-1\n")
+
+    assert result.exit_code == 1
+    assert "Error:" in result.stdout

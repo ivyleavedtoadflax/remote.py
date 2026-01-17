@@ -15,7 +15,7 @@ from remotepy.utils import (
     get_instance_name,
     get_launch_template_id,
 )
-from remotepy.validation import safe_get_array_item
+from remotepy.validation import safe_get_array_item, validate_array_index
 
 app = typer.Typer()
 
@@ -183,7 +183,15 @@ def launch(
         launch_templates = list_launch_templates()["LaunchTemplates"]
         typer.secho("Select a launch template by number", fg=typer.colors.YELLOW)
         launch_template_number = typer.prompt("Launch template", type=str)
-        selected_template = launch_templates[int(launch_template_number) - 1]
+        # Validate user input and safely access array
+        try:
+            template_index = validate_array_index(
+                launch_template_number, len(launch_templates), "launch templates"
+            )
+            selected_template = launch_templates[template_index]
+        except ValidationError as e:
+            typer.secho(f"Error: {e}", fg=typer.colors.RED)
+            raise typer.Exit(1)
         launch_template_name = str(selected_template["LaunchTemplateName"])
         launch_template_id = str(selected_template["LaunchTemplateId"])
 
