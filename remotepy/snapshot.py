@@ -13,9 +13,9 @@ app = typer.Typer()
 
 @app.command()
 def create(
-    volume_id: str = typer.Option(None, help="Volume ID"),
-    name: str = typer.Option(None, help="Snapshot name"),
-    description: str = typer.Option(None, help="Description"),
+    volume_id: str = typer.Option(..., "--volume-id", "-v", help="Volume ID (required)"),
+    name: str = typer.Option(..., "--name", "-n", help="Snapshot name (required)"),
+    description: str = typer.Option("", "--description", "-d", help="Description"),
 ):
     """
     Snapshot a volume
