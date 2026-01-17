@@ -1,0 +1,32 @@
+default_stages: [pre-push]
+
+repos:
+  - repo: local
+    hooks:
+      # Auto-fix linting issues
+      - id: ruff-check-fix
+        name: ruff-check-fix
+        entry: uv run ruff check --fix --quiet
+        language: system
+        pass_filenames: true
+        types: [python]
+        stages: [pre-push]
+
+      # Auto-format code
+      - id: ruff-format
+        name: ruff-format
+        entry: uv run ruff format --quiet
+        language: system
+        pass_filenames: true
+        types: [python]
+        stages: [pre-push]
+
+      # Run tests (quiet mode - CI has full output)
+      - id: pytest
+        name: pytest
+        entry: uv run pytest -q --tb=line
+        language: system
+        pass_filenames: false
+        types: [python]
+        stages: [pre-push]
+

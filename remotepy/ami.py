@@ -4,13 +4,15 @@ import string
 import typer
 import wasabi
 
-from remotepy.config import cfg
+from remotepy.exceptions import ValidationError
 from remotepy.utils import (
     ec2_client,
     get_account_id,
     get_instance_id,
     get_instance_name,
+    get_launch_template_id,
 )
+from remotepy.validation import safe_get_array_item
 
 app = typer.Typer()
 
@@ -48,7 +50,7 @@ def create(
     """
 
     if not instance_name:
-        instance_name = get_instance_name(cfg)
+        instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
 
     ami = ec2_client.create_image(
@@ -97,31 +99,6 @@ def list():
     # Format table using wasabi
     formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
     typer.secho(formatted, fg=typer.colors.YELLOW)
-
-
-def get_launch_template_id(launch_template_name: str):
-    """
-    Get the launch template ID corresponding to a given launch template name.
-
-    This function queries AWS EC2 to get details of all launch templates with the specified name.
-    It then retrieves and returns the ID of the first matching launch template.
-
-    Args:
-        launch_template_name (str): The name of the launch template.
-
-    Returns:
-        str: The ID of the launch template.
-
-    Example usage:
-        template_id = get_launch_template_id("my-template-name")
-    """
-    launch_templates = ec2_client.describe_launch_templates(
-        Filters=[{"Name": "tag:Name", "Values": [launch_template_name]}]
-    )
-
-    launch_template_id = launch_templates["LaunchTemplates"][0]["LaunchTemplateId"]
-
-    return launch_template_id
 
 
 @app.command()
@@ -189,7 +166,6 @@ def launch(
     """
 
     # if no launch template is specified, list all the launch templates
-
     if not launch_template:
         typer.secho("Please specify a launch template", fg=typer.colors.RED)
         typer.secho("Available launch templates:", fg=typer.colors.YELLOW)
@@ -200,23 +176,20 @@ def launch(
         launch_template_name = launch_template["LaunchTemplateName"]
         launch_template_id = launch_template["LaunchTemplateId"]
 
-        typer.secho(
-            f"Launch template {launch_template_name} selected", fg=typer.colors.YELLOW
-        )
+        typer.secho(f"Launch template {launch_template_name} selected", fg=typer.colors.YELLOW)
         typer.secho(
             f"Defaulting to latest version: {launch_template['LatestVersionNumber']}",
             fg=typer.colors.YELLOW,
         )
-        typer.secho(
-            f"Launching instance based on launch template {launch_template_name}"
-        )
+        typer.secho(f"Launching instance based on launch template {launch_template_name}")
+    else:
+        # launch template name was provided, get the ID and set variables
+        launch_template_name = launch_template
+        launch_template_id = get_launch_template_id(launch_template)
 
     # if no name is specified, ask the user for the name
-
     if not name:
-        random_string = "".join(
-            random.choices(string.ascii_letters + string.digits, k=6)
-        )
+        random_string = "".join(random.choices(string.ascii_letters + string.digits, k=6))
         name_suggestion = launch_template_name + "-" + random_string
         name = typer.prompt(
             "Please enter a name for the instance", type=str, default=name_suggestion
@@ -237,10 +210,25 @@ def launch(
         ],
     )
 
-    typer.secho(
-        f"Instance {instance['Instances'][0]['InstanceId']} with name '{name}' launched",
-        fg=typer.colors.GREEN,
-    )
+    # Safely access the launched instance ID
+    try:
+        instances = instance.get("Instances", [])
+        if not instances:
+            typer.secho(
+                "Warning: No instance information returned from launch", fg=typer.colors.YELLOW
+            )
+            return
+
+        launched_instance = safe_get_array_item(instances, 0, "launched instances")
+        instance_id = launched_instance.get("InstanceId", "unknown")
+
+        typer.secho(
+            f"Instance {instance_id} with name '{name}' launched",
+            fg=typer.colors.GREEN,
+        )
+    except ValidationError as e:
+        typer.secho(f"Error accessing launch result: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
 
 
 if __name__ == "__main__":
