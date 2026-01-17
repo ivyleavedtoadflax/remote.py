@@ -1,6 +1,6 @@
 # Issue 21: Replace wasabi with rich
 
-**Status:** Not started
+**Status:** COMPLETED
 **Priority:** Medium
 **Files:** Multiple files using wasabi
 
@@ -64,9 +64,9 @@ console.print(table)
 
 ## Acceptance Criteria
 
-- [ ] Remove wasabi dependency from pyproject.toml
-- [ ] Add rich dependency
-- [ ] Update all table formatting to use rich.Table
-- [ ] Add status color coding (running=green, stopped=red, etc.)
-- [ ] Ensure all existing tests pass
-- [ ] Update any tests that check table output format
+- [x] Remove wasabi dependency from pyproject.toml
+- [x] Add rich dependency
+- [x] Update all table formatting to use rich.Table
+- [x] Add status color coding (running=green, stopped=red, etc.)
+- [x] Ensure all existing tests pass
+- [x] Update any tests that check table output format
