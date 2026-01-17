@@ -3,28 +3,28 @@ default_stages: [pre-push]
 repos:
   - repo: local
     hooks:
-      # Auto-fix linting issues using the exact ruff version from uv environment
+      # Auto-fix linting issues
       - id: ruff-check-fix
         name: ruff-check-fix
-        entry: uv run ruff check . --fix
+        entry: uv run ruff check . --fix --quiet
         language: system
         pass_filenames: false
         always_run: true
         stages: [pre-push]
 
-      # Auto-format code using the exact ruff version from uv environment  
+      # Auto-format code
       - id: ruff-format
         name: ruff-format
-        entry: uv run ruff format .
+        entry: uv run ruff format . --quiet
         language: system
         pass_filenames: false
         always_run: true
         stages: [pre-push]
 
-      # Run tests to ensure everything works after auto-fixes
+      # Run tests (quiet mode - CI has full output)
       - id: pytest
         name: pytest
-        entry: uv run pytest -v --tb=short --cov=remotepy --cov-report=term-missing
+        entry: uv run pytest -q --tb=line
         language: system
         pass_filenames: false
         always_run: true
