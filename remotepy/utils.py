@@ -638,6 +638,81 @@ def get_snapshot_status(snapshot_id: str) -> str:
         raise AWSServiceError("EC2", "describe_snapshots", error_code, error_message)
 
 
+def get_launch_templates(name_filter: str | None = None) -> list[dict[str, Any]]:
+    """Get launch templates, optionally filtered by name pattern.
+
+    Args:
+        name_filter: Optional string to filter templates by name (case-insensitive)
+
+    Returns:
+        List of launch template dictionaries
+
+    Raises:
+        AWSServiceError: If AWS API call fails
+    """
+    try:
+        response = get_ec2_client().describe_launch_templates()
+        validate_aws_response_structure(response, ["LaunchTemplates"], "describe_launch_templates")
+
+        templates = response["LaunchTemplates"]
+
+        if name_filter:
+            templates = [
+                t for t in templates if name_filter.lower() in t["LaunchTemplateName"].lower()
+            ]
+
+        return cast(list[dict[str, Any]], templates)
+
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        error_message = e.response["Error"]["Message"]
+        raise AWSServiceError("EC2", "describe_launch_templates", error_code, error_message)
+    except NoCredentialsError:
+        raise AWSServiceError(
+            "EC2",
+            "describe_launch_templates",
+            "NoCredentials",
+            "AWS credentials not found or invalid",
+        )
+
+
+def get_launch_template_versions(template_name: str) -> list[dict[str, Any]]:
+    """Get all versions of a launch template.
+
+    Args:
+        template_name: Name of the launch template
+
+    Returns:
+        List of launch template version dictionaries
+
+    Raises:
+        ResourceNotFoundError: If template not found
+        AWSServiceError: If AWS API call fails
+    """
+    try:
+        response = get_ec2_client().describe_launch_template_versions(
+            LaunchTemplateName=template_name
+        )
+        validate_aws_response_structure(
+            response, ["LaunchTemplateVersions"], "describe_launch_template_versions"
+        )
+        return cast(list[dict[str, Any]], response["LaunchTemplateVersions"])
+
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        if error_code == "InvalidLaunchTemplateName.NotFoundException":
+            raise ResourceNotFoundError("Launch Template", template_name)
+        error_message = e.response["Error"]["Message"]
+        raise AWSServiceError("EC2", "describe_launch_template_versions", error_code, error_message)
+    except NoCredentialsError:
+        raise AWSServiceError(
+            "EC2",
+            "describe_launch_template_versions",
+            "NoCredentials",
+            "AWS credentials not found or invalid",
+        )
+
+
 def get_launch_template_id(launch_template_name: str) -> str:
     """Get the launch template ID corresponding to a given launch template name.
 

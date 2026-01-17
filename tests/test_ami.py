@@ -183,17 +183,14 @@ def test_get_launch_template_id(mocker):
 
 
 def test_list_launch_templates(mocker, mock_launch_template_response):
-    mock_ec2_client = mocker.patch("remotepy.ami.get_ec2_client")
-
-    mock_ec2_client.return_value.describe_launch_templates.return_value = (
-        mock_launch_template_response
+    mocker.patch(
+        "remotepy.ami.get_launch_templates",
+        return_value=mock_launch_template_response["LaunchTemplates"],
     )
 
-    result = runner.invoke(app, ["list-launch-templates"])
+    result = runner.invoke(app, ["list-templates"])
 
     assert result.exit_code == 0
-    mock_ec2_client.return_value.describe_launch_templates.assert_called_once()
-
     assert "lt-0123456789abcdef0" in result.stdout
     assert "lt-0123456789abcdef1" in result.stdout
     assert "test-template-1" in result.stdout
@@ -201,16 +198,12 @@ def test_list_launch_templates(mocker, mock_launch_template_response):
 
 
 def test_list_launch_templates_empty(mocker):
-    mock_ec2_client = mocker.patch("remotepy.ami.get_ec2_client")
+    mocker.patch("remotepy.ami.get_launch_templates", return_value=[])
 
-    mock_ec2_client.return_value.describe_launch_templates.return_value = {"LaunchTemplates": []}
-
-    result = runner.invoke(app, ["list-launch-templates"])
+    result = runner.invoke(app, ["list-templates"])
 
     assert result.exit_code == 0
-    # Should show headers but no template data
-    assert "LaunchTemplateId" in result.stdout
-    assert "LaunchTemplateName" in result.stdout
+    assert "No launch templates found" in result.stdout
 
 
 def test_launch_with_template_name(mocker):
@@ -277,9 +270,11 @@ def test_launch_with_default_version(mocker):
 
 def test_launch_without_template_interactive(mocker, mock_launch_template_response):
     mock_ec2_client = mocker.patch("remotepy.ami.get_ec2_client")
-    mock_list_launch_templates = mocker.patch(
-        "remotepy.ami.list_launch_templates", return_value=mock_launch_template_response
+    mock_get_templates = mocker.patch(
+        "remotepy.ami.get_launch_templates",
+        return_value=mock_launch_template_response["LaunchTemplates"],
     )
+    mocker.patch("remotepy.ami.config_manager.get_value", return_value=None)
 
     mock_ec2_client.return_value.run_instances.return_value = {
         "Instances": [{"InstanceId": "i-interactive"}]
@@ -289,7 +284,7 @@ def test_launch_without_template_interactive(mocker, mock_launch_template_respon
     result = runner.invoke(app, ["launch"], input="1\ntest-instance-abc123\n")
 
     assert result.exit_code == 0
-    mock_list_launch_templates.assert_called_once()
+    mock_get_templates.assert_called_once()
     mock_ec2_client.return_value.run_instances.assert_called_once()
 
     assert "Please specify a launch template" in result.stdout
@@ -362,7 +357,11 @@ def test_launch_validation_error_accessing_results(mocker):
 def test_launch_invalid_template_number(mocker, mock_launch_template_response):
     """Test launch with invalid template number selection (out of bounds)."""
     mocker.patch("remotepy.ami.get_ec2_client")
-    mocker.patch("remotepy.ami.list_launch_templates", return_value=mock_launch_template_response)
+    mocker.patch(
+        "remotepy.ami.get_launch_templates",
+        return_value=mock_launch_template_response["LaunchTemplates"],
+    )
+    mocker.patch("remotepy.ami.config_manager.get_value", return_value=None)
 
     # User enters invalid template number (3, but only 2 templates exist)
     result = runner.invoke(app, ["launch"], input="3\n")
@@ -374,7 +373,11 @@ def test_launch_invalid_template_number(mocker, mock_launch_template_response):
 def test_launch_zero_template_number(mocker, mock_launch_template_response):
     """Test launch with zero as template number selection."""
     mocker.patch("remotepy.ami.get_ec2_client")
-    mocker.patch("remotepy.ami.list_launch_templates", return_value=mock_launch_template_response)
+    mocker.patch(
+        "remotepy.ami.get_launch_templates",
+        return_value=mock_launch_template_response["LaunchTemplates"],
+    )
+    mocker.patch("remotepy.ami.config_manager.get_value", return_value=None)
 
     # User enters 0 (invalid since templates are 1-indexed)
     result = runner.invoke(app, ["launch"], input="0\n")
@@ -386,7 +389,11 @@ def test_launch_zero_template_number(mocker, mock_launch_template_response):
 def test_launch_negative_template_number(mocker, mock_launch_template_response):
     """Test launch with negative template number selection."""
     mocker.patch("remotepy.ami.get_ec2_client")
-    mocker.patch("remotepy.ami.list_launch_templates", return_value=mock_launch_template_response)
+    mocker.patch(
+        "remotepy.ami.get_launch_templates",
+        return_value=mock_launch_template_response["LaunchTemplates"],
+    )
+    mocker.patch("remotepy.ami.config_manager.get_value", return_value=None)
 
     # User enters negative number
     result = runner.invoke(app, ["launch"], input="-1\n")

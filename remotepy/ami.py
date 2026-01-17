@@ -6,13 +6,16 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from remotepy.exceptions import ValidationError
+from remotepy.config import config_manager
+from remotepy.exceptions import ResourceNotFoundError, ValidationError
 from remotepy.utils import (
     get_account_id,
     get_ec2_client,
     get_instance_id,
     get_instance_name,
     get_launch_template_id,
+    get_launch_template_versions,
+    get_launch_templates,
 )
 from remotepy.validation import safe_get_array_item, validate_array_index
 
@@ -90,33 +93,72 @@ def list_amis() -> None:
     console.print(table)
 
 
-@app.command()
-def list_launch_templates() -> dict[str, Any]:
+@app.command("list-templates")
+def list_launch_templates(
+    filter: str | None = typer.Option(None, "-f", "--filter", help="Filter by name"),
+    details: bool = typer.Option(False, "-d", "--details", help="Show template details"),
+) -> list[dict[str, Any]]:
     """
     List all available EC2 launch templates.
 
     Displays template ID, name, and latest version number.
+    Use --filter to search templates by name pattern.
+    Use --details to show additional template information.
+
+    Examples:
+        remote ami list-templates                   # List all templates
+        remote ami list-templates -f web            # Filter by 'web' in name
+        remote ami list-templates -d                # Show details
     """
-    launch_templates = get_ec2_client().describe_launch_templates()
+    templates = get_launch_templates(name_filter=filter)
 
-    # Format table using rich
-    table = Table(title="Launch Templates")
-    table.add_column("Number", justify="right")
-    table.add_column("LaunchTemplateId", style="green")
-    table.add_column("LaunchTemplateName", style="cyan")
-    table.add_column("Version", justify="right")
+    if not templates:
+        typer.secho("No launch templates found", fg=typer.colors.YELLOW)
+        return []
 
-    for i, launch_template in enumerate(launch_templates["LaunchTemplates"], 1):
-        table.add_row(
-            str(i),
-            launch_template["LaunchTemplateId"],
-            launch_template["LaunchTemplateName"],
-            str(launch_template["LatestVersionNumber"]),
-        )
+    if details:
+        # Show detailed view with version info
+        for template in templates:
+            console.print()
+            console.print(
+                f"[bold cyan]{template['LaunchTemplateName']}[/bold cyan] ({template['LaunchTemplateId']})"
+            )
+            console.print(f"  Latest Version: {template['LatestVersionNumber']}")
+            console.print(f"  Created: {template.get('CreateTime', 'N/A')}")
 
-    console.print(table)
+            # Get latest version details
+            try:
+                versions = get_launch_template_versions(template["LaunchTemplateName"])
+                if versions:
+                    latest = versions[0]
+                    data = latest.get("LaunchTemplateData", {})
+                    console.print(f"  Instance Type: {data.get('InstanceType', 'N/A')}")
+                    console.print(f"  AMI: {data.get('ImageId', 'N/A')}")
+                    console.print(f"  Key Pair: {data.get('KeyName', 'N/A')}")
+                    security_groups = data.get("SecurityGroupIds", [])
+                    if security_groups:
+                        console.print(f"  Security Groups: {', '.join(security_groups)}")
+            except (ResourceNotFoundError, Exception):
+                pass
+    else:
+        # Standard table view
+        table = Table(title="Launch Templates")
+        table.add_column("Number", justify="right")
+        table.add_column("LaunchTemplateId", style="green")
+        table.add_column("LaunchTemplateName", style="cyan")
+        table.add_column("Version", justify="right")
 
-    return dict(launch_templates)
+        for i, template in enumerate(templates, 1):
+            table.add_row(
+                str(i),
+                template["LaunchTemplateId"],
+                template["LaunchTemplateName"],
+                str(template["LatestVersionNumber"]),
+            )
+
+        console.print(table)
+
+    return templates
 
 
 @app.command()
@@ -128,11 +170,12 @@ def launch(
     """
     Launch a new EC2 instance from a launch template.
 
-    If no launch template is provided, lists available templates for selection.
+    Uses default template from config if not specified.
+    If no launch template is configured, lists available templates for selection.
     If no name is provided, suggests a name based on the template name.
 
     Examples:
-        remote ami launch                                    # Interactive selection
+        remote ami launch                                    # Use default or interactive
         remote ami launch --launch-template my-template      # Use specific template
         remote ami launch --name my-server --launch-template my-template
     """
@@ -141,19 +184,48 @@ def launch(
     launch_template_name: str = ""
     launch_template_id: str = ""
 
+    # Check for default template from config if not specified
+    if not launch_template:
+        default_template = config_manager.get_value("default_launch_template")
+        if default_template:
+            typer.secho(f"Using default template: {default_template}", fg=typer.colors.YELLOW)
+            launch_template = default_template
+
     # if no launch template is specified, list all the launch templates
     if not launch_template:
         typer.secho("Please specify a launch template", fg=typer.colors.RED)
         typer.secho("Available launch templates:", fg=typer.colors.YELLOW)
-        launch_templates = list_launch_templates()["LaunchTemplates"]
+        templates = get_launch_templates()
+
+        if not templates:
+            typer.secho("No launch templates found", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        # Display templates
+        table = Table(title="Launch Templates")
+        table.add_column("Number", justify="right")
+        table.add_column("LaunchTemplateId", style="green")
+        table.add_column("LaunchTemplateName", style="cyan")
+        table.add_column("Version", justify="right")
+
+        for i, template in enumerate(templates, 1):
+            table.add_row(
+                str(i),
+                template["LaunchTemplateId"],
+                template["LaunchTemplateName"],
+                str(template["LatestVersionNumber"]),
+            )
+
+        console.print(table)
+
         typer.secho("Select a launch template by number", fg=typer.colors.YELLOW)
         launch_template_number = typer.prompt("Launch template", type=str)
         # Validate user input and safely access array
         try:
             template_index = validate_array_index(
-                launch_template_number, len(launch_templates), "launch templates"
+                launch_template_number, len(templates), "launch templates"
             )
-            selected_template = launch_templates[template_index]
+            selected_template = templates[template_index]
         except ValidationError as e:
             typer.secho(f"Error: {e}", fg=typer.colors.RED)
             raise typer.Exit(1)
@@ -213,6 +285,126 @@ def launch(
     except ValidationError as e:
         typer.secho(f"Error accessing launch result: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)
+
+
+@app.command("template-versions")
+def template_versions(
+    template_name: str = typer.Argument(..., help="Launch template name"),
+) -> None:
+    """
+    Show version history for a launch template.
+
+    Displays all versions with creation date and description.
+
+    Examples:
+        remote ami template-versions my-template
+    """
+    try:
+        versions = get_launch_template_versions(template_name)
+    except ResourceNotFoundError:
+        typer.secho(f"Template '{template_name}' not found", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    if not versions:
+        typer.secho("No versions found", fg=typer.colors.YELLOW)
+        return
+
+    table = Table(title=f"Versions for {template_name}")
+    table.add_column("Version", justify="right")
+    table.add_column("Created")
+    table.add_column("Description")
+    table.add_column("Default", justify="center")
+
+    for version in versions:
+        is_default = "✓" if version.get("DefaultVersion", False) else ""
+        description = version.get("VersionDescription", "")
+        created = str(version.get("CreateTime", "N/A"))
+
+        table.add_row(
+            str(version["VersionNumber"]),
+            created,
+            description,
+            is_default,
+        )
+
+    console.print(table)
+
+
+@app.command("template-info")
+def template_info(
+    template_name: str = typer.Argument(..., help="Launch template name"),
+    version: str = typer.Option("$Latest", "-v", "--version", help="Template version"),
+) -> None:
+    """
+    Show detailed information for a launch template.
+
+    Displays instance type, AMI, key pair, security groups, and more.
+
+    Examples:
+        remote ami template-info my-template
+        remote ami template-info my-template -v 2
+    """
+    try:
+        versions = get_launch_template_versions(template_name)
+    except ResourceNotFoundError:
+        typer.secho(f"Template '{template_name}' not found", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    if not versions:
+        typer.secho("No versions found", fg=typer.colors.YELLOW)
+        return
+
+    # Find the requested version
+    target_version = None
+    if version == "$Latest":
+        target_version = versions[0]  # First is latest
+    else:
+        for v in versions:
+            if str(v["VersionNumber"]) == version:
+                target_version = v
+                break
+
+    if not target_version:
+        typer.secho(f"Version {version} not found", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+    data = target_version.get("LaunchTemplateData", {})
+
+    console.print()
+    console.print(f"[bold cyan]Template:[/bold cyan] {template_name}")
+    console.print(f"[bold cyan]Version:[/bold cyan] {target_version['VersionNumber']}")
+    console.print(
+        f"[bold cyan]Description:[/bold cyan] {target_version.get('VersionDescription', 'N/A')}"
+    )
+    console.print(f"[bold cyan]Created:[/bold cyan] {target_version.get('CreateTime', 'N/A')}")
+    console.print()
+    console.print("[bold]Instance Configuration:[/bold]")
+    console.print(f"  Instance Type: {data.get('InstanceType', 'N/A')}")
+    console.print(f"  AMI: {data.get('ImageId', 'N/A')}")
+    console.print(f"  Key Pair: {data.get('KeyName', 'N/A')}")
+
+    security_groups = data.get("SecurityGroupIds", [])
+    if security_groups:
+        console.print(f"  Security Groups: {', '.join(security_groups)}")
+
+    # Network interfaces
+    network_interfaces = data.get("NetworkInterfaces", [])
+    if network_interfaces:
+        console.print()
+        console.print("[bold]Network Configuration:[/bold]")
+        for i, ni in enumerate(network_interfaces):
+            console.print(f"  Interface {i}: Subnet {ni.get('SubnetId', 'N/A')}")
+
+    # Block device mappings
+    block_devices = data.get("BlockDeviceMappings", [])
+    if block_devices:
+        console.print()
+        console.print("[bold]Storage:[/bold]")
+        for bd in block_devices:
+            ebs = bd.get("Ebs", {})
+            console.print(
+                f"  {bd.get('DeviceName', 'N/A')}: {ebs.get('VolumeSize', 'N/A')} GB ({ebs.get('VolumeType', 'N/A')})"
+            )
 
 
 if __name__ == "__main__":

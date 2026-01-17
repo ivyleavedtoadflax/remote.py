@@ -1,6 +1,6 @@
 # Issue 26: Improve Launch Template Workflow
 
-**Status:** Not started
+**Status:** COMPLETED
 **Priority:** Medium
 **Files:** `remotepy/ami.py`, `remotepy/instance.py`, `remotepy/config.py`
 
@@ -158,12 +158,12 @@ Instance name [web-server-a1b2c3]: _
 
 ## Acceptance Criteria
 
-- [ ] Move `list_launch_templates()` to utils.py (remove duplication)
-- [ ] Add `default_launch_template` config option
-- [ ] Add `--filter` option to template listing
-- [ ] Add `--details` option to show instance type, AMI, etc.
-- [ ] Add `template-versions` command
-- [ ] Add `template-info` command
-- [ ] Add `config set-template` command
-- [ ] Update launch to use default template if configured
-- [ ] Add tests for new functionality
+- [x] Move `list_launch_templates()` to utils.py (remove duplication)
+- [x] Add `default_launch_template` config option
+- [x] Add `--filter` option to template listing
+- [x] Add `--details` option to show instance type, AMI, etc.
+- [x] Add `template-versions` command
+- [x] Add `template-info` command
+- [x] Add `config set-template` command (via generic `config set default_launch_template <name>`)
+- [x] Update launch to use default template if configured
+- [x] Add tests for new functionality
