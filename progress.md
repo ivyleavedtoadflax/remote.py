@@ -1033,3 +1033,26 @@ minutes = remaining % MINUTES_PER_HOUR  # remaining is in minutes ✓
 
 ---
 
+## 2026-01-18: Extract type change polling magic numbers to constants
+
+**File:** `remote/instance.py`
+
+**Issue:** The `instance_type()` function used hardcoded magic numbers for type change polling:
+- Line 883: `wait = 5` - maximum polling attempts
+- Line 887: `time.sleep(5)` - sleep duration between polls
+
+These magic numbers made the code harder to understand and maintain, and were inconsistent with the established pattern of using named constants for time-related values (e.g., `MAX_STARTUP_WAIT_SECONDS`, `STARTUP_POLL_INTERVAL_SECONDS`).
+
+**Changes:**
+- Added two new constants to the "Instance type change polling constants" section:
+  - `TYPE_CHANGE_MAX_POLL_ATTEMPTS = 5` - maximum number of polling attempts
+  - `TYPE_CHANGE_POLL_INTERVAL_SECONDS = 5` - sleep duration between polls in seconds
+- Updated the `instance_type()` function to use these constants instead of hardcoded values
+
+**Impact:**
+- Improved code readability and self-documentation
+- Consistent with existing patterns for time-related constants
+- Easier to adjust polling behavior if needed in the future
+
+---
+
