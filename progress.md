@@ -623,6 +623,29 @@ This duplication violated DRY (Don't Repeat Yourself) and meant any bug fix or f
 
 ---
 
+## 2026-01-18: Remove unused `get_instance_pricing_info()` function
+
+**File:** `remote/pricing.py`
+
+**Issue:** The `get_instance_pricing_info()` function (lines 205-228) was never used in the application code:
+1. Only `get_instance_price_with_fallback()` was imported and used by `remote/instance.py`
+2. `get_instance_pricing_info()` was a higher-level wrapper that was only exercised by tests
+3. The function provided formatted strings and a dictionary that duplicated what `format_price()` and `get_monthly_estimate()` already provided separately
+4. According to `specs/issue-37-pricing-region-fallback.md`, the function was part of the original implementation plan but the actual implementation used the lower-level functions directly
+
+**Changes:**
+- Removed the `get_instance_pricing_info()` function from `remote/pricing.py`
+- Removed the import of `get_instance_pricing_info` from `tests/test_pricing.py`
+- Removed the `TestGetInstancePricingInfo` test class from `tests/test_pricing.py`
+- Updated `specs/issue-37-pricing-region-fallback.md` to remove references to the unused function
+
+**Impact:**
+- ~24 lines of dead code removed
+- ~60 lines of tests for dead code removed
+- Cleaner module API surface
+
+---
+
 ## 2026-01-18: Add explicit exit codes to `typer.Exit()` calls in `ecs.py`
 
 **File:** `remote/ecs.py`
