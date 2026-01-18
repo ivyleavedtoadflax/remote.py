@@ -59,3 +59,17 @@ The `typer` import itself is still needed for other uses in the file (typer.Exit
 
 **Changes:**
 - Removed the unused `app = typer.Typer()` line
+
+---
+
+## 2026-01-18: Use cached STS client in `get_account_id()`
+
+**File:** `remote/utils.py`
+
+**Issue:** The `get_sts_client()` function (lines 46-55) was defined as a cached client factory but was never used. The `get_account_id()` function at line 86 created a new STS client directly with `boto3.client("sts")` instead of using the cached `get_sts_client()` function.
+
+This was inconsistent with the pattern used for EC2 clients, where `get_ec2_client()` is consistently used throughout the codebase.
+
+**Changes:**
+- Changed line 86 from `boto3.client("sts").get_caller_identity()` to `get_sts_client().get_caller_identity()`
+- This makes the code consistent with the EC2 client pattern and utilizes the caching provided by `@lru_cache`
