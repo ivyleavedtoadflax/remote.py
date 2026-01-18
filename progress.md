@@ -110,3 +110,22 @@ The parameter was misleading because:
 - Removed the `drop_nameless` parameter from the function signature
 - Removed the parameter documentation from the docstring
 - Added a "Note" section to the docstring clarifying that instances without a Name tag are automatically excluded
+
+---
+
+## 2026-01-18: Remove deprecated `ec2_client` backwards compatibility shim
+
+**File:** `remote/utils.py`
+
+**Issue:** The module contained deprecated backwards compatibility code for accessing `ec2_client` as a module-level attribute:
+1. Lines 59-62 had a comment indicating the deprecated attribute "will be removed in v0.5.0"
+2. Lines 65-74 defined a `__getattr__` function providing lazy access to `ec2_client` for backwards compatibility
+3. The `Any` type was imported solely for this `__getattr__` function's return type
+
+After scanning the entire codebase, no code was found using the deprecated `ec2_client` attribute:
+- All modules use `get_ec2_client()` function directly
+- All test files use local mock variables named `mock_ec2_client`, not the deprecated module attribute
+
+**Changes:**
+- Removed the deprecation comment block (lines 59-62)
+- Removed the `__getattr__` function (lines 65-74)
