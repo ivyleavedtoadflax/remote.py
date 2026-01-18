@@ -405,3 +405,23 @@ This was redundant because:
 
 This completes the console centralization refactor - all modules now use the shared `console` instance from `remote/utils.py`.
 
+---
+
+## 2026-01-18: Remove redundant `get_instance_type()` call in `instance_type()` function
+
+**File:** `remote/instance.py`
+
+**Issue:** The `instance_type()` function called `get_instance_type()` twice to retrieve the same value:
+1. Line 833: `current_type = get_instance_type(instance_id)` - first call at function start
+2. Line 909: `current_instance_type = get_instance_type(instance_id)` - redundant second call in the else branch
+
+Both calls retrieved the same value for the same `instance_id`. The second call was unnecessary because:
+- `current_type` was already available and unchanged
+- This was making a redundant AWS API call
+- The variable naming inconsistency (`current_type` vs `current_instance_type`) obscured the duplication
+
+**Changes:**
+- Removed the redundant `get_instance_type()` call in the else branch
+- Reused the existing `current_type` variable instead of creating `current_instance_type`
+- This eliminates one AWS API call when displaying current instance type
+
