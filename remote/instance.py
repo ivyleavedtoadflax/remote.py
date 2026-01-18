@@ -3,11 +3,12 @@ import random
 import string
 import subprocess
 import time
-from typing import Any
+from typing import Annotated, Any
 
 import typer
 from botocore.exceptions import ClientError, NoCredentialsError
 from rich.console import Console
+from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 
@@ -111,67 +112,122 @@ def list_instances(
     console.print(table)
 
 
+def _build_status_table(instance_name: str, instance_id: str) -> Table | str:
+    """Build a Rich Table with instance status information.
+
+    Returns a Table on success, or an error message string if the instance
+    is not in a running state or if there's an error.
+    """
+    try:
+        status = get_instance_status(instance_id)
+
+        instance_statuses = status.get("InstanceStatuses", [])
+        if not instance_statuses:
+            return f"{instance_name} is not in running state"
+
+        # Safely access the first status
+        first_status = safe_get_array_item(instance_statuses, 0, "instance statuses")
+
+        # Safely extract nested values with defaults
+        instance_id_value = first_status.get("InstanceId", "unknown")
+        state_name = safe_get_nested_value(first_status, ["InstanceState", "Name"], "unknown")
+        system_status = safe_get_nested_value(first_status, ["SystemStatus", "Status"], "unknown")
+        instance_status = safe_get_nested_value(
+            first_status, ["InstanceStatus", "Status"], "unknown"
+        )
+
+        # Safely access details array
+        details = safe_get_nested_value(first_status, ["InstanceStatus", "Details"], [])
+        reachability = "unknown"
+        if details:
+            first_detail = safe_get_array_item(details, 0, "status details", {"Status": "unknown"})
+            reachability = first_detail.get("Status", "unknown")
+
+        # Build table using rich
+        table = Table(title="Instance Status")
+        table.add_column("Name", style="cyan")
+        table.add_column("InstanceId", style="green")
+        table.add_column("InstanceState")
+        table.add_column("SystemStatus")
+        table.add_column("InstanceStatus")
+        table.add_column("Reachability")
+
+        state_style = _get_status_style(state_name)
+        table.add_row(
+            instance_name or "",
+            instance_id_value,
+            f"[{state_style}]{state_name}[/{state_style}]",
+            system_status,
+            instance_status,
+            reachability,
+        )
+
+        return table
+    except (InstanceNotFoundError, ResourceNotFoundError) as e:
+        return f"Error: {e}"
+    except AWSServiceError as e:
+        return f"AWS Error: {e}"
+    except ValidationError as e:
+        return f"Validation Error: {e}"
+
+
+def _watch_status(instance_name: str, instance_id: str, interval: int) -> None:
+    """Watch instance status with live updates."""
+    watch_console = Console()
+
+    try:
+        with Live(console=watch_console, refresh_per_second=1, screen=True) as live:
+            while True:
+                result = _build_status_table(instance_name, instance_id)
+                live.update(result)
+                time.sleep(interval)
+    except KeyboardInterrupt:
+        watch_console.print("\nWatch mode stopped.")
+
+
 @app.command()
-def status(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
+def status(
+    instance_name: Annotated[str | None, typer.Argument(help="Instance name")] = None,
+    watch: Annotated[
+        bool, typer.Option("--watch", "-w", help="Watch mode - refresh continuously")
+    ] = False,
+    interval: Annotated[
+        int, typer.Option("--interval", "-i", help="Refresh interval in seconds")
+    ] = 2,
+) -> None:
     """
     Get detailed status of an instance.
 
     Shows instance state, system status, and reachability information.
     Uses the default instance from config if no name is provided.
+
+    Examples:
+        remote instance status                  # Show default instance status
+        remote instance status my-server        # Show specific instance status
+        remote instance status --watch          # Watch status continuously
+        remote instance status -w -i 5          # Watch with 5 second interval
     """
+    # Validate interval
+    if interval < 1:
+        typer.secho("Error: Interval must be at least 1 second", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
     try:
         if not instance_name:
             instance_name = get_instance_name()
         instance_id = get_instance_id(instance_name)
-        typer.secho(f"Getting status of {instance_name} ({instance_id})", fg=typer.colors.YELLOW)
-        status = get_instance_status(instance_id)
 
-        instance_statuses = status.get("InstanceStatuses", [])
-        if instance_statuses:
-            # Safely access the first status
-            first_status = safe_get_array_item(instance_statuses, 0, "instance statuses")
-
-            # Safely extract nested values with defaults
-            instance_id_value = first_status.get("InstanceId", "unknown")
-            state_name = safe_get_nested_value(first_status, ["InstanceState", "Name"], "unknown")
-            system_status = safe_get_nested_value(
-                first_status, ["SystemStatus", "Status"], "unknown"
-            )
-            instance_status = safe_get_nested_value(
-                first_status, ["InstanceStatus", "Status"], "unknown"
-            )
-
-            # Safely access details array
-            details = safe_get_nested_value(first_status, ["InstanceStatus", "Details"], [])
-            reachability = "unknown"
-            if details:
-                first_detail = safe_get_array_item(
-                    details, 0, "status details", {"Status": "unknown"}
-                )
-                reachability = first_detail.get("Status", "unknown")
-
-            # Format table using rich
-            table = Table(title="Instance Status")
-            table.add_column("Name", style="cyan")
-            table.add_column("InstanceId", style="green")
-            table.add_column("InstanceState")
-            table.add_column("SystemStatus")
-            table.add_column("InstanceStatus")
-            table.add_column("Reachability")
-
-            state_style = _get_status_style(state_name)
-            table.add_row(
-                instance_name or "",
-                instance_id_value,
-                f"[{state_style}]{state_name}[/{state_style}]",
-                system_status,
-                instance_status,
-                reachability,
-            )
-
-            console.print(table)
+        if watch:
+            _watch_status(instance_name, instance_id, interval)
         else:
-            typer.secho(f"{instance_name} is not in running state", fg=typer.colors.RED)
+            typer.secho(
+                f"Getting status of {instance_name} ({instance_id})", fg=typer.colors.YELLOW
+            )
+            result = _build_status_table(instance_name, instance_id)
+            if isinstance(result, Table):
+                console.print(result)
+            else:
+                typer.secho(result, fg=typer.colors.RED)
 
     except (InstanceNotFoundError, ResourceNotFoundError) as e:
         typer.secho(f"Error: {e}", fg=typer.colors.RED)
