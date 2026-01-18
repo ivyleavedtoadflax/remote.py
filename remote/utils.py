@@ -301,7 +301,7 @@ def get_instance_name() -> str:
 
 
 def get_instance_info(
-    instances: list[dict[str, Any]], name_filter: str | None = None, drop_nameless: bool = False
+    instances: list[dict[str, Any]], name_filter: str | None = None
 ) -> tuple[list[str], list[str], list[str], list[str], list[str | None]]:
     """
     Get all instance names for the given account from aws cli.
@@ -310,10 +310,12 @@ def get_instance_info(
         instances: List of instances returned by get_instances()
         name_filter: Filter to apply to the instance names. If not found in the
             instance name, it will be excluded from the list.
-        drop_nameless: Whether to exclude instances without a Name tag
 
     Returns:
         Tuple of (names, public_dnss, statuses, instance_types, launch_times)
+
+    Note:
+        Instances without a Name tag are automatically excluded.
 
     Raises:
         ValidationError: If instances data is malformed
