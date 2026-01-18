@@ -1043,5 +1043,173 @@ def terminate(instance_name: str | None = typer.Argument(None, help="Instance na
         )
 
 
+def _get_instance_details(instance_id: str) -> dict[str, Any]:
+    """Get detailed information about an instance.
+
+    Args:
+        instance_id: The EC2 instance ID
+
+    Returns:
+        Dictionary with instance details including Name, InstanceType, State, LaunchTime
+
+    Raises:
+        InstanceNotFoundError: If instance not found
+        AWSServiceError: If AWS API call fails
+    """
+    from datetime import datetime, timezone
+
+    try:
+        response = get_ec2_client().describe_instances(InstanceIds=[instance_id])
+        reservations = response.get("Reservations", [])
+        if not reservations:
+            raise InstanceNotFoundError(instance_id)
+
+        reservation = safe_get_array_item(reservations, 0, "instance reservations")
+        instances = reservation.get("Instances", [])
+        if not instances:
+            raise InstanceNotFoundError(instance_id)
+
+        instance = safe_get_array_item(instances, 0, "instances")
+
+        # Extract name from tags
+        tags = {tag["Key"]: tag["Value"] for tag in instance.get("Tags", [])}
+        name = tags.get("Name", "")
+
+        # Get state
+        state = instance.get("State", {}).get("Name", "unknown")
+
+        # Get launch time
+        launch_time = instance.get("LaunchTime")
+        launch_time_str = None
+        uptime_seconds = None
+        if launch_time:
+            launch_time_str = launch_time.strftime("%Y-%m-%d %H:%M:%S UTC")
+            now = datetime.now(timezone.utc)
+            uptime_seconds = (now - launch_time.replace(tzinfo=timezone.utc)).total_seconds()
+
+        return {
+            "instance_id": instance_id,
+            "name": name,
+            "instance_type": instance.get("InstanceType", "unknown"),
+            "state": state,
+            "launch_time": launch_time,
+            "launch_time_str": launch_time_str,
+            "uptime_seconds": uptime_seconds,
+        }
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        if error_code == "InvalidInstanceID.NotFound":
+            raise InstanceNotFoundError(instance_id)
+        error_message = e.response["Error"]["Message"]
+        raise AWSServiceError("EC2", "describe_instances", error_code, error_message)
+
+
+def _format_uptime(seconds: float | None) -> str:
+    """Format uptime in seconds to human-readable string.
+
+    Args:
+        seconds: Uptime in seconds, or None
+
+    Returns:
+        Human-readable string like '2h 45m' or '3d 5h 30m'
+    """
+    if seconds is None or seconds < 0:
+        return "-"
+
+    total_minutes = int(seconds // 60)
+    days = total_minutes // (24 * 60)
+    remaining = total_minutes % (24 * 60)
+    hours = remaining // 60
+    minutes = remaining % 60
+
+    parts = []
+    if days > 0:
+        parts.append(f"{days}d")
+    if hours > 0:
+        parts.append(f"{hours}h")
+    if minutes > 0 or not parts:
+        parts.append(f"{minutes}m")
+
+    return " ".join(parts)
+
+
+@app.command()
+def cost(
+    instance_name: str | None = typer.Argument(None, help="Instance name"),
+) -> None:
+    """
+    Show estimated cost of a running instance based on uptime.
+
+    Calculates cost from launch time to now using the instance's hourly rate.
+    Uses the default instance from config if no name is provided.
+
+    Examples:
+        remote instance cost                    # Show cost of default instance
+        remote instance cost my-server          # Show cost of specific instance
+    """
+    try:
+        if not instance_name:
+            instance_name = get_instance_name()
+        instance_id = get_instance_id(instance_name)
+
+        # Get instance details
+        details = _get_instance_details(instance_id)
+
+        # Check if instance is running
+        if details["state"] != "running":
+            typer.secho(
+                f"Instance '{instance_name}' is not running (status: {details['state']})",
+                fg=typer.colors.YELLOW,
+            )
+            typer.secho("Cost calculation requires a running instance.", fg=typer.colors.YELLOW)
+            return
+
+        # Get pricing info
+        instance_type = details["instance_type"]
+        hourly_price, fallback_used = get_instance_price_with_fallback(instance_type)
+
+        # Calculate cost
+        uptime_hours = (
+            details["uptime_seconds"] / 3600 if details["uptime_seconds"] is not None else None
+        )
+        estimated_cost = hourly_price * uptime_hours if hourly_price and uptime_hours else None
+
+        # Format uptime
+        uptime_str = _format_uptime(details["uptime_seconds"])
+
+        # Build output panel
+        status_style = _get_status_style(details["state"])
+        lines = [
+            f"[cyan]Instance ID:[/cyan]    {details['instance_id']}",
+            f"[cyan]Instance Type:[/cyan]  {instance_type}",
+            f"[cyan]Status:[/cyan]         [{status_style}]{details['state']}[/{status_style}]",
+            f"[cyan]Launch Time:[/cyan]    {details['launch_time_str'] or '-'}",
+            f"[cyan]Uptime:[/cyan]         {uptime_str}",
+            f"[cyan]Hourly Rate:[/cyan]    {format_price(hourly_price)}{'*' if fallback_used else ''}",
+            f"[cyan]Estimated Cost:[/cyan] {format_price(estimated_cost)}",
+        ]
+
+        if fallback_used:
+            lines.append("")
+            lines.append("[dim]* Using us-east-1 pricing as estimate[/dim]")
+
+        panel = Panel(
+            "\n".join(lines),
+            title=f"[green]Instance Cost: {instance_name}[/green]",
+            border_style="green",
+        )
+        console.print(panel)
+
+    except (InstanceNotFoundError, ResourceNotFoundError) as e:
+        typer.secho(f"Error: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    except AWSServiceError as e:
+        typer.secho(f"AWS Error: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    except ValidationError as e:
+        typer.secho(f"Validation Error: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+
 if __name__ == "__main__":
     app()
