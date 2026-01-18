@@ -49,6 +49,7 @@ MAX_STARTUP_WAIT_SECONDS = 60
 STARTUP_POLL_INTERVAL_SECONDS = 5
 CONNECTION_RETRY_SLEEP_SECONDS = 20
 MAX_CONNECTION_ATTEMPTS = 5
+SSH_READINESS_WAIT_SECONDS = 10
 
 app = typer.Typer()
 
@@ -441,7 +442,7 @@ def start(
 
             # Give a bit more time for SSH to be ready
             typer.secho("Waiting for SSH to be ready...", fg=typer.colors.YELLOW)
-            time.sleep(10)
+            time.sleep(SSH_READINESS_WAIT_SECONDS)
 
             _schedule_shutdown(instance_name, instance_id, stop_in_minutes)
 
@@ -751,7 +752,7 @@ def connect(
                     )
                     raise typer.Exit(1)
 
-                time.sleep(10)
+                time.sleep(SSH_READINESS_WAIT_SECONDS)
 
         # Wait a few seconds to give the instance time to initialize
 

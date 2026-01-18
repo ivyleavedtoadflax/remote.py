@@ -982,6 +982,27 @@ These magic numbers:
 
 ---
 
+## 2026-01-18: Extract hardcoded SSH readiness sleep to constant
+
+**File:** `remote/instance.py`
+
+**Issue:** The hardcoded value `10` was used for SSH readiness wait times in two locations:
+- Line 444: `time.sleep(10)` - waiting for SSH to be ready after instance startup
+- Line 755: `time.sleep(10)` - sleep between connection retry attempts
+
+These magic numbers:
+1. Made the code harder to understand without context
+2. Required searching the codebase to find all related wait times
+3. Made it difficult to adjust the SSH wait time consistently
+
+**Changes:**
+- Added `SSH_READINESS_WAIT_SECONDS = 10` constant to the "Instance startup/connection constants" section
+- Updated both `time.sleep(10)` calls to use `time.sleep(SSH_READINESS_WAIT_SECONDS)`
+
+This follows the established pattern of extracting time-related constants, as done in previous refactors for `STARTUP_POLL_INTERVAL_SECONDS`, `CONNECTION_RETRY_SLEEP_SECONDS`, etc.
+
+---
+
 ## 2026-01-18: Add `MINUTES_PER_HOUR` constant for semantic correctness in `_format_uptime()`
 
 **File:** `remote/instance.py`
