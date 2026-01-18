@@ -351,3 +351,33 @@ This pattern is inconsistent with other modules like `utils.py` which imports da
 - Added `from datetime import datetime, timedelta, timezone` at the module level (after line 4)
 - Removed the three inline imports from `_get_raw_launch_times`, `list_instances`, and `_schedule_shutdown` functions
 
+---
+
+## 2026-01-18: Centralize console initialization in `utils.py`
+
+**Issue:** Duplicated `console = Console(force_terminal=True, width=200)` initialization across 7 modules:
+- `remote/utils.py:32`
+- `remote/ami.py:24`
+- `remote/config.py:18`
+- `remote/ecs.py:30`
+- `remote/instance.py:45`
+- `remote/snapshot.py:13`
+- `remote/volume.py:13`
+
+This duplication meant any changes to console configuration would need to be made in 7 places. It also increased the risk of inconsistency (as seen in the previous `config.py` fix where `width=200` was missing).
+
+**Changes:**
+- Kept the single console instance in `remote/utils.py`
+- Updated all other modules to import `console` from `remote.utils` instead of creating their own instances
+- Removed redundant `from rich.console import Console` imports where Console was only used for the module-level instance
+
+**Files Modified:**
+- `remote/ami.py` - Import console from utils, remove Console import
+- `remote/config.py` - Import console from utils, remove Console import
+- `remote/ecs.py` - Import console from utils, remove Console import
+- `remote/instance.py` - Import console from utils (kept Console import for local use in `_watch_status`)
+- `remote/snapshot.py` - Import console from utils, remove Console import
+- `remote/volume.py` - Import console from utils, remove Console import
+
+**Note:** `remote/instance.py` still imports `Console` from `rich.console` because the `_watch_status` function creates a separate Console instance for its Live display functionality.
+

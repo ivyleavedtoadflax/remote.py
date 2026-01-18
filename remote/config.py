@@ -7,15 +7,13 @@ from typing import Any
 import typer
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
 from remote.settings import Settings
-from remote.utils import get_instance_ids, get_instance_info, get_instances
+from remote.utils import console, get_instance_ids, get_instance_info, get_instances
 
 app = typer.Typer()
-console = Console(force_terminal=True, width=200)
 
 # Valid configuration keys with descriptions
 VALID_KEYS: dict[str, str] = {
