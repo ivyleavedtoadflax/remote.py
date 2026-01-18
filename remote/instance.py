@@ -906,10 +906,8 @@ def instance_type(
                 raise typer.Exit(1)
 
     else:
-        current_instance_type = get_instance_type(instance_id)
-
         typer.secho(
-            f"Instance {instance_name} is currently of type {current_instance_type}",
+            f"Instance {instance_name} is currently of type {current_type}",
             fg=typer.colors.YELLOW,
         )
 
