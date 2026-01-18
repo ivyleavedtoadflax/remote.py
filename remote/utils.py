@@ -1,4 +1,3 @@
-from configparser import ConfigParser
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, cast
@@ -281,11 +280,8 @@ def get_instance_dns(instance_id: str) -> str:
         raise AWSServiceError("EC2", "describe_instances", error_code, error_message)
 
 
-def get_instance_name(cfg: ConfigParser | None = None) -> str:
+def get_instance_name() -> str:
     """Returns the name of the instance as defined in the config file.
-
-    Args:
-        cfg: Legacy config parser (for backward compatibility)
 
     Returns:
         str: Instance name if found
