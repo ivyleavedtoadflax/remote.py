@@ -978,3 +978,337 @@ class TestSSHErrorHandling:
 
         assert result.exit_code == 0
         assert "SSH connection failed" not in result.stdout
+
+
+# ============================================================================
+# Issue 39: Scheduled Shutdown Tests
+# ============================================================================
+
+
+class TestScheduledShutdown:
+    """Tests for scheduled instance shutdown functionality."""
+
+    def test_stop_with_in_option_schedules_shutdown(self, mocker):
+        """Test that --in option schedules shutdown via SSH."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+        mock_config = mocker.patch("remote.instance.config_manager")
+
+        # Mock instance lookup
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        # Mock config values
+        mock_config.get_value.side_effect = lambda k: "ubuntu" if k == "ssh_user" else None
+
+        # Mock subprocess success
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 0
+        mock_result.stderr = ""
+        mock_subprocess.return_value = mock_result
+
+        result = runner.invoke(app, ["stop", "test-instance", "--in", "3h"])
+
+        assert result.exit_code == 0
+        assert "will shut down in 3h" in result.stdout
+
+        # Verify SSH command was called with shutdown command
+        mock_subprocess.assert_called_once()
+        ssh_command = mock_subprocess.call_args[0][0]
+        assert "ssh" in ssh_command
+        assert "sudo shutdown -h +180" in ssh_command
+
+    def test_stop_with_in_option_invalid_duration(self, mocker):
+        """Test that --in option with invalid duration shows error."""
+        mocker.patch("remote.instance.get_instance_name", return_value="test-instance")
+        mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+        mocker.patch("remote.instance.is_instance_running", return_value=True)
+
+        result = runner.invoke(app, ["stop", "test-instance", "--in", "invalid"])
+
+        assert result.exit_code == 1
+        assert "Invalid duration format" in result.stdout
+
+    def test_stop_with_in_option_not_running(self, mocker):
+        """Test that --in option on stopped instance shows warning."""
+        mocker.patch("remote.instance.get_instance_name", return_value="test-instance")
+        mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+        mocker.patch("remote.instance.is_instance_running", return_value=False)
+
+        result = runner.invoke(app, ["stop", "test-instance", "--in", "3h"])
+
+        assert result.exit_code == 0
+        assert "is not running" in result.stdout
+        assert "cannot schedule shutdown" in result.stdout
+
+    def test_stop_with_cancel_option(self, mocker):
+        """Test that --cancel option cancels scheduled shutdown."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+        mock_config = mocker.patch("remote.instance.config_manager")
+
+        # Mock instance lookup
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        # Mock config values
+        mock_config.get_value.side_effect = lambda k: "ubuntu" if k == "ssh_user" else None
+
+        # Mock subprocess success
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 0
+        mock_result.stderr = ""
+        mock_subprocess.return_value = mock_result
+
+        result = runner.invoke(app, ["stop", "test-instance", "--cancel"])
+
+        assert result.exit_code == 0
+        assert "Cancelled scheduled shutdown" in result.stdout
+
+        # Verify SSH command was called with shutdown -c
+        mock_subprocess.assert_called_once()
+        ssh_command = mock_subprocess.call_args[0][0]
+        assert "sudo shutdown -c" in ssh_command
+
+    def test_stop_with_cancel_not_running(self, mocker):
+        """Test that --cancel on stopped instance shows warning."""
+        mocker.patch("remote.instance.get_instance_name", return_value="test-instance")
+        mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+        mocker.patch("remote.instance.is_instance_running", return_value=False)
+
+        result = runner.invoke(app, ["stop", "test-instance", "--cancel"])
+
+        assert result.exit_code == 0
+        assert "is not running" in result.stdout
+        assert "cannot cancel shutdown" in result.stdout
+
+
+class TestStartWithStopIn:
+    """Tests for start command with --stop-in option."""
+
+    def test_start_with_stop_in_option_invalid_duration(self, mocker):
+        """Test that --stop-in option with invalid duration fails early."""
+        mocker.patch("remote.instance.get_instance_name", return_value="test-instance")
+        mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+
+        result = runner.invoke(app, ["start", "test-instance", "--stop-in", "bad"])
+
+        assert result.exit_code == 1
+        assert "Invalid duration format" in result.stdout
+
+    def test_start_with_stop_in_already_running(self, mocker):
+        """Test that --stop-in on running instance still schedules shutdown."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+        mock_config = mocker.patch("remote.instance.config_manager")
+
+        # Mock instance already running
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        mock_config.get_value.side_effect = lambda k: "ubuntu" if k == "ssh_user" else None
+
+        # Mock subprocess success
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 0
+        mock_result.stderr = ""
+        mock_subprocess.return_value = mock_result
+
+        result = runner.invoke(app, ["start", "test-instance", "--stop-in", "2h"])
+
+        assert result.exit_code == 0
+        assert "already running" in result.stdout
+        assert "Scheduling automatic shutdown" in result.stdout
+        assert "will shut down in 2h" in result.stdout
+
+
+class TestScheduledShutdownSSHErrors:
+    """Tests for SSH error handling in scheduled shutdown."""
+
+    def test_schedule_shutdown_ssh_timeout(self, mocker):
+        """Test that SSH timeout is handled gracefully."""
+        import subprocess
+
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+        mock_config = mocker.patch("remote.instance.config_manager")
+
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        mock_config.get_value.side_effect = lambda k: "ubuntu" if k == "ssh_user" else None
+
+        # Mock subprocess timeout
+        mock_subprocess.side_effect = subprocess.TimeoutExpired(cmd="ssh", timeout=30)
+
+        result = runner.invoke(app, ["stop", "test-instance", "--in", "1h"])
+
+        assert result.exit_code == 1
+        assert "SSH connection timed out" in result.stdout
+
+    def test_schedule_shutdown_no_ssh_client(self, mocker):
+        """Test that missing SSH client is handled."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+        mock_config = mocker.patch("remote.instance.config_manager")
+
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        mock_config.get_value.side_effect = lambda k: "ubuntu" if k == "ssh_user" else None
+
+        # Mock SSH not found
+        mock_subprocess.side_effect = FileNotFoundError("ssh not found")
+
+        result = runner.invoke(app, ["stop", "test-instance", "--in", "1h"])
+
+        assert result.exit_code == 1
+        assert "SSH client not found" in result.stdout
+
+    def test_schedule_shutdown_no_public_dns(self, mocker):
+        """Test that missing public DNS is handled."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_config = mocker.patch("remote.instance.config_manager")
+
+        # Instance has no public DNS
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "PublicDnsName": "",  # No public DNS
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        mock_config.get_value.side_effect = lambda k: "ubuntu" if k == "ssh_user" else None
+
+        result = runner.invoke(app, ["stop", "test-instance", "--in", "1h"])
+
+        assert result.exit_code == 1
+        assert "has no public DNS" in result.stdout
+
+    def test_schedule_shutdown_uses_config_ssh_key(self, mocker):
+        """Test that SSH key from config is used."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+        mock_config = mocker.patch("remote.instance.config_manager")
+
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        # Return SSH key from config
+        def get_config_value(key):
+            if key == "ssh_user":
+                return "ec2-user"
+            elif key == "ssh_key_path":
+                return "/path/to/key.pem"
+            return None
+
+        mock_config.get_value.side_effect = get_config_value
+
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 0
+        mock_result.stderr = ""
+        mock_subprocess.return_value = mock_result
+
+        result = runner.invoke(app, ["stop", "test-instance", "--in", "30m"])
+
+        assert result.exit_code == 0
+
+        # Verify SSH command includes the key
+        ssh_command = mock_subprocess.call_args[0][0]
+        assert "-i" in ssh_command
+        assert "/path/to/key.pem" in ssh_command
+        assert "ec2-user@" in ssh_command[-2]  # User from config

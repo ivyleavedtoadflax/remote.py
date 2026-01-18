@@ -9,8 +9,10 @@ from remote.exceptions import (
     InstanceNotFoundError,
     MultipleInstancesFoundError,
     ResourceNotFoundError,
+    ValidationError,
 )
 from remote.utils import (
+    format_duration,
     get_account_id,
     get_instance_dns,
     get_instance_id,
@@ -26,6 +28,7 @@ from remote.utils import (
     get_volume_name,
     is_instance_running,
     is_instance_stopped,
+    parse_duration_to_minutes,
 )
 
 # Remove duplicate fixtures - use centralized ones from conftest.py
@@ -990,3 +993,108 @@ class TestClientCaching:
 
         # Clean up
         get_ec2_client.cache_clear()
+
+
+# ============================================================================
+# Issue 39: Duration Parsing Tests
+# ============================================================================
+
+
+class TestParseDurationToMinutes:
+    """Tests for parse_duration_to_minutes function."""
+
+    def test_parse_hours_only(self):
+        """Test parsing hours-only duration."""
+        assert parse_duration_to_minutes("1h") == 60
+        assert parse_duration_to_minutes("2h") == 120
+        assert parse_duration_to_minutes("10h") == 600
+        assert parse_duration_to_minutes("24h") == 1440
+
+    def test_parse_minutes_only(self):
+        """Test parsing minutes-only duration."""
+        assert parse_duration_to_minutes("1m") == 1
+        assert parse_duration_to_minutes("30m") == 30
+        assert parse_duration_to_minutes("45m") == 45
+        assert parse_duration_to_minutes("120m") == 120
+
+    def test_parse_hours_and_minutes(self):
+        """Test parsing combined hours and minutes."""
+        assert parse_duration_to_minutes("1h30m") == 90
+        assert parse_duration_to_minutes("2h15m") == 135
+        assert parse_duration_to_minutes("0h30m") == 30
+        assert parse_duration_to_minutes("1h0m") == 60
+
+    def test_parse_case_insensitive(self):
+        """Test that parsing is case-insensitive."""
+        assert parse_duration_to_minutes("1H") == 60
+        assert parse_duration_to_minutes("30M") == 30
+        assert parse_duration_to_minutes("1H30M") == 90
+        assert parse_duration_to_minutes("2H15m") == 135
+
+    def test_parse_with_whitespace(self):
+        """Test that parsing handles whitespace."""
+        assert parse_duration_to_minutes(" 1h ") == 60
+        assert parse_duration_to_minutes("  30m  ") == 30
+        assert parse_duration_to_minutes(" 1h30m ") == 90
+
+    def test_parse_empty_string_raises_error(self):
+        """Test that empty string raises ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            parse_duration_to_minutes("")
+        assert "Duration cannot be empty" in str(exc_info.value)
+
+    def test_parse_whitespace_only_raises_error(self):
+        """Test that whitespace-only string raises ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            parse_duration_to_minutes("   ")
+        assert "Duration cannot be empty" in str(exc_info.value)
+
+    def test_parse_invalid_format_raises_error(self):
+        """Test that invalid formats raise ValidationError."""
+        invalid_inputs = ["3", "abc", "1x", "1 hour", "1:30", "1.5h", "h30m", "hm"]
+        for invalid_input in invalid_inputs:
+            with pytest.raises(ValidationError) as exc_info:
+                parse_duration_to_minutes(invalid_input)
+            assert "Invalid duration format" in str(exc_info.value)
+
+    def test_parse_zero_duration_raises_error(self):
+        """Test that zero duration raises ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            parse_duration_to_minutes("0h")
+        assert "greater than 0 minutes" in str(exc_info.value)
+
+        with pytest.raises(ValidationError) as exc_info:
+            parse_duration_to_minutes("0m")
+        assert "greater than 0 minutes" in str(exc_info.value)
+
+        with pytest.raises(ValidationError) as exc_info:
+            parse_duration_to_minutes("0h0m")
+        assert "greater than 0 minutes" in str(exc_info.value)
+
+
+class TestFormatDuration:
+    """Tests for format_duration function."""
+
+    def test_format_hours_only(self):
+        """Test formatting full hours."""
+        assert format_duration(60) == "1h"
+        assert format_duration(120) == "2h"
+        assert format_duration(180) == "3h"
+
+    def test_format_minutes_only(self):
+        """Test formatting minutes less than an hour."""
+        assert format_duration(1) == "1m"
+        assert format_duration(30) == "30m"
+        assert format_duration(59) == "59m"
+
+    def test_format_hours_and_minutes(self):
+        """Test formatting combined hours and minutes."""
+        assert format_duration(90) == "1h 30m"
+        assert format_duration(135) == "2h 15m"
+        assert format_duration(61) == "1h 1m"
+
+    def test_format_zero_or_negative(self):
+        """Test formatting zero or negative values."""
+        assert format_duration(0) == "0m"
+        assert format_duration(-1) == "0m"
+        assert format_duration(-60) == "0m"

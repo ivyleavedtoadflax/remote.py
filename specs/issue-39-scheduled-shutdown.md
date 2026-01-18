@@ -1,6 +1,6 @@
 # Issue 39: Scheduled Instance Shutdown
 
-**Status:** TODO
+**Status:** COMPLETED
 **Priority:** Medium
 **Target Version:** v1.2.0
 **Files:** `remotepy/instance.py`, `remotepy/utils.py`
@@ -125,15 +125,15 @@ $ remote status
 
 ## Acceptance Criteria
 
-- [ ] Add `--in` option to `remote instance stop` command
-- [ ] Add `--stop-in` option to `remote instance start` command
-- [ ] Implement duration string parsing (h, m, hm formats)
-- [ ] Implement SSH command to run `shutdown -h +N` on instance
-- [ ] Show confirmation message with calculated stop time
-- [ ] Add `--cancel` flag to cancel scheduled stop (runs `shutdown -c`)
-- [ ] Add tests for duration parsing
-- [ ] Add tests for SSH command generation
-- [ ] Update CLI help documentation
+- [x] Add `--in` option to `remote instance stop` command
+- [x] Add `--stop-in` option to `remote instance start` command
+- [x] Implement duration string parsing (h, m, hm formats)
+- [x] Implement SSH command to run `shutdown -h +N` on instance
+- [x] Show confirmation message with calculated stop time
+- [x] Add `--cancel` flag to cancel scheduled stop (runs `shutdown -c`)
+- [x] Add tests for duration parsing
+- [x] Add tests for SSH command generation
+- [x] Update CLI help documentation
 
 ## Testing Notes
 

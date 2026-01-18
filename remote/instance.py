@@ -24,6 +24,7 @@ from remote.pricing import (
     get_monthly_estimate,
 )
 from remote.utils import (
+    format_duration,
     get_ec2_client,
     get_instance_dns,
     get_instance_id,
@@ -36,6 +37,7 @@ from remote.utils import (
     get_launch_template_id,
     get_launch_templates,
     is_instance_running,
+    parse_duration_to_minutes,
 )
 from remote.validation import safe_get_array_item, safe_get_nested_value, validate_array_index
 
@@ -244,25 +246,81 @@ def status(
 
 
 @app.command()
-def start(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
+def start(
+    instance_name: str | None = typer.Argument(None, help="Instance name"),
+    stop_in: str | None = typer.Option(
+        None,
+        "--stop-in",
+        help="Automatically stop instance after duration (e.g., 2h, 30m). Schedules shutdown via SSH.",
+    ),
+) -> None:
     """
     Start an EC2 instance.
 
     Uses the default instance from config if no name is provided.
-    """
 
+    Examples:
+        remote instance start                   # Start instance
+        remote instance start --stop-in 2h      # Start and auto-stop in 2 hours
+        remote instance start --stop-in 30m     # Start and auto-stop in 30 minutes
+    """
     if not instance_name:
         instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
 
+    # Parse stop_in duration early to fail fast on invalid input
+    stop_in_minutes: int | None = None
+    if stop_in:
+        try:
+            stop_in_minutes = parse_duration_to_minutes(stop_in)
+        except ValidationError as e:
+            typer.secho(f"Error: {e}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
     if is_instance_running(instance_id):
         typer.secho(f"Instance {instance_name} is already running", fg=typer.colors.YELLOW)
-
+        # If stop_in was requested and instance is already running, still schedule shutdown
+        if stop_in_minutes:
+            typer.secho("Scheduling automatic shutdown...", fg=typer.colors.YELLOW)
+            _schedule_shutdown(instance_name, instance_id, stop_in_minutes)
         return
 
     try:
         get_ec2_client().start_instances(InstanceIds=[instance_id])
         typer.secho(f"Instance {instance_name} started", fg=typer.colors.GREEN)
+
+        # If stop_in was requested, wait for instance and schedule shutdown
+        if stop_in_minutes:
+            typer.secho(
+                "Waiting for instance to be ready before scheduling shutdown...",
+                fg=typer.colors.YELLOW,
+            )
+            # Wait for instance to be running and reachable
+            max_wait = 60  # seconds
+            wait_interval = 5
+            waited = 0
+            while waited < max_wait:
+                time.sleep(wait_interval)
+                waited += wait_interval
+                if is_instance_running(instance_id):
+                    # Check if DNS is available
+                    dns = get_instance_dns(instance_id)
+                    if dns:
+                        break
+                typer.secho(f"  Waiting for instance... ({waited}s)", fg=typer.colors.YELLOW)
+
+            if waited >= max_wait:
+                typer.secho(
+                    "Warning: Instance may not be ready. Attempting to schedule shutdown anyway.",
+                    fg=typer.colors.YELLOW,
+                )
+
+            # Give a bit more time for SSH to be ready
+            typer.secho("Waiting for SSH to be ready...", fg=typer.colors.YELLOW)
+            time.sleep(10)
+
+            _schedule_shutdown(instance_name, instance_id, stop_in_minutes)
+
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
         error_message = e.response["Error"]["Message"]
@@ -276,22 +334,204 @@ def start(instance_name: str | None = typer.Argument(None, help="Instance name")
         raise typer.Exit(1)
 
 
+def _schedule_shutdown(instance_name: str, instance_id: str, minutes: int) -> None:
+    """Schedule instance shutdown via SSH using the Linux shutdown command.
+
+    Args:
+        instance_name: Name of the instance for display
+        instance_id: AWS instance ID
+        minutes: Number of minutes until shutdown
+    """
+    from datetime import datetime, timedelta, timezone
+
+    # Get instance DNS for SSH
+    dns = get_instance_dns(instance_id)
+    if not dns:
+        typer.secho(
+            f"Cannot schedule shutdown: Instance {instance_name} has no public DNS",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
+
+    # Get SSH config
+    user = config_manager.get_value("ssh_user") or "ubuntu"
+    key = config_manager.get_value("ssh_key_path")
+
+    # Build SSH command to run shutdown
+    ssh_args = [
+        "ssh",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=10",
+    ]
+
+    if key:
+        ssh_args.extend(["-i", key])
+
+    ssh_args.append(f"{user}@{dns}")
+    ssh_args.append(f"sudo shutdown -h +{minutes}")
+
+    typer.secho(f"Scheduling shutdown for {instance_name}...", fg=typer.colors.YELLOW)
+
+    try:
+        result = subprocess.run(ssh_args, capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            error_msg = result.stderr.strip() if result.stderr else "Unknown SSH error"
+            typer.secho(f"Failed to schedule shutdown: {error_msg}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        # Calculate and display shutdown time
+        shutdown_time = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+        formatted_time = shutdown_time.strftime("%Y-%m-%d %H:%M:%S UTC")
+        duration_str = format_duration(minutes)
+
+        typer.secho(
+            f"Instance '{instance_name}' will shut down in {duration_str} (at {formatted_time})",
+            fg=typer.colors.GREEN,
+        )
+    except subprocess.TimeoutExpired:
+        typer.secho("SSH connection timed out", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    except FileNotFoundError:
+        typer.secho("SSH client not found. Please install OpenSSH.", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    except OSError as e:
+        typer.secho(f"SSH connection error: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+
+def _cancel_scheduled_shutdown(instance_name: str, instance_id: str) -> None:
+    """Cancel a scheduled shutdown via SSH.
+
+    Args:
+        instance_name: Name of the instance for display
+        instance_id: AWS instance ID
+    """
+    # Get instance DNS for SSH
+    dns = get_instance_dns(instance_id)
+    if not dns:
+        typer.secho(
+            f"Cannot cancel shutdown: Instance {instance_name} has no public DNS",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
+
+    # Get SSH config
+    user = config_manager.get_value("ssh_user") or "ubuntu"
+    key = config_manager.get_value("ssh_key_path")
+
+    # Build SSH command to cancel shutdown
+    ssh_args = [
+        "ssh",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=10",
+    ]
+
+    if key:
+        ssh_args.extend(["-i", key])
+
+    ssh_args.append(f"{user}@{dns}")
+    ssh_args.append("sudo shutdown -c")
+
+    typer.secho(f"Cancelling scheduled shutdown for {instance_name}...", fg=typer.colors.YELLOW)
+
+    try:
+        result = subprocess.run(ssh_args, capture_output=True, text=True, timeout=30)
+        # shutdown -c returns non-zero if no shutdown is scheduled, which is fine
+        if result.returncode == 0:
+            typer.secho(
+                f"Cancelled scheduled shutdown for '{instance_name}'", fg=typer.colors.GREEN
+            )
+        else:
+            # Check if error is because no shutdown was scheduled
+            stderr = result.stderr.strip() if result.stderr else ""
+            if "No scheduled shutdown" in stderr or result.returncode == 1:
+                typer.secho(
+                    f"No scheduled shutdown to cancel for '{instance_name}'",
+                    fg=typer.colors.YELLOW,
+                )
+            else:
+                typer.secho(f"Failed to cancel shutdown: {stderr}", fg=typer.colors.RED)
+                raise typer.Exit(1)
+    except subprocess.TimeoutExpired:
+        typer.secho("SSH connection timed out", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    except FileNotFoundError:
+        typer.secho("SSH client not found. Please install OpenSSH.", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    except OSError as e:
+        typer.secho(f"SSH connection error: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+
 @app.command()
-def stop(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
+def stop(
+    instance_name: str | None = typer.Argument(None, help="Instance name"),
+    in_duration: str | None = typer.Option(
+        None,
+        "--in",
+        help="Schedule stop after duration (e.g., 3h, 30m, 1h30m). Uses SSH to run 'shutdown -h'.",
+    ),
+    cancel: bool = typer.Option(
+        False,
+        "--cancel",
+        help="Cancel a scheduled shutdown",
+    ),
+) -> None:
     """
     Stop an EC2 instance.
 
     Prompts for confirmation before stopping.
     Uses the default instance from config if no name is provided.
-    """
 
+    Examples:
+        remote instance stop                    # Stop instance immediately
+        remote instance stop --in 3h            # Schedule stop in 3 hours
+        remote instance stop --in 30m           # Schedule stop in 30 minutes
+        remote instance stop --in 1h30m         # Schedule stop in 1 hour 30 minutes
+        remote instance stop --cancel           # Cancel scheduled shutdown
+    """
     if not instance_name:
         instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
 
+    # Handle cancel option
+    if cancel:
+        if not is_instance_running(instance_id):
+            typer.secho(
+                f"Instance {instance_name} is not running - cannot cancel shutdown",
+                fg=typer.colors.YELLOW,
+            )
+            return
+        _cancel_scheduled_shutdown(instance_name, instance_id)
+        return
+
+    # Handle scheduled shutdown
+    if in_duration:
+        if not is_instance_running(instance_id):
+            typer.secho(
+                f"Instance {instance_name} is not running - cannot schedule shutdown",
+                fg=typer.colors.YELLOW,
+            )
+            return
+        try:
+            minutes = parse_duration_to_minutes(in_duration)
+            _schedule_shutdown(instance_name, instance_id, minutes)
+        except ValidationError as e:
+            typer.secho(f"Error: {e}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+        return
+
+    # Immediate stop
     if not is_instance_running(instance_id):
         typer.secho(f"Instance {instance_name} is already stopped", fg=typer.colors.YELLOW)
-
         return
 
     try:
