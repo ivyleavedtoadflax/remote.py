@@ -476,3 +476,27 @@ This is problematic because:
 - Removed `return templates` statement on line 161 (implicit None return)
 - Removed the now-unused `from typing import Any` import
 
+---
+
+## 2026-01-18: Replace overly broad exception handling in `config.py`
+
+**File:** `remote/config.py`
+
+**Issue:** Three locations used overly broad `except Exception` clauses:
+1. Line 195: `except Exception as e:` in `ConfigValidationResult.validate_config()`
+2. Lines 268-270: `except Exception as e:` in `ConfigManager.get_instance_name()`
+3. Lines 295-296: `except Exception as e:` in `ConfigManager.get_value()`
+
+This is problematic because:
+- `except Exception` catches too many exception types including ones that shouldn't be silently handled
+- It can mask unexpected errors and make debugging harder
+- The prior except blocks already handled specific cases (`configparser.Error`, `OSError`, `PermissionError`, `KeyError`, `TypeError`, `AttributeError`)
+- The only remaining realistic exception type is `ValueError` from Pydantic validation
+
+**Changes:**
+- Line 195: Changed `except Exception as e:` to `except ValueError as e:` (Pydantic's `ValidationError` inherits from `ValueError`)
+- Lines 268-270: Changed `except Exception as e:` to `except ValueError as e:` with updated error message "Config validation error"
+- Lines 295-296: Changed `except Exception as e:` to `except ValueError as e:` with updated error message "Config validation error"
+
+This makes the error handling explicit and specific to the documented exceptions, consistent with the refactor in PR #48 which addressed similar issues in `ami.py`.
+

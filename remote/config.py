@@ -192,7 +192,7 @@ class ConfigValidationResult(BaseModel):
         # Load and validate with Pydantic
         try:
             config = RemoteConfig.from_ini_file(config_path)
-        except Exception as e:
+        except ValueError as e:
             errors.append(f"Configuration error: {e}")
             return cls(is_valid=False, errors=errors, warnings=warnings)
 
@@ -265,9 +265,9 @@ class ConfigManager:
         except (KeyError, TypeError, AttributeError):
             # Handle malformed config structure
             typer.secho("Warning: Config file structure is invalid", fg=typer.colors.YELLOW)
-        except Exception as e:
-            # Handle any other unexpected errors
-            typer.secho(f"Warning: Unexpected error reading config: {e}", fg=typer.colors.YELLOW)
+        except ValueError as e:
+            # Handle Pydantic validation errors
+            typer.secho(f"Warning: Config validation error: {e}", fg=typer.colors.YELLOW)
 
         # No configuration found
         return None
@@ -292,8 +292,8 @@ class ConfigManager:
             typer.secho(f"Warning: Could not read config file: {e}", fg=typer.colors.YELLOW)
         except (KeyError, TypeError, AttributeError):
             typer.secho("Warning: Config file structure is invalid", fg=typer.colors.YELLOW)
-        except Exception as e:
-            typer.secho(f"Warning: Unexpected error reading config: {e}", fg=typer.colors.YELLOW)
+        except ValueError as e:
+            typer.secho(f"Warning: Config validation error: {e}", fg=typer.colors.YELLOW)
         return None
 
     def set_value(self, key: str, value: str, config_path: str | None = None) -> None:

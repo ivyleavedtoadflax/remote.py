@@ -117,10 +117,10 @@ class TestConfigManager:
         result = manager.get_instance_name()
         assert result is None
 
-    def test_get_instance_name_exception(self, mocker):
+    def test_get_instance_name_validation_error(self, mocker):
         manager = ConfigManager()
         mock_config = mocker.MagicMock()
-        mock_config.__contains__.side_effect = Exception("Config error")
+        mock_config.__contains__.side_effect = ValueError("Config validation error")
         manager._file_config = mock_config
 
         result = manager.get_instance_name()
