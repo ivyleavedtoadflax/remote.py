@@ -23,7 +23,6 @@ from remote.utils import (
     get_instance_type,
     get_instances,
     get_launch_template_id,
-    get_snapshot_status,
     get_volume_ids,
     get_volume_name,
     is_instance_running,
@@ -380,21 +379,6 @@ def test_get_volume_name_no_tags(mocker):
     assert result == ""
 
 
-def test_get_snapshot_status(mocker):
-    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-
-    mock_ec2_client.return_value.describe_snapshots.return_value = {
-        "Snapshots": [{"State": "completed"}]
-    }
-
-    result = get_snapshot_status("snap-0123456789abcdef0")
-
-    assert result == "completed"
-    mock_ec2_client.return_value.describe_snapshots.assert_called_once_with(
-        SnapshotIds=["snap-0123456789abcdef0"]
-    )
-
-
 def test_get_launch_template_id(mocker):
     mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
@@ -679,39 +663,6 @@ def test_get_volume_name_other_client_error(mocker):
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_volume_name("vol-12345678")
-
-    assert exc_info.value.aws_error_code == "UnauthorizedOperation"
-
-
-def test_get_snapshot_status_snapshot_not_found_error(mocker):
-    """Test get_snapshot_status with snapshot not found."""
-    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-
-    error_response = {
-        "Error": {"Code": "InvalidSnapshotID.NotFound", "Message": "Snapshot not found"}
-    }
-    mock_ec2_client.return_value.describe_snapshots.side_effect = ClientError(
-        error_response, "describe_snapshots"
-    )
-
-    with pytest.raises(ResourceNotFoundError) as exc_info:
-        get_snapshot_status("snap-1234567890abcdef0")
-
-    assert exc_info.value.resource_type == "Snapshot"
-    assert exc_info.value.resource_id == "snap-1234567890abcdef0"
-
-
-def test_get_snapshot_status_other_client_error(mocker):
-    """Test get_snapshot_status with other ClientError."""
-    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-
-    error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Unauthorized"}}
-    mock_ec2_client.return_value.describe_snapshots.side_effect = ClientError(
-        error_response, "describe_snapshots"
-    )
-
-    with pytest.raises(AWSServiceError) as exc_info:
-        get_snapshot_status("snap-12345678")
 
     assert exc_info.value.aws_error_code == "UnauthorizedOperation"
 
