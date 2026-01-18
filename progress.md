@@ -982,3 +982,33 @@ These magic numbers:
 
 ---
 
+## 2026-01-18: Add `MINUTES_PER_HOUR` constant for semantic correctness in `_format_uptime()`
+
+**File:** `remote/instance.py`
+
+**Issue:** The `_format_uptime()` function used `SECONDS_PER_MINUTE` (value: 60) to perform arithmetic on variables measured in minutes, not seconds:
+
+```python
+# Before - semantically incorrect
+hours = remaining // SECONDS_PER_MINUTE  # remaining is in minutes!
+minutes = remaining % SECONDS_PER_MINUTE  # remaining is in minutes!
+```
+
+While mathematically correct (60 seconds per minute = 60 minutes per hour), this was semantically misleading because:
+1. `remaining` is measured in minutes (from `total_minutes % MINUTES_PER_DAY`)
+2. Using `SECONDS_PER_MINUTE` to divide minutes violates the principle of using appropriately-named constants
+3. A `MINUTES_PER_HOUR` constant was missing from the time-related constants
+
+**Changes:**
+- Added `MINUTES_PER_HOUR = 60` constant alongside existing time constants
+- Updated `MINUTES_PER_DAY` to use `24 * MINUTES_PER_HOUR` for consistency
+- Changed `_format_uptime()` to use `MINUTES_PER_HOUR` for the hours/minutes calculation
+
+```python
+# After - semantically correct
+hours = remaining // MINUTES_PER_HOUR  # remaining is in minutes ✓
+minutes = remaining % MINUTES_PER_HOUR  # remaining is in minutes ✓
+```
+
+---
+
