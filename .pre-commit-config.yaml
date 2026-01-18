@@ -21,10 +21,10 @@ repos:
         types: [python]
         stages: [pre-push]
 
-      # Run tests (quiet mode - CI has full output)
+      # Run tests with coverage (quiet mode - CI has full output)
       - id: pytest
         name: pytest
-        entry: uv run pytest -q --tb=line
+        entry: uv run pytest -q --tb=line --cov=remotepy --cov-report=term-missing:skip-covered
         language: system
         pass_filenames: false
         types: [python]
