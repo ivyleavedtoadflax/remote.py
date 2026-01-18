@@ -242,3 +242,24 @@ This inconsistency could cause different output formatting in `config.py` comman
 - Removed the `is_instance_stopped()` function from `remote/utils.py`
 - Removed the import of `is_instance_stopped` from `tests/test_utils.py`
 - Removed the two associated test functions `test_is_instance_stopped_true()` and `test_is_instance_stopped_false()` from `tests/test_utils.py`
+
+---
+
+## 2026-01-18: Remove duplicate `list_launch_templates()` function from `instance.py`
+
+**File:** `remote/instance.py`
+
+**Issue:** The `list_launch_templates()` function (lines 922-952) was duplicated in both `instance.py` and `ami.py`:
+1. `instance.py` version: Simple implementation with basic table display
+2. `ami.py` version: Feature-rich implementation with `--filter` and `--details` options
+
+The duplicate in `instance.py` was:
+- A subset of the `ami.py` functionality
+- Inconsistent with DRY (Don't Repeat Yourself) principle
+- Creating maintenance burden for similar functionality in two places
+
+Users can use `remote ami list-templates` which provides the same functionality plus additional features like filtering and detailed output.
+
+**Changes:**
+- Removed the `list_launch_templates()` function from `remote/instance.py`
+- Removed the corresponding test `test_list_launch_templates_command()` from `tests/test_instance.py`

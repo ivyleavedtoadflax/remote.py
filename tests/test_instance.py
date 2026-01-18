@@ -652,25 +652,6 @@ def test_terminate_terraform_managed_instance(mocker):
     assert "This instance appears to be managed by Terraform" in result.stdout
 
 
-def test_list_launch_templates_command(mocker):
-    mocker.patch(
-        "remote.instance.get_launch_templates",
-        return_value=[
-            {
-                "LaunchTemplateId": "lt-0123456789abcdef0",
-                "LaunchTemplateName": "test-template-1",
-                "LatestVersionNumber": 2,
-            }
-        ],
-    )
-
-    result = runner.invoke(app, ["list-launch-templates"])
-
-    assert result.exit_code == 0
-    assert "test-template-1" in result.stdout
-    assert "lt-0123456789abcdef0" in result.stdout
-
-
 def test_connect_with_key_option(mocker):
     """Test that --key option adds -i flag to SSH command."""
     # Mock the AWS EC2 client in utils (where get_instance_id and is_instance_running are defined)
