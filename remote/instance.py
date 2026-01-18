@@ -7,7 +7,6 @@ from typing import Annotated, Any
 
 import typer
 from botocore.exceptions import ClientError, NoCredentialsError
-from rich.console import Console
 from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
@@ -302,16 +301,14 @@ def _build_status_table(instance_name: str, instance_id: str) -> Panel | str:
 
 def _watch_status(instance_name: str, instance_id: str, interval: int) -> None:
     """Watch instance status with live updates."""
-    watch_console = Console()
-
     try:
-        with Live(console=watch_console, refresh_per_second=1, screen=True) as live:
+        with Live(console=console, refresh_per_second=1, screen=True) as live:
             while True:
                 result = _build_status_table(instance_name, instance_id)
                 live.update(result)
                 time.sleep(interval)
     except KeyboardInterrupt:
-        watch_console.print("\nWatch mode stopped.")
+        console.print("\nWatch mode stopped.")
 
 
 @app.command()
