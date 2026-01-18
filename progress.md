@@ -780,6 +780,36 @@ This places the comment immediately before the code it documents, following the 
 
 ---
 
+## 2026-01-18: Simplify config path assignment using ternary operator
+
+**File:** `remote/config.py`
+
+**Issue:** Two methods in `config.py` used verbose if-else blocks for config path assignment that could be simplified using ternary operators (SIM108 code smell):
+
+```python
+# Before (4 lines):
+if config_path is None:
+    config_path = Settings.get_config_path()
+else:
+    config_path = Path(config_path)
+```
+
+This pattern appeared in:
+- `RemoteConfig.from_ini_file()` (lines 137-140)
+- `ConfigValidationResult.validate_config()` (lines 179-182)
+
+The ruff linter flagged these as SIM108 violations, recommending ternary operator syntax for simpler code.
+
+**Changes:**
+- Replaced both if-else blocks with ternary operators:
+  ```python
+  config_path = Settings.get_config_path() if config_path is None else Path(config_path)
+  ```
+- This reduces each 4-line block to a single line while maintaining the same behavior
+- The change is purely stylistic with no functional impact
+
+---
+
 ## 2026-01-18: Use `config_manager.remove_value()` in `unset_value()` CLI command
 
 **File:** `remote/config.py`
