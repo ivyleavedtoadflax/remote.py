@@ -9,8 +9,10 @@ from remote.exceptions import (
     InstanceNotFoundError,
     MultipleInstancesFoundError,
     ResourceNotFoundError,
+    ValidationError,
 )
 from remote.utils import (
+    format_duration,
     get_account_id,
     get_instance_dns,
     get_instance_id,
@@ -21,11 +23,10 @@ from remote.utils import (
     get_instance_type,
     get_instances,
     get_launch_template_id,
-    get_snapshot_status,
     get_volume_ids,
     get_volume_name,
     is_instance_running,
-    is_instance_stopped,
+    parse_duration_to_minutes,
 )
 
 # Remove duplicate fixtures - use centralized ones from conftest.py
@@ -261,6 +262,32 @@ def test_get_instance_ids(mock_ec2_instances):
     assert result == ["i-0123456789abcdef0", "i-0123456789abcdef1"]
 
 
+def test_get_instance_ids_filters_instances_without_name_tag():
+    """Instances without a Name tag should be excluded (matches get_instance_info behavior)."""
+    instances = [
+        {
+            "Instances": [
+                {
+                    "InstanceId": "i-with-name",
+                    "Tags": [{"Key": "Name", "Value": "named-instance"}],
+                },
+                {
+                    "InstanceId": "i-no-name-tag",
+                    "Tags": [{"Key": "Environment", "Value": "test"}],
+                },
+                {
+                    "InstanceId": "i-no-tags",
+                    # No Tags key at all
+                },
+            ]
+        }
+    ]
+
+    result = get_instance_ids(instances)
+
+    assert result == ["i-with-name"]
+
+
 def test_is_instance_running_true(mocker):
     mock_get_instance_status = mocker.patch("remote.utils.get_instance_status")
     mock_get_instance_status.return_value = {
@@ -289,28 +316,6 @@ def test_is_instance_running_no_status(mocker):
     mock_get_instance_status.return_value = {"InstanceStatuses": []}
 
     result = is_instance_running("i-0123456789abcdef0")
-
-    assert result is False
-
-
-def test_is_instance_stopped_true(mocker):
-    mock_get_instance_status = mocker.patch("remote.utils.get_instance_status")
-    mock_get_instance_status.return_value = {
-        "InstanceStatuses": [{"InstanceState": {"Name": "stopped"}}]
-    }
-
-    result = is_instance_stopped("i-0123456789abcdef0")
-
-    assert result is True
-
-
-def test_is_instance_stopped_false(mocker):
-    mock_get_instance_status = mocker.patch("remote.utils.get_instance_status")
-    mock_get_instance_status.return_value = {
-        "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
-    }
-
-    result = is_instance_stopped("i-0123456789abcdef0")
 
     assert result is False
 
@@ -400,21 +405,6 @@ def test_get_volume_name_no_tags(mocker):
     assert result == ""
 
 
-def test_get_snapshot_status(mocker):
-    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-
-    mock_ec2_client.return_value.describe_snapshots.return_value = {
-        "Snapshots": [{"State": "completed"}]
-    }
-
-    result = get_snapshot_status("snap-0123456789abcdef0")
-
-    assert result == "completed"
-    mock_ec2_client.return_value.describe_snapshots.assert_called_once_with(
-        SnapshotIds=["snap-0123456789abcdef0"]
-    )
-
-
 def test_get_launch_template_id(mocker):
     mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
@@ -435,11 +425,10 @@ def test_get_launch_template_id(mocker):
 
 def test_get_account_id_client_error(mocker):
     """Test get_account_id with ClientError."""
-    mock_boto3_client = mocker.patch("remote.utils.boto3.client")
-    mock_sts_client = mock_boto3_client.return_value
+    mock_sts_client = mocker.patch("remote.utils.get_sts_client")
 
     error_response = {"Error": {"Code": "AccessDenied", "Message": "Access denied"}}
-    mock_sts_client.get_caller_identity.side_effect = ClientError(
+    mock_sts_client.return_value.get_caller_identity.side_effect = ClientError(
         error_response, "get_caller_identity"
     )
 
@@ -453,10 +442,9 @@ def test_get_account_id_client_error(mocker):
 
 def test_get_account_id_no_credentials_error(mocker):
     """Test get_account_id with NoCredentialsError."""
-    mock_boto3_client = mocker.patch("remote.utils.boto3.client")
-    mock_sts_client = mock_boto3_client.return_value
+    mock_sts_client = mocker.patch("remote.utils.get_sts_client")
 
-    mock_sts_client.get_caller_identity.side_effect = NoCredentialsError()
+    mock_sts_client.return_value.get_caller_identity.side_effect = NoCredentialsError()
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_account_id()
@@ -701,39 +689,6 @@ def test_get_volume_name_other_client_error(mocker):
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_volume_name("vol-12345678")
-
-    assert exc_info.value.aws_error_code == "UnauthorizedOperation"
-
-
-def test_get_snapshot_status_snapshot_not_found_error(mocker):
-    """Test get_snapshot_status with snapshot not found."""
-    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-
-    error_response = {
-        "Error": {"Code": "InvalidSnapshotID.NotFound", "Message": "Snapshot not found"}
-    }
-    mock_ec2_client.return_value.describe_snapshots.side_effect = ClientError(
-        error_response, "describe_snapshots"
-    )
-
-    with pytest.raises(ResourceNotFoundError) as exc_info:
-        get_snapshot_status("snap-1234567890abcdef0")
-
-    assert exc_info.value.resource_type == "Snapshot"
-    assert exc_info.value.resource_id == "snap-1234567890abcdef0"
-
-
-def test_get_snapshot_status_other_client_error(mocker):
-    """Test get_snapshot_status with other ClientError."""
-    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-
-    error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Unauthorized"}}
-    mock_ec2_client.return_value.describe_snapshots.side_effect = ClientError(
-        error_response, "describe_snapshots"
-    )
-
-    with pytest.raises(AWSServiceError) as exc_info:
-        get_snapshot_status("snap-12345678")
 
     assert exc_info.value.aws_error_code == "UnauthorizedOperation"
 
@@ -992,3 +947,108 @@ class TestClientCaching:
 
         # Clean up
         get_ec2_client.cache_clear()
+
+
+# ============================================================================
+# Issue 39: Duration Parsing Tests
+# ============================================================================
+
+
+class TestParseDurationToMinutes:
+    """Tests for parse_duration_to_minutes function."""
+
+    def test_parse_hours_only(self):
+        """Test parsing hours-only duration."""
+        assert parse_duration_to_minutes("1h") == 60
+        assert parse_duration_to_minutes("2h") == 120
+        assert parse_duration_to_minutes("10h") == 600
+        assert parse_duration_to_minutes("24h") == 1440
+
+    def test_parse_minutes_only(self):
+        """Test parsing minutes-only duration."""
+        assert parse_duration_to_minutes("1m") == 1
+        assert parse_duration_to_minutes("30m") == 30
+        assert parse_duration_to_minutes("45m") == 45
+        assert parse_duration_to_minutes("120m") == 120
+
+    def test_parse_hours_and_minutes(self):
+        """Test parsing combined hours and minutes."""
+        assert parse_duration_to_minutes("1h30m") == 90
+        assert parse_duration_to_minutes("2h15m") == 135
+        assert parse_duration_to_minutes("0h30m") == 30
+        assert parse_duration_to_minutes("1h0m") == 60
+
+    def test_parse_case_insensitive(self):
+        """Test that parsing is case-insensitive."""
+        assert parse_duration_to_minutes("1H") == 60
+        assert parse_duration_to_minutes("30M") == 30
+        assert parse_duration_to_minutes("1H30M") == 90
+        assert parse_duration_to_minutes("2H15m") == 135
+
+    def test_parse_with_whitespace(self):
+        """Test that parsing handles whitespace."""
+        assert parse_duration_to_minutes(" 1h ") == 60
+        assert parse_duration_to_minutes("  30m  ") == 30
+        assert parse_duration_to_minutes(" 1h30m ") == 90
+
+    def test_parse_empty_string_raises_error(self):
+        """Test that empty string raises ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            parse_duration_to_minutes("")
+        assert "Duration cannot be empty" in str(exc_info.value)
+
+    def test_parse_whitespace_only_raises_error(self):
+        """Test that whitespace-only string raises ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            parse_duration_to_minutes("   ")
+        assert "Duration cannot be empty" in str(exc_info.value)
+
+    def test_parse_invalid_format_raises_error(self):
+        """Test that invalid formats raise ValidationError."""
+        invalid_inputs = ["3", "abc", "1x", "1 hour", "1:30", "1.5h", "h30m", "hm"]
+        for invalid_input in invalid_inputs:
+            with pytest.raises(ValidationError) as exc_info:
+                parse_duration_to_minutes(invalid_input)
+            assert "Invalid duration format" in str(exc_info.value)
+
+    def test_parse_zero_duration_raises_error(self):
+        """Test that zero duration raises ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            parse_duration_to_minutes("0h")
+        assert "greater than 0 minutes" in str(exc_info.value)
+
+        with pytest.raises(ValidationError) as exc_info:
+            parse_duration_to_minutes("0m")
+        assert "greater than 0 minutes" in str(exc_info.value)
+
+        with pytest.raises(ValidationError) as exc_info:
+            parse_duration_to_minutes("0h0m")
+        assert "greater than 0 minutes" in str(exc_info.value)
+
+
+class TestFormatDuration:
+    """Tests for format_duration function."""
+
+    def test_format_hours_only(self):
+        """Test formatting full hours."""
+        assert format_duration(60) == "1h"
+        assert format_duration(120) == "2h"
+        assert format_duration(180) == "3h"
+
+    def test_format_minutes_only(self):
+        """Test formatting minutes less than an hour."""
+        assert format_duration(1) == "1m"
+        assert format_duration(30) == "30m"
+        assert format_duration(59) == "59m"
+
+    def test_format_hours_and_minutes(self):
+        """Test formatting combined hours and minutes."""
+        assert format_duration(90) == "1h 30m"
+        assert format_duration(135) == "2h 15m"
+        assert format_duration(61) == "1h 1m"
+
+    def test_format_zero_or_negative(self):
+        """Test formatting zero or negative values."""
+        assert format_duration(0) == "0m"
+        assert format_duration(-1) == "0m"
+        assert format_duration(-60) == "0m"

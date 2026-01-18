@@ -1,13 +1,12 @@
-import builtins
-import random
-import string
 import subprocess
+import sys
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import typer
 from botocore.exceptions import ClientError, NoCredentialsError
-from rich.console import Console
+from rich.live import Live
 from rich.panel import Panel
 from rich.table import Table
 
@@ -18,8 +17,13 @@ from remote.exceptions import (
     ResourceNotFoundError,
     ValidationError,
 )
-from remote.pricing import format_price, get_instance_price, get_monthly_estimate
+from remote.pricing import (
+    format_price,
+    get_instance_price_with_fallback,
+)
 from remote.utils import (
+    console,
+    format_duration,
     get_ec2_client,
     get_instance_dns,
     get_instance_id,
@@ -29,14 +33,30 @@ from remote.utils import (
     get_instance_status,
     get_instance_type,
     get_instances,
-    get_launch_template_id,
-    get_launch_templates,
     is_instance_running,
+    launch_instance_from_template,
+    parse_duration_to_minutes,
 )
-from remote.validation import safe_get_array_item, safe_get_nested_value, validate_array_index
+from remote.validation import safe_get_array_item, safe_get_nested_value
+
+# Time-related constants
+SECONDS_PER_MINUTE = 60
+SECONDS_PER_HOUR = 3600
+MINUTES_PER_HOUR = 60
+MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR
+
+# Instance startup/connection constants
+MAX_STARTUP_WAIT_SECONDS = 60
+STARTUP_POLL_INTERVAL_SECONDS = 5
+CONNECTION_RETRY_SLEEP_SECONDS = 20
+MAX_CONNECTION_ATTEMPTS = 5
+SSH_READINESS_WAIT_SECONDS = 10
+
+# Instance type change polling constants
+TYPE_CHANGE_MAX_POLL_ATTEMPTS = 5
+TYPE_CHANGE_POLL_INTERVAL_SECONDS = 5
 
 app = typer.Typer()
-console = Console(force_terminal=True, width=200)
 
 
 def _get_status_style(status: str) -> str:
@@ -51,27 +71,68 @@ def _get_status_style(status: str) -> str:
     return "white"
 
 
+def _get_raw_launch_times(instances: list[dict[str, Any]]) -> list[Any]:
+    """Extract raw launch time datetime objects from instances.
+
+    Args:
+        instances: List of reservation dictionaries from describe_instances()
+
+    Returns:
+        List of launch time datetime objects (or None for stopped instances)
+    """
+    launch_times = []
+
+    for reservation in instances:
+        reservation_instances = reservation.get("Instances", [])
+        for instance in reservation_instances:
+            # Check if instance has a Name tag (same filtering as get_instance_info)
+            tags = {k["Key"]: k["Value"] for k in instance.get("Tags", [])}
+            if not tags or "Name" not in tags:
+                continue
+
+            state_info = instance.get("State", {})
+            status = state_info.get("Name", "unknown")
+
+            # Only include launch time for running instances
+            if status == "running" and "LaunchTime" in instance:
+                launch_time = instance["LaunchTime"]
+                # Ensure timezone awareness
+                if hasattr(launch_time, "tzinfo") and launch_time.tzinfo is None:
+                    launch_time = launch_time.replace(tzinfo=timezone.utc)
+                launch_times.append(launch_time)
+            else:
+                launch_times.append(None)
+
+    return launch_times
+
+
 @app.command("ls")
 @app.command("list")
 def list_instances(
-    no_pricing: bool = typer.Option(
-        False, "--no-pricing", help="Skip pricing lookup (faster, no cost columns)"
+    cost: bool = typer.Option(
+        False, "--cost", "-c", help="Show cost columns (uptime, hourly rate, estimated cost)"
     ),
 ) -> None:
     """
-    List all EC2 instances.
+    List all EC2 instances with summary info.
 
-    Displays a table with instance name, ID, public DNS, status, type, launch time,
-    and pricing information (hourly and monthly estimates).
+    Shows a summary table of all instances. Use 'instance status' for detailed
+    health information about a specific instance.
+
+    Columns: Name, ID, DNS, Status, Type, Launch Time
+    With --cost: adds Uptime, Hourly Rate, Estimated Cost
 
     Examples:
-        remote list                # List with pricing
-        remote list --no-pricing   # List without pricing (faster)
+        remote instance ls              # List all instances
+        remote instance ls --cost       # Include cost information
     """
     instances = get_instances()
     ids = get_instance_ids(instances)
 
     names, public_dnss, statuses, instance_types, launch_times = get_instance_info(instances)
+
+    # Get raw launch times for uptime calculation if cost is requested
+    raw_launch_times = _get_raw_launch_times(instances) if cost else []
 
     # Format table using rich
     table = Table(title="EC2 Instances")
@@ -82,12 +143,13 @@ def list_instances(
     table.add_column("Type")
     table.add_column("Launch Time")
 
-    if not no_pricing:
+    if cost:
+        table.add_column("Uptime", justify="right")
         table.add_column("$/hr", justify="right")
-        table.add_column("$/month", justify="right")
+        table.add_column("Est. Cost", justify="right")
 
-    for name, instance_id, dns, status, it, lt in zip(
-        names, ids, public_dnss, statuses, instance_types, launch_times, strict=False
+    for i, (name, instance_id, dns, status, it, lt) in enumerate(
+        zip(names, ids, public_dnss, statuses, instance_types, launch_times, strict=True)
     ):
         status_style = _get_status_style(status)
 
@@ -100,78 +162,207 @@ def list_instances(
             lt or "",
         ]
 
-        if not no_pricing:
-            hourly_price = get_instance_price(it) if it else None
-            monthly_price = get_monthly_estimate(hourly_price)
+        if cost:
+            # Calculate uptime
+            uptime_str = "-"
+            estimated_cost = None
+            hourly_price = None
+
+            if i < len(raw_launch_times) and raw_launch_times[i] is not None:
+                now = datetime.now(timezone.utc)
+                launch_time_dt = raw_launch_times[i]
+                if launch_time_dt.tzinfo is None:
+                    launch_time_dt = launch_time_dt.replace(tzinfo=timezone.utc)
+                uptime_seconds = (now - launch_time_dt).total_seconds()
+                uptime_str = _format_uptime(uptime_seconds)
+
+                # Get pricing and calculate cost
+                if it:
+                    hourly_price, _ = get_instance_price_with_fallback(it)
+                    if hourly_price is not None and uptime_seconds > 0:
+                        uptime_hours = uptime_seconds / SECONDS_PER_HOUR
+                        estimated_cost = hourly_price * uptime_hours
+
+            row_data.append(uptime_str)
             row_data.append(format_price(hourly_price))
-            row_data.append(format_price(monthly_price))
+            row_data.append(format_price(estimated_cost))
 
         table.add_row(*row_data)
 
     console.print(table)
 
 
-@app.command()
-def status(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
-    """
-    Get detailed status of an instance.
+def _build_status_table(instance_name: str, instance_id: str) -> Panel | str:
+    """Build a Rich Panel with detailed instance status information.
 
-    Shows instance state, system status, and reachability information.
-    Uses the default instance from config if no name is provided.
+    Returns a Panel on success, or an error message string if there's an error.
+    Shows both health status and instance details.
     """
+    try:
+        # Get instance health status
+        status = get_instance_status(instance_id)
+        instance_statuses = status.get("InstanceStatuses", [])
+
+        # Get detailed instance info
+        ec2 = get_ec2_client()
+        instance_info = ec2.describe_instances(InstanceIds=[instance_id])
+        reservations = instance_info.get("Reservations", [])
+
+        if not reservations:
+            return f"Instance {instance_name} not found"
+
+        reservation = safe_get_array_item(reservations, 0, "instance reservations")
+        instances = reservation.get("Instances", [])
+        if not instances:
+            return f"Instance {instance_name} not found"
+
+        instance = safe_get_array_item(instances, 0, "instances")
+
+        # Extract instance details
+        state_info = instance.get("State", {})
+        state_name = state_info.get("Name", "unknown")
+        instance_type = instance.get("InstanceType", "unknown")
+        public_ip = instance.get("PublicIpAddress", "-")
+        private_ip = instance.get("PrivateIpAddress", "-")
+        public_dns = instance.get("PublicDnsName", "-") or "-"
+        key_name = instance.get("KeyName", "-")
+        launch_time = instance.get("LaunchTime")
+        az = instance.get("Placement", {}).get("AvailabilityZone", "-")
+
+        # Get security groups
+        security_groups = instance.get("SecurityGroups", [])
+        sg_names = [sg.get("GroupName", "") for sg in security_groups]
+        sg_display = ", ".join(sg_names) if sg_names else "-"
+
+        # Get tags (excluding Name)
+        tags = instance.get("Tags", [])
+        tag_dict = {t["Key"]: t["Value"] for t in tags}
+        other_tags = {k: v for k, v in tag_dict.items() if k != "Name"}
+
+        # Format launch time
+        launch_time_str = "-"
+        if launch_time:
+            launch_time_str = launch_time.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+        # Get health status if running
+        system_status = "-"
+        instance_status_str = "-"
+        reachability = "-"
+
+        if instance_statuses:
+            first_status = safe_get_array_item(instance_statuses, 0, "instance statuses")
+            system_status = safe_get_nested_value(first_status, ["SystemStatus", "Status"], "-")
+            instance_status_str = safe_get_nested_value(
+                first_status, ["InstanceStatus", "Status"], "-"
+            )
+            details = safe_get_nested_value(first_status, ["InstanceStatus", "Details"], [])
+            if details:
+                first_detail = safe_get_array_item(details, 0, "status details", {"Status": "-"})
+                reachability = first_detail.get("Status", "-")
+
+        # Build output lines
+        state_style = _get_status_style(state_name)
+        lines = [
+            f"[cyan]Instance ID:[/cyan]    {instance_id}",
+            f"[cyan]Name:[/cyan]           {instance_name}",
+            f"[cyan]State:[/cyan]          [{state_style}]{state_name}[/{state_style}]",
+            f"[cyan]Type:[/cyan]           {instance_type}",
+            f"[cyan]AZ:[/cyan]             {az}",
+            "",
+            "[bold]Network[/bold]",
+            f"[cyan]Public IP:[/cyan]      {public_ip}",
+            f"[cyan]Private IP:[/cyan]     {private_ip}",
+            f"[cyan]Public DNS:[/cyan]     {public_dns}",
+            "",
+            "[bold]Configuration[/bold]",
+            f"[cyan]Key Pair:[/cyan]       {key_name}",
+            f"[cyan]Security Groups:[/cyan] {sg_display}",
+            f"[cyan]Launch Time:[/cyan]    {launch_time_str}",
+        ]
+
+        # Add health section if instance is running
+        if state_name == "running":
+            lines.extend(
+                [
+                    "",
+                    "[bold]Health Status[/bold]",
+                    f"[cyan]System Status:[/cyan]   {system_status}",
+                    f"[cyan]Instance Status:[/cyan] {instance_status_str}",
+                    f"[cyan]Reachability:[/cyan]   {reachability}",
+                ]
+            )
+
+        # Add tags if present
+        if other_tags:
+            lines.extend(["", "[bold]Tags[/bold]"])
+            for key, value in other_tags.items():
+                lines.append(f"[cyan]{key}:[/cyan] {value}")
+
+        panel = Panel(
+            "\n".join(lines),
+            title="[bold]Instance Details[/bold]",
+            border_style="blue",
+            expand=False,
+        )
+        return panel
+
+    except (InstanceNotFoundError, ResourceNotFoundError) as e:
+        return f"Error: {e}"
+    except AWSServiceError as e:
+        return f"AWS Error: {e}"
+    except ValidationError as e:
+        return f"Validation Error: {e}"
+
+
+def _watch_status(instance_name: str, instance_id: str, interval: int) -> None:
+    """Watch instance status with live updates."""
+    try:
+        with Live(console=console, refresh_per_second=1, screen=True) as live:
+            while True:
+                result = _build_status_table(instance_name, instance_id)
+                live.update(result)
+                time.sleep(interval)
+    except KeyboardInterrupt:
+        console.print("\nWatch mode stopped.")
+
+
+@app.command()
+def status(
+    instance_name: str | None = typer.Argument(None, help="Instance name"),
+    watch: bool = typer.Option(False, "--watch", "-w", help="Watch mode - refresh continuously"),
+    interval: int = typer.Option(2, "--interval", "-i", help="Refresh interval in seconds"),
+) -> None:
+    """
+    Show detailed information about a specific instance.
+
+    Displays comprehensive instance details including network configuration,
+    security groups, key pair, tags, and health status. Use 'instance ls'
+    for a summary of all instances.
+
+    Examples:
+        remote instance status                  # Show default instance details
+        remote instance status my-server        # Show specific instance details
+        remote instance status --watch          # Watch status continuously
+        remote instance status -w -i 5          # Watch with 5 second interval
+    """
+    # Validate interval
+    if interval < 1:
+        typer.secho("Error: Interval must be at least 1 second", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
     try:
         if not instance_name:
             instance_name = get_instance_name()
         instance_id = get_instance_id(instance_name)
-        typer.secho(f"Getting status of {instance_name} ({instance_id})", fg=typer.colors.YELLOW)
-        status = get_instance_status(instance_id)
 
-        instance_statuses = status.get("InstanceStatuses", [])
-        if instance_statuses:
-            # Safely access the first status
-            first_status = safe_get_array_item(instance_statuses, 0, "instance statuses")
-
-            # Safely extract nested values with defaults
-            instance_id_value = first_status.get("InstanceId", "unknown")
-            state_name = safe_get_nested_value(first_status, ["InstanceState", "Name"], "unknown")
-            system_status = safe_get_nested_value(
-                first_status, ["SystemStatus", "Status"], "unknown"
-            )
-            instance_status = safe_get_nested_value(
-                first_status, ["InstanceStatus", "Status"], "unknown"
-            )
-
-            # Safely access details array
-            details = safe_get_nested_value(first_status, ["InstanceStatus", "Details"], [])
-            reachability = "unknown"
-            if details:
-                first_detail = safe_get_array_item(
-                    details, 0, "status details", {"Status": "unknown"}
-                )
-                reachability = first_detail.get("Status", "unknown")
-
-            # Format table using rich
-            table = Table(title="Instance Status")
-            table.add_column("Name", style="cyan")
-            table.add_column("InstanceId", style="green")
-            table.add_column("InstanceState")
-            table.add_column("SystemStatus")
-            table.add_column("InstanceStatus")
-            table.add_column("Reachability")
-
-            state_style = _get_status_style(state_name)
-            table.add_row(
-                instance_name or "",
-                instance_id_value,
-                f"[{state_style}]{state_name}[/{state_style}]",
-                system_status,
-                instance_status,
-                reachability,
-            )
-
-            console.print(table)
+        if watch:
+            _watch_status(instance_name, instance_id, interval)
         else:
-            typer.secho(f"{instance_name} is not in running state", fg=typer.colors.RED)
+            result = _build_status_table(instance_name, instance_id)
+            if isinstance(result, Panel):
+                console.print(result)
+            else:
+                typer.secho(result, fg=typer.colors.RED)
 
     except (InstanceNotFoundError, ResourceNotFoundError) as e:
         typer.secho(f"Error: {e}", fg=typer.colors.RED)
@@ -184,26 +375,59 @@ def status(instance_name: str | None = typer.Argument(None, help="Instance name"
         raise typer.Exit(1)
 
 
-@app.command()
-def start(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
-    """
-    Start an EC2 instance.
+def _start_instance(instance_name: str, stop_in_minutes: int | None = None) -> None:
+    """Internal function to start an instance.
 
-    Uses the default instance from config if no name is provided.
+    Args:
+        instance_name: Name of the instance to start
+        stop_in_minutes: Optional number of minutes after which to schedule shutdown
     """
-
-    if not instance_name:
-        instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
 
     if is_instance_running(instance_id):
         typer.secho(f"Instance {instance_name} is already running", fg=typer.colors.YELLOW)
-
+        # If stop_in was requested and instance is already running, still schedule shutdown
+        if stop_in_minutes:
+            typer.secho("Scheduling automatic shutdown...", fg=typer.colors.YELLOW)
+            _schedule_shutdown(instance_name, instance_id, stop_in_minutes)
         return
 
     try:
         get_ec2_client().start_instances(InstanceIds=[instance_id])
         typer.secho(f"Instance {instance_name} started", fg=typer.colors.GREEN)
+
+        # If stop_in was requested, wait for instance and schedule shutdown
+        if stop_in_minutes:
+            typer.secho(
+                "Waiting for instance to be ready before scheduling shutdown...",
+                fg=typer.colors.YELLOW,
+            )
+            # Wait for instance to be running and reachable
+            max_wait = MAX_STARTUP_WAIT_SECONDS
+            wait_interval = STARTUP_POLL_INTERVAL_SECONDS
+            waited = 0
+            while waited < max_wait:
+                time.sleep(wait_interval)
+                waited += wait_interval
+                if is_instance_running(instance_id):
+                    # Check if DNS is available
+                    dns = get_instance_dns(instance_id)
+                    if dns:
+                        break
+                typer.secho(f"  Waiting for instance... ({waited}s)", fg=typer.colors.YELLOW)
+
+            if waited >= max_wait:
+                typer.secho(
+                    "Warning: Instance may not be ready. Attempting to schedule shutdown anyway.",
+                    fg=typer.colors.YELLOW,
+                )
+
+            # Give a bit more time for SSH to be ready
+            typer.secho("Waiting for SSH to be ready...", fg=typer.colors.YELLOW)
+            time.sleep(SSH_READINESS_WAIT_SECONDS)
+
+            _schedule_shutdown(instance_name, instance_id, stop_in_minutes)
+
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
         error_message = e.response["Error"]["Message"]
@@ -218,21 +442,237 @@ def start(instance_name: str | None = typer.Argument(None, help="Instance name")
 
 
 @app.command()
-def stop(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
+def start(
+    instance_name: str | None = typer.Argument(None, help="Instance name"),
+    stop_in: str | None = typer.Option(
+        None,
+        "--stop-in",
+        help="Automatically stop instance after duration (e.g., 2h, 30m). Schedules shutdown via SSH.",
+    ),
+) -> None:
+    """
+    Start an EC2 instance.
+
+    Uses the default instance from config if no name is provided.
+
+    Examples:
+        remote instance start                   # Start instance
+        remote instance start --stop-in 2h      # Start and auto-stop in 2 hours
+        remote instance start --stop-in 30m     # Start and auto-stop in 30 minutes
+    """
+    if not instance_name:
+        instance_name = get_instance_name()
+
+    # Parse stop_in duration early to fail fast on invalid input
+    stop_in_minutes: int | None = None
+    if stop_in:
+        try:
+            stop_in_minutes = parse_duration_to_minutes(stop_in)
+        except ValidationError as e:
+            typer.secho(f"Error: {e}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+    _start_instance(instance_name, stop_in_minutes)
+
+
+def _build_ssh_command(dns: str, key: str | None = None, user: str = "ubuntu") -> list[str]:
+    """Build base SSH command arguments with standard options.
+
+    Args:
+        dns: The DNS hostname or IP address to connect to
+        key: Optional path to SSH private key
+        user: SSH username (default: ubuntu)
+
+    Returns:
+        List of SSH command arguments ready for subprocess
+    """
+    ssh_args = [
+        "ssh",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=10",
+    ]
+
+    if key:
+        ssh_args.extend(["-i", key])
+
+    ssh_args.append(f"{user}@{dns}")
+    return ssh_args
+
+
+def _schedule_shutdown(instance_name: str, instance_id: str, minutes: int) -> None:
+    """Schedule instance shutdown via SSH using the Linux shutdown command.
+
+    Args:
+        instance_name: Name of the instance for display
+        instance_id: AWS instance ID
+        minutes: Number of minutes until shutdown
+    """
+    # Get instance DNS for SSH
+    dns = get_instance_dns(instance_id)
+    if not dns:
+        typer.secho(
+            f"Cannot schedule shutdown: Instance {instance_name} has no public DNS",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
+
+    # Get SSH config
+    user = config_manager.get_value("ssh_user") or "ubuntu"
+    key = config_manager.get_value("ssh_key_path")
+
+    # Build SSH command to run shutdown
+    ssh_args = _build_ssh_command(dns, key, user)
+    ssh_args.append(f"sudo shutdown -h +{minutes}")
+
+    typer.secho(f"Scheduling shutdown for {instance_name}...", fg=typer.colors.YELLOW)
+
+    try:
+        result = subprocess.run(ssh_args, capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            error_msg = result.stderr.strip() if result.stderr else "Unknown SSH error"
+            typer.secho(f"Failed to schedule shutdown: {error_msg}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        # Calculate and display shutdown time
+        shutdown_time = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+        formatted_time = shutdown_time.strftime("%Y-%m-%d %H:%M:%S UTC")
+        duration_str = format_duration(minutes)
+
+        typer.secho(
+            f"Instance '{instance_name}' will shut down in {duration_str} (at {formatted_time})",
+            fg=typer.colors.GREEN,
+        )
+    except subprocess.TimeoutExpired:
+        typer.secho("SSH connection timed out", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    except FileNotFoundError:
+        typer.secho("SSH client not found. Please install OpenSSH.", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    except OSError as e:
+        typer.secho(f"SSH connection error: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+
+def _cancel_scheduled_shutdown(instance_name: str, instance_id: str) -> None:
+    """Cancel a scheduled shutdown via SSH.
+
+    Args:
+        instance_name: Name of the instance for display
+        instance_id: AWS instance ID
+    """
+    # Get instance DNS for SSH
+    dns = get_instance_dns(instance_id)
+    if not dns:
+        typer.secho(
+            f"Cannot cancel shutdown: Instance {instance_name} has no public DNS",
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(1)
+
+    # Get SSH config
+    user = config_manager.get_value("ssh_user") or "ubuntu"
+    key = config_manager.get_value("ssh_key_path")
+
+    # Build SSH command to cancel shutdown
+    ssh_args = _build_ssh_command(dns, key, user)
+    ssh_args.append("sudo shutdown -c")
+
+    typer.secho(f"Cancelling scheduled shutdown for {instance_name}...", fg=typer.colors.YELLOW)
+
+    try:
+        result = subprocess.run(ssh_args, capture_output=True, text=True, timeout=30)
+        # shutdown -c returns non-zero if no shutdown is scheduled, which is fine
+        if result.returncode == 0:
+            typer.secho(
+                f"Cancelled scheduled shutdown for '{instance_name}'", fg=typer.colors.GREEN
+            )
+        else:
+            # Check if error is because no shutdown was scheduled
+            stderr = result.stderr.strip() if result.stderr else ""
+            if "No scheduled shutdown" in stderr or result.returncode == 1:
+                typer.secho(
+                    f"No scheduled shutdown to cancel for '{instance_name}'",
+                    fg=typer.colors.YELLOW,
+                )
+            else:
+                typer.secho(f"Failed to cancel shutdown: {stderr}", fg=typer.colors.RED)
+                raise typer.Exit(1)
+    except subprocess.TimeoutExpired:
+        typer.secho("SSH connection timed out", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    except FileNotFoundError:
+        typer.secho("SSH client not found. Please install OpenSSH.", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    except OSError as e:
+        typer.secho(f"SSH connection error: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
+
+@app.command()
+def stop(
+    instance_name: str | None = typer.Argument(None, help="Instance name"),
+    stop_in: str | None = typer.Option(
+        None,
+        "--in",
+        help="Schedule stop after duration (e.g., 3h, 30m, 1h30m). Uses SSH to run 'shutdown -h'.",
+    ),
+    cancel: bool = typer.Option(
+        False,
+        "--cancel",
+        help="Cancel a scheduled shutdown",
+    ),
+) -> None:
     """
     Stop an EC2 instance.
 
     Prompts for confirmation before stopping.
     Uses the default instance from config if no name is provided.
-    """
 
+    Examples:
+        remote instance stop                    # Stop instance immediately
+        remote instance stop --in 3h            # Schedule stop in 3 hours
+        remote instance stop --in 30m           # Schedule stop in 30 minutes
+        remote instance stop --in 1h30m         # Schedule stop in 1 hour 30 minutes
+        remote instance stop --cancel           # Cancel scheduled shutdown
+    """
     if not instance_name:
         instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
 
+    # Handle cancel option
+    if cancel:
+        if not is_instance_running(instance_id):
+            typer.secho(
+                f"Instance {instance_name} is not running - cannot cancel shutdown",
+                fg=typer.colors.YELLOW,
+            )
+            return
+        _cancel_scheduled_shutdown(instance_name, instance_id)
+        return
+
+    # Handle scheduled shutdown
+    if stop_in:
+        if not is_instance_running(instance_id):
+            typer.secho(
+                f"Instance {instance_name} is not running - cannot schedule shutdown",
+                fg=typer.colors.YELLOW,
+            )
+            return
+        try:
+            minutes = parse_duration_to_minutes(stop_in)
+            _schedule_shutdown(instance_name, instance_id, minutes)
+        except ValidationError as e:
+            typer.secho(f"Error: {e}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+        return
+
+    # Immediate stop
     if not is_instance_running(instance_id):
         typer.secho(f"Instance {instance_name} is already stopped", fg=typer.colors.YELLOW)
-
         return
 
     try:
@@ -270,13 +710,23 @@ def connect(
     ),
     user: str = typer.Option("ubuntu", "--user", "-u", help="User to be used for ssh connection."),
     key: str | None = typer.Option(
-        None, "--key", "-k", help="Path to SSH private key file. Falls back to config ssh_key."
+        None, "--key", "-k", help="Path to SSH private key file. Falls back to config ssh_key_path."
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose mode"),
     no_strict_host_key: bool = typer.Option(
         False,
         "--no-strict-host-key",
         help="Disable strict host key checking (less secure, use StrictHostKeyChecking=no)",
+    ),
+    auto_start: bool = typer.Option(
+        False,
+        "--start",
+        help="Automatically start the instance if stopped (no prompt)",
+    ),
+    no_start: bool = typer.Option(
+        False,
+        "--no-start",
+        help="Fail immediately if instance is not running (no prompt)",
     ),
 ) -> None:
     """
@@ -285,40 +735,75 @@ def connect(
     If the instance is not running, prompts to start it first.
     Uses the default instance from config if no name is provided.
 
+    Use --start to automatically start a stopped instance without prompting.
+    Use --no-start to fail immediately if the instance is not running.
+
     Examples:
         remote connect                           # Connect to default instance
         remote connect my-server                 # Connect to specific instance
         remote connect -u ec2-user               # Connect as ec2-user
         remote connect -p 8080:80                # With port forwarding
         remote connect -k ~/.ssh/my-key.pem     # With specific SSH key
+        remote connect --start                   # Auto-start if stopped
+        remote connect --no-start                # Fail if not running
     """
+    # Validate mutually exclusive options
+    if auto_start and no_start:
+        typer.secho("Error: --start and --no-start are mutually exclusive", fg=typer.colors.RED)
+        raise typer.Exit(1)
 
     if not instance_name:
         instance_name = get_instance_name()
-    max_attempts = 5
-    sleep_duration = 20
+    max_attempts = MAX_CONNECTION_ATTEMPTS
+    sleep_duration = CONNECTION_RETRY_SLEEP_SECONDS
     instance_id = get_instance_id(instance_name)
 
-    # Check whether the instance is up, and if not prompt the user on whether
-    # to start it.
-
+    # Check whether the instance is up, and if not handle based on flags
     if not is_instance_running(instance_id):
         typer.secho(f"Instance {instance_name} is not running", fg=typer.colors.RED)
-        start_instance = typer.confirm(
-            "Do you want to start it?",
-            default=True,
-            abort=True,
-        )
 
-        if start_instance:
+        # Determine whether to start the instance
+        should_start = False
+
+        if no_start:
+            # --no-start: fail immediately
+            typer.secho(
+                "Use --start to automatically start the instance, or start it manually.",
+                fg=typer.colors.YELLOW,
+            )
+            raise typer.Exit(1)
+        elif auto_start:
+            # --start: auto-start without prompting
+            should_start = True
+        elif sys.stdin.isatty():
+            # Interactive: prompt user
+            try:
+                should_start = typer.confirm(
+                    "Do you want to start it?",
+                    default=True,
+                )
+                if not should_start:
+                    raise typer.Exit(0)
+            except (EOFError, KeyboardInterrupt):
+                # Handle Ctrl+C or EOF gracefully
+                typer.secho("\nAborted.", fg=typer.colors.YELLOW)
+                raise typer.Exit(1)
+        else:
+            # Non-interactive (not a TTY): fail with helpful message
+            typer.secho(
+                "Non-interactive mode: use --start to automatically start the instance.",
+                fg=typer.colors.YELLOW,
+            )
+            raise typer.Exit(1)
+
+        if should_start:
             # Try to start the instance, and exit if it fails
-
             while not is_instance_running(instance_id) and max_attempts > 0:
                 typer.secho(
-                    f"Instance {instance_name} is not running, trying to starting it...",
+                    f"Instance {instance_name} is not running, trying to start it...",
                     fg=typer.colors.YELLOW,
                 )
-                start(instance_name)
+                _start_instance(instance_name)
                 max_attempts -= 1
 
                 if max_attempts == 0:
@@ -328,16 +813,15 @@ def connect(
                     )
                     raise typer.Exit(1)
 
-                time.sleep(10)
+                time.sleep(SSH_READINESS_WAIT_SECONDS)
 
-        # Wait a few seconds to give the instance time to initialize
+            # Wait a few seconds to give the instance time to initialize
+            typer.secho(
+                f"Waiting {sleep_duration} seconds to allow instance to initialize",
+                fg="yellow",
+            )
 
-        typer.secho(
-            f"Waiting {sleep_duration} seconds to allow instance to initialize",
-            fg="yellow",
-        )
-
-        time.sleep(sleep_duration)
+            time.sleep(sleep_duration)
 
     # Now connect to the instance
 
@@ -356,7 +840,7 @@ def connect(
 
     # Check for default key from config if not provided
     if not key:
-        key = config_manager.get_value("ssh_key")
+        key = config_manager.get_value("ssh_key_path")
 
     # If SSH key is specified (from option or config), add the -i option
     if key:
@@ -389,9 +873,9 @@ def connect(
         raise typer.Exit(1)
 
 
-@app.command()
-def type(
-    type: str | None = typer.Argument(
+@app.command("type")
+def instance_type(
+    new_type: str | None = typer.Argument(
         None,
         help="Type of instance to convert to. If none, will print the current instance type.",
     ),
@@ -414,13 +898,13 @@ def type(
     instance_id = get_instance_id(instance_name)
     current_type = get_instance_type(instance_id)
 
-    if type:
+    if new_type:
         # If the current instance type is the same as the requested type,
         # exit.
 
-        if current_type == type:
+        if current_type == new_type:
             typer.secho(
-                f"Instance {instance_name} is already of type {type}",
+                f"Instance {instance_name} is already of type {new_type}",
                 fg=typer.colors.YELLOW,
             )
 
@@ -444,28 +928,28 @@ def type(
                 get_ec2_client().modify_instance_attribute(
                     InstanceId=instance_id,
                     InstanceType={
-                        "Value": type,
+                        "Value": new_type,
                     },
                 )
                 typer.secho(
-                    f"Changing {instance_name} to {type}",
+                    f"Changing {instance_name} to {new_type}",
                     fg=typer.colors.YELLOW,
                 )
 
-                wait = 5
+                wait = TYPE_CHANGE_MAX_POLL_ATTEMPTS
 
                 with console.status("Confirming type change..."):
                     while wait > 0:
-                        time.sleep(5)
+                        time.sleep(TYPE_CHANGE_POLL_INTERVAL_SECONDS)
                         wait -= 1
 
-                        if get_instance_type(instance_id) == type:
+                        if get_instance_type(instance_id) == new_type:
                             typer.secho(
                                 "Done",
                                 fg=typer.colors.YELLOW,
                             )
                             typer.secho(
-                                f"Instance {instance_name} is now of type {type}",
+                                f"Instance {instance_name} is now of type {new_type}",
                                 fg=typer.colors.GREEN,
                             )
 
@@ -479,7 +963,7 @@ def type(
                 error_code = e.response["Error"]["Code"]
                 error_message = e.response["Error"]["Message"]
                 typer.secho(
-                    f"AWS Error changing instance {instance_name} to {type}: {error_message} ({error_code})",
+                    f"AWS Error changing instance {instance_name} to {new_type}: {error_message} ({error_code})",
                     fg=typer.colors.RED,
                 )
                 raise typer.Exit(1)
@@ -488,45 +972,10 @@ def type(
                 raise typer.Exit(1)
 
     else:
-        type = get_instance_type(instance_id)
-
         typer.secho(
-            f"Instance {instance_name} is currently of type {type}",
+            f"Instance {instance_name} is currently of type {current_type}",
             fg=typer.colors.YELLOW,
         )
-
-
-@app.command()
-def list_launch_templates() -> list[dict[str, Any]]:
-    """
-    List all available EC2 launch templates.
-
-    Displays template ID, name, and latest version number.
-    """
-    templates = get_launch_templates()
-
-    if not templates:
-        typer.secho("No launch templates found", fg=typer.colors.YELLOW)
-        return []
-
-    # Format table using rich
-    table = Table(title="Launch Templates")
-    table.add_column("Number", justify="right")
-    table.add_column("LaunchTemplateId", style="green")
-    table.add_column("LaunchTemplateName", style="cyan")
-    table.add_column("Version", justify="right")
-
-    for i, template in enumerate(templates, 1):
-        table.add_row(
-            str(i),
-            template["LaunchTemplateId"],
-            template["LaunchTemplateName"],
-            str(template["LatestVersionNumber"]),
-        )
-
-    console.print(table)
-
-    return templates
 
 
 @app.command()
@@ -547,123 +996,7 @@ def launch(
         remote launch --launch-template my-template      # Use specific template
         remote launch --name my-server --launch-template my-template
     """
-
-    # Variables to track launch template details
-    launch_template_name: str = ""
-    launch_template_id: str = ""
-
-    # Check for default template from config if not specified
-    if not launch_template:
-        default_template = config_manager.get_value("default_launch_template")
-        if default_template:
-            typer.secho(f"Using default template: {default_template}", fg=typer.colors.YELLOW)
-            launch_template = default_template
-
-    # if no launch template is specified, list all the launch templates
-    if not launch_template:
-        typer.secho("Please specify a launch template", fg=typer.colors.RED)
-        typer.secho("Available launch templates:", fg=typer.colors.YELLOW)
-        templates = get_launch_templates()
-
-        if not templates:
-            typer.secho("No launch templates found", fg=typer.colors.RED)
-            raise typer.Exit(1)
-
-        # Display templates
-        table = Table(title="Launch Templates")
-        table.add_column("Number", justify="right")
-        table.add_column("LaunchTemplateId", style="green")
-        table.add_column("LaunchTemplateName", style="cyan")
-        table.add_column("Version", justify="right")
-
-        for i, template in enumerate(templates, 1):
-            table.add_row(
-                str(i),
-                template["LaunchTemplateId"],
-                template["LaunchTemplateName"],
-                str(template["LatestVersionNumber"]),
-            )
-
-        console.print(table)
-
-        typer.secho("Select a launch template by number", fg=typer.colors.YELLOW)
-        launch_template_number = typer.prompt("Launch template", type=str)
-        # Validate user input and safely access array
-        try:
-            template_index = validate_array_index(
-                launch_template_number, len(templates), "launch templates"
-            )
-            selected_template = templates[template_index]
-        except ValidationError as e:
-            typer.secho(f"Error: {e}", fg=typer.colors.RED)
-            raise typer.Exit(1)
-        launch_template_name = str(selected_template["LaunchTemplateName"])
-        launch_template_id = str(selected_template["LaunchTemplateId"])
-
-        typer.secho(f"Launch template {launch_template_name} selected", fg=typer.colors.YELLOW)
-        typer.secho(
-            f"Defaulting to latest version: {selected_template['LatestVersionNumber']}",
-            fg=typer.colors.YELLOW,
-        )
-        typer.secho(f"Launching instance based on launch template {launch_template_name}")
-    else:
-        # launch_template was provided as a string
-        launch_template_name = launch_template
-        launch_template_id = get_launch_template_id(launch_template)
-
-    # if no name is specified, ask the user for the name
-
-    if not name:
-        random_string = "".join(random.choices(string.ascii_letters + string.digits, k=6))
-        name_suggestion = launch_template_name + "-" + random_string
-        name = typer.prompt(
-            "Please enter a name for the instance", type=str, default=name_suggestion
-        )
-
-    # Launch the instance with the specified launch template, version, and name
-    instance = get_ec2_client().run_instances(
-        LaunchTemplate={"LaunchTemplateId": launch_template_id, "Version": version},
-        MaxCount=1,
-        MinCount=1,
-        TagSpecifications=[
-            {
-                "ResourceType": "instance",
-                "Tags": [
-                    {"Key": "Name", "Value": name},
-                ],
-            },
-        ],
-    )
-
-    # Safely access the launched instance ID
-    try:
-        instances = instance.get("Instances", [])
-        if not instances:
-            typer.secho(
-                "Warning: No instance information returned from launch", fg=typer.colors.YELLOW
-            )
-            return
-
-        launched_instance = safe_get_array_item(instances, 0, "launched instances")
-        instance_id = launched_instance.get("InstanceId", "unknown")
-        instance_type = launched_instance.get("InstanceType", "unknown")
-
-        # Display launch summary as Rich panel
-        summary_lines = [
-            f"[cyan]Instance ID:[/cyan] {instance_id}",
-            f"[cyan]Name:[/cyan]        {name}",
-            f"[cyan]Template:[/cyan]    {launch_template_name}",
-            f"[cyan]Type:[/cyan]        {instance_type}",
-        ]
-        panel = Panel(
-            "\n".join(summary_lines),
-            title="[green]Instance Launched[/green]",
-            border_style="green",
-        )
-        console.print(panel)
-    except ValidationError as e:
-        typer.secho(f"Error accessing launch result: {e}", fg=typer.colors.RED)
-        raise typer.Exit(1)
+    launch_instance_from_template(name=name, launch_template=launch_template, version=version)
 
 
 @app.command()
@@ -683,7 +1016,7 @@ def terminate(instance_name: str | None = typer.Argument(None, help="Instance na
     # Check if instance is managed by Terraform
     instance_info = get_ec2_client().describe_instances(InstanceIds=[instance_id])
     # Safely access instance information
-    tags: builtins.list[dict[str, str]] = []
+    tags: list[dict[str, str]] = []
     try:
         reservations = instance_info.get("Reservations", [])
         if not reservations:
@@ -699,8 +1032,6 @@ def terminate(instance_name: str | None = typer.Argument(None, help="Instance na
     except ValidationError as e:
         typer.secho(f"Error accessing instance information: {e}", fg=typer.colors.RED)
         # Continue with empty tags
-
-    # If the instance is managed by Terraform, warn user
 
     # Confirmation step
     typer.secho(
@@ -720,6 +1051,7 @@ def terminate(instance_name: str | None = typer.Argument(None, help="Instance na
 
         return
 
+    # If the instance is managed by Terraform, warn user
     terraform_managed = any("terraform" in tag["Value"].lower() for tag in tags)
 
     if terraform_managed:
@@ -744,5 +1076,30 @@ def terminate(instance_name: str | None = typer.Argument(None, help="Instance na
         )
 
 
-if __name__ == "__main__":
-    app()
+def _format_uptime(seconds: float | None) -> str:
+    """Format uptime in seconds to human-readable string.
+
+    Args:
+        seconds: Uptime in seconds, or None
+
+    Returns:
+        Human-readable string like '2h 45m' or '3d 5h 30m'
+    """
+    if seconds is None or seconds < 0:
+        return "-"
+
+    total_minutes = int(seconds // SECONDS_PER_MINUTE)
+    days = total_minutes // MINUTES_PER_DAY
+    remaining = total_minutes % MINUTES_PER_DAY
+    hours = remaining // MINUTES_PER_HOUR
+    minutes = remaining % MINUTES_PER_HOUR
+
+    parts = []
+    if days > 0:
+        parts.append(f"{days}d")
+    if hours > 0:
+        parts.append(f"{hours}h")
+    if minutes > 0 or not parts:
+        parts.append(f"{minutes}m")
+
+    return " ".join(parts)

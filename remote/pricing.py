@@ -11,18 +11,29 @@ from typing import Any
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 
-# AWS region to location name mapping
-# The Pricing API uses location names, not region codes
+# AWS region to location name mapping for the Pricing API.
+#
+# IMPORTANT: The Pricing API uses human-readable location names, NOT region codes.
+# These names must match EXACTLY what AWS accepts. Common mistakes:
+#   - "Europe (Ireland)" - WRONG (AWS returns no results)
+#   - "EU (Ireland)" - CORRECT
+#
+# Validated against AWS Pricing API: 2026-01-18
+# To re-validate, run: pytest -m integration tests/test_api_contracts.py
+# See: https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/price-list-query-api.html
+#
+# Test coverage for this mapping: tests/test_api_contracts.py::TestPricingApiContracts
 REGION_TO_LOCATION: dict[str, str] = {
     "us-east-1": "US East (N. Virginia)",
     "us-east-2": "US East (Ohio)",
     "us-west-1": "US West (N. California)",
     "us-west-2": "US West (Oregon)",
-    "eu-west-1": "Europe (Ireland)",
-    "eu-west-2": "Europe (London)",
-    "eu-west-3": "Europe (Paris)",
-    "eu-central-1": "Europe (Frankfurt)",
-    "eu-north-1": "Europe (Stockholm)",
+    "eu-west-1": "EU (Ireland)",
+    "eu-west-2": "EU (London)",
+    "eu-west-3": "EU (Paris)",
+    "eu-central-1": "EU (Frankfurt)",
+    "eu-north-1": "EU (Stockholm)",
+    "eu-south-1": "EU (Milan)",
     "ap-northeast-1": "Asia Pacific (Tokyo)",
     "ap-northeast-2": "Asia Pacific (Seoul)",
     "ap-northeast-3": "Asia Pacific (Osaka)",
@@ -32,9 +43,6 @@ REGION_TO_LOCATION: dict[str, str] = {
     "sa-east-1": "South America (Sao Paulo)",
     "ca-central-1": "Canada (Central)",
 }
-
-# Hours per month (for calculating monthly estimates)
-HOURS_PER_MONTH = 730
 
 
 @lru_cache(maxsize=1)
@@ -130,18 +138,34 @@ def get_instance_price(instance_type: str, region: str | None = None) -> float |
         return None
 
 
-def get_monthly_estimate(hourly_price: float | None) -> float | None:
-    """Calculate monthly cost estimate from hourly price.
+def get_instance_price_with_fallback(
+    instance_type: str, region: str | None = None
+) -> tuple[float | None, bool]:
+    """Get the hourly on-demand price with region fallback.
+
+    If the requested region is not in our region-to-location mapping,
+    falls back to us-east-1 pricing as an estimate.
 
     Args:
-        hourly_price: The hourly price in USD
+        instance_type: The EC2 instance type (e.g., 't3.micro', 'm5.large')
+        region: AWS region code. If None, uses the current session region.
 
     Returns:
-        The estimated monthly cost in USD, or None if hourly_price is None
+        Tuple of (price, used_fallback) where:
+        - price: The hourly price in USD, or None if pricing is unavailable
+        - used_fallback: True if us-east-1 pricing was used as a fallback
     """
-    if hourly_price is None:
-        return None
-    return hourly_price * HOURS_PER_MONTH
+    if region is None:
+        region = get_current_region()
+
+    # Check if region is in our mapping
+    if region not in REGION_TO_LOCATION:
+        # Fall back to us-east-1 pricing
+        price = get_instance_price(instance_type, "us-east-1")
+        return (price, True)
+
+    price = get_instance_price(instance_type, region)
+    return (price, False)
 
 
 def format_price(price: float | None, prefix: str = "$") -> str:
@@ -159,27 +183,6 @@ def format_price(price: float | None, prefix: str = "$") -> str:
     if price < 0.01:
         return f"{prefix}{price:.4f}"
     return f"{prefix}{price:.2f}"
-
-
-def get_instance_pricing_info(instance_type: str, region: str | None = None) -> dict[str, Any]:
-    """Get comprehensive pricing information for an instance type.
-
-    Args:
-        instance_type: The EC2 instance type
-        region: AWS region code. If None, uses the current session region.
-
-    Returns:
-        Dictionary with 'hourly', 'monthly', and formatted strings
-    """
-    hourly = get_instance_price(instance_type, region)
-    monthly = get_monthly_estimate(hourly)
-
-    return {
-        "hourly": hourly,
-        "monthly": monthly,
-        "hourly_formatted": format_price(hourly),
-        "monthly_formatted": format_price(monthly),
-    }
 
 
 def clear_price_cache() -> None:

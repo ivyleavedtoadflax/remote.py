@@ -36,7 +36,7 @@ class TestInstanceListCommand:
         mock_paginator.paginate.return_value = [{"Reservations": []}]
         mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
-        result = runner.invoke(app, ["list", "--no-pricing"])
+        result = runner.invoke(app, ["list"])
 
         assert result.exit_code == 0
         assert "Name" in result.stdout
@@ -52,10 +52,6 @@ class TestInstanceListCommand:
         mock_paginator = mocker.MagicMock()
         mock_paginator.paginate.return_value = [mock_ec2_instances]
         mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
-
-        # Mock pricing to avoid actual API calls
-        mocker.patch("remote.instance.get_instance_price", return_value=0.0104)
-        mocker.patch("remote.instance.get_monthly_estimate", return_value=7.59)
 
         result = runner.invoke(app, ["list"])
 
@@ -76,8 +72,8 @@ class TestInstanceListCommand:
         assert "t2.micro" in result.stdout
         assert "2023-07-15 00:00:00 UTC" in result.stdout
 
-    def test_should_show_pricing_columns_by_default(self, mocker):
-        """Should display pricing columns when --no-pricing is not specified."""
+    def test_should_hide_cost_columns_by_default(self, mocker):
+        """Should not display cost columns by default (without --cost flag)."""
         mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
         mock_paginator = mocker.MagicMock()
         mock_paginator.paginate.return_value = [{"Reservations": []}]
@@ -86,67 +82,21 @@ class TestInstanceListCommand:
         result = runner.invoke(app, ["list"])
 
         assert result.exit_code == 0
-        assert "$/hr" in result.stdout
-        assert "$/month" in result.stdout
-
-    def test_should_hide_pricing_columns_with_no_pricing_flag(self, mocker):
-        """Should not display pricing columns when --no-pricing is specified."""
-        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-        mock_paginator = mocker.MagicMock()
-        mock_paginator.paginate.return_value = [{"Reservations": []}]
-        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
-
-        result = runner.invoke(app, ["list", "--no-pricing"])
-
-        assert result.exit_code == 0
+        # Cost columns should be hidden by default
         assert "$/hr" not in result.stdout
-        assert "$/month" not in result.stdout
+        assert "Est. Cost" not in result.stdout
+        assert "Uptime" not in result.stdout
 
-    def test_should_display_pricing_data_for_instances(self, mocker, mock_ec2_instances):
-        """Should show pricing information for each instance type."""
+    def test_should_not_call_pricing_api_by_default(self, mocker, mock_ec2_instances):
+        """Should skip pricing API calls by default (without --cost flag)."""
         mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
         mock_paginator = mocker.MagicMock()
         mock_paginator.paginate.return_value = [mock_ec2_instances]
         mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
-        # Mock pricing functions
-        mocker.patch("remote.instance.get_instance_price", return_value=0.0104)
-        mocker.patch("remote.instance.get_monthly_estimate", return_value=7.59)
+        mock_get_price = mocker.patch("remote.instance.get_instance_price_with_fallback")
 
         result = runner.invoke(app, ["list"])
-
-        assert result.exit_code == 0
-        # format_price formats 0.0104 as "$0.01" since it's >= 0.01 (uses 2 decimal places)
-        assert "$0.01" in result.stdout
-        assert "$7.59" in result.stdout
-
-    def test_should_handle_unavailable_pricing_gracefully(self, mocker, mock_ec2_instances):
-        """Should display dash when pricing is unavailable."""
-        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-        mock_paginator = mocker.MagicMock()
-        mock_paginator.paginate.return_value = [mock_ec2_instances]
-        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
-
-        # Mock pricing to return None (unavailable)
-        mocker.patch("remote.instance.get_instance_price", return_value=None)
-        mocker.patch("remote.instance.get_monthly_estimate", return_value=None)
-
-        result = runner.invoke(app, ["list"])
-
-        assert result.exit_code == 0
-        # format_price returns "-" for None values
-        assert "-" in result.stdout
-
-    def test_should_not_call_pricing_api_with_no_pricing_flag(self, mocker, mock_ec2_instances):
-        """Should skip pricing API calls when --no-pricing flag is used."""
-        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-        mock_paginator = mocker.MagicMock()
-        mock_paginator.paginate.return_value = [mock_ec2_instances]
-        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
-
-        mock_get_price = mocker.patch("remote.instance.get_instance_price")
-
-        result = runner.invoke(app, ["list", "--no-pricing"])
 
         assert result.exit_code == 0
         mock_get_price.assert_not_called()
@@ -190,6 +140,28 @@ class TestLaunchTemplateUtilities:
                 ]
             },
         )
+        # Mock EC2 client for describe_instances call
+        mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+        mock_ec2_client.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running"},
+                            "InstanceType": "t2.micro",
+                            "PublicIpAddress": "1.2.3.4",
+                            "PrivateIpAddress": "10.0.0.1",
+                            "PublicDnsName": "ec2-1-2-3-4.compute-1.amazonaws.com",
+                            "KeyName": "my-key",
+                            "Placement": {"AvailabilityZone": "us-east-1a"},
+                            "SecurityGroups": [{"GroupName": "default"}],
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
 
         result = runner.invoke(app, ["status"])
 
@@ -204,22 +176,283 @@ class TestLaunchTemplateUtilities:
         # Verify status information is displayed
         assert "test-instance" in result.stdout
         assert "running" in result.stdout
+        # Verify detailed info is shown
+        assert "t2.micro" in result.stdout
+        assert "1.2.3.4" in result.stdout
 
-    def test_should_report_non_running_instance_status(self, mocker):
-        """Should report when instance exists but is not in running state."""
+    def test_should_show_stopped_instance_details(self, mocker):
+        """Should display details for stopped instances (without health status)."""
         mock_get_instance_id = mocker.patch(
             "remote.instance.get_instance_id", return_value="i-0123456789abcdef0"
         )
         mocker.patch("remote.instance.get_instance_status", return_value={"InstanceStatuses": []})
+        # Mock EC2 client for describe_instances call
+        mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+        mock_ec2_client.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "stopped"},
+                            "InstanceType": "t2.micro",
+                            "PrivateIpAddress": "10.0.0.1",
+                            "KeyName": "my-key",
+                            "Placement": {"AvailabilityZone": "us-east-1a"},
+                            "SecurityGroups": [{"GroupName": "default"}],
+                            "Tags": [{"Key": "Name", "Value": "specific-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
 
         result = runner.invoke(app, ["status", "specific-instance"])
 
         assert result.exit_code == 0
         mock_get_instance_id.assert_called_once_with("specific-instance")
-        assert "specific-instance is not in running state" in result.stdout
+        # Verify basic info is displayed
+        assert "specific-instance" in result.stdout
+        assert "stopped" in result.stdout
+        assert "t2.micro" in result.stdout
 
 
-# Removed duplicate - moved to TestInstanceStatusCommand class above
+class TestStatusWatchMode:
+    """Test the watch mode functionality for the status command."""
+
+    def test_should_reject_interval_less_than_one(self, mocker):
+        """Should exit with error when interval is less than 1."""
+        mocker.patch("remote.instance.get_instance_name", return_value="test-instance")
+        mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+
+        result = runner.invoke(app, ["status", "--watch", "--interval", "0"])
+
+        assert result.exit_code == 1
+        assert "Interval must be at least 1 second" in result.stdout
+
+    def test_should_accept_watch_flag(self, mocker):
+        """Should accept the --watch flag and enter watch mode."""
+        mocker.patch("remote.instance.get_instance_name", return_value="test-instance")
+        mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+
+        # Mock _watch_status to avoid actually entering the infinite loop
+        mock_watch = mocker.patch("remote.instance._watch_status")
+
+        result = runner.invoke(app, ["status", "--watch"])
+
+        assert result.exit_code == 0
+        mock_watch.assert_called_once_with("test-instance", "i-0123456789abcdef0", 2)
+
+    def test_should_accept_short_watch_flag(self, mocker):
+        """Should accept the -w short flag for watch mode."""
+        mocker.patch("remote.instance.get_instance_name", return_value="test-instance")
+        mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+
+        mock_watch = mocker.patch("remote.instance._watch_status")
+
+        result = runner.invoke(app, ["status", "-w"])
+
+        assert result.exit_code == 0
+        mock_watch.assert_called_once()
+
+    def test_should_accept_custom_interval(self, mocker):
+        """Should accept custom interval via --interval flag."""
+        mocker.patch("remote.instance.get_instance_name", return_value="test-instance")
+        mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+
+        mock_watch = mocker.patch("remote.instance._watch_status")
+
+        result = runner.invoke(app, ["status", "--watch", "--interval", "5"])
+
+        assert result.exit_code == 0
+        mock_watch.assert_called_once_with("test-instance", "i-0123456789abcdef0", 5)
+
+    def test_should_accept_short_interval_flag(self, mocker):
+        """Should accept -i short flag for interval."""
+        mocker.patch("remote.instance.get_instance_name", return_value="test-instance")
+        mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+
+        mock_watch = mocker.patch("remote.instance._watch_status")
+
+        result = runner.invoke(app, ["status", "-w", "-i", "10"])
+
+        assert result.exit_code == 0
+        mock_watch.assert_called_once_with("test-instance", "i-0123456789abcdef0", 10)
+
+
+class TestBuildStatusTable:
+    """Test the _build_status_table helper function."""
+
+    def test_should_return_panel_for_running_instance(self, mocker):
+        """Should return a Rich Panel for a running instance."""
+        from rich.panel import Panel
+
+        from remote.instance import _build_status_table
+
+        mocker.patch(
+            "remote.instance.get_instance_status",
+            return_value={
+                "InstanceStatuses": [
+                    {
+                        "InstanceId": "i-0123456789abcdef0",
+                        "InstanceState": {"Name": "running"},
+                        "SystemStatus": {"Status": "ok"},
+                        "InstanceStatus": {"Status": "ok", "Details": [{"Status": "passed"}]},
+                    }
+                ]
+            },
+        )
+        # Mock EC2 client for describe_instances call
+        mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+        mock_ec2_client.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running"},
+                            "InstanceType": "t2.micro",
+                            "PublicIpAddress": "1.2.3.4",
+                            "PrivateIpAddress": "10.0.0.1",
+                            "PublicDnsName": "ec2-1-2-3-4.compute-1.amazonaws.com",
+                            "KeyName": "my-key",
+                            "Placement": {"AvailabilityZone": "us-east-1a"},
+                            "SecurityGroups": [{"GroupName": "default"}],
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+
+        result = _build_status_table("test-instance", "i-0123456789abcdef0")
+
+        assert isinstance(result, Panel)
+
+    def test_should_return_panel_with_expand_false(self, mocker):
+        """Panel should not expand to full terminal width."""
+        from rich.panel import Panel
+
+        from remote.instance import _build_status_table
+
+        mocker.patch(
+            "remote.instance.get_instance_status",
+            return_value={
+                "InstanceStatuses": [
+                    {
+                        "InstanceId": "i-0123456789abcdef0",
+                        "InstanceState": {"Name": "running"},
+                        "SystemStatus": {"Status": "ok"},
+                        "InstanceStatus": {"Status": "ok", "Details": [{"Status": "passed"}]},
+                    }
+                ]
+            },
+        )
+        mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+        mock_ec2_client.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running"},
+                            "InstanceType": "t2.micro",
+                            "PublicIpAddress": "1.2.3.4",
+                            "PrivateIpAddress": "10.0.0.1",
+                            "PublicDnsName": "ec2-1-2-3-4.compute-1.amazonaws.com",
+                            "KeyName": "my-key",
+                            "Placement": {"AvailabilityZone": "us-east-1a"},
+                            "SecurityGroups": [{"GroupName": "default"}],
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+
+        result = _build_status_table("test-instance", "i-0123456789abcdef0")
+
+        assert isinstance(result, Panel)
+        assert result.expand is False
+
+    def test_should_return_panel_for_stopped_instance(self, mocker):
+        """Should return a Panel for stopped instances (without health section)."""
+        from rich.panel import Panel
+
+        from remote.instance import _build_status_table
+
+        mocker.patch(
+            "remote.instance.get_instance_status",
+            return_value={"InstanceStatuses": []},
+        )
+        # Mock EC2 client for describe_instances call
+        mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+        mock_ec2_client.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "stopped"},
+                            "InstanceType": "t2.micro",
+                            "PrivateIpAddress": "10.0.0.1",
+                            "KeyName": "my-key",
+                            "Placement": {"AvailabilityZone": "us-east-1a"},
+                            "SecurityGroups": [{"GroupName": "default"}],
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+
+        result = _build_status_table("test-instance", "i-0123456789abcdef0")
+
+        # Should still return a Panel with basic info (just no health section)
+        assert isinstance(result, Panel)
+
+    def test_should_return_error_string_for_not_found_instance(self, mocker):
+        """Should return an error string when instance is not found."""
+        from remote.instance import _build_status_table
+
+        mocker.patch(
+            "remote.instance.get_instance_status",
+            return_value={"InstanceStatuses": []},
+        )
+        # Mock EC2 client returning empty reservations
+        mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+        mock_ec2_client.return_value.describe_instances.return_value = {"Reservations": []}
+
+        result = _build_status_table("test-instance", "i-0123456789abcdef0")
+
+        assert isinstance(result, str)
+        assert "not found" in result
+
+
+class TestWatchStatusFunction:
+    """Test the _watch_status function."""
+
+    def test_should_handle_keyboard_interrupt(self, mocker):
+        """Should handle Ctrl+C gracefully."""
+        from remote.instance import _watch_status
+
+        # Mock time.sleep to raise KeyboardInterrupt
+        mocker.patch("remote.instance.time.sleep", side_effect=KeyboardInterrupt)
+
+        # Mock _build_status_table to return a simple string
+        mocker.patch("remote.instance._build_status_table", return_value="test")
+
+        # Mock console (imported from utils) and Live
+        mocker.patch("remote.instance.console")
+        mock_live = mocker.patch("remote.instance.Live")
+        mock_live.return_value.__enter__ = mocker.Mock(return_value=mock_live.return_value)
+        mock_live.return_value.__exit__ = mocker.Mock(return_value=False)
+
+        # Should not raise, should exit gracefully
+        _watch_status("test-instance", "i-0123456789abcdef0", 2)
+
+        # Verify the function tried to update at least once
+        mock_live.return_value.update.assert_called()
 
 
 def test_start_instance_already_running(mocker):
@@ -463,25 +696,6 @@ def test_terminate_terraform_managed_instance(mocker):
 
     assert result.exit_code == 0
     assert "This instance appears to be managed by Terraform" in result.stdout
-
-
-def test_list_launch_templates_command(mocker):
-    mocker.patch(
-        "remote.instance.get_launch_templates",
-        return_value=[
-            {
-                "LaunchTemplateId": "lt-0123456789abcdef0",
-                "LaunchTemplateName": "test-template-1",
-                "LatestVersionNumber": 2,
-            }
-        ],
-    )
-
-    result = runner.invoke(app, ["list-launch-templates"])
-
-    assert result.exit_code == 0
-    assert "test-template-1" in result.stdout
-    assert "lt-0123456789abcdef0" in result.stdout
 
 
 def test_connect_with_key_option(mocker):
@@ -846,3 +1060,874 @@ class TestSSHErrorHandling:
 
         assert result.exit_code == 0
         assert "SSH connection failed" not in result.stdout
+
+
+# ============================================================================
+# Issue 39: Scheduled Shutdown Tests
+# ============================================================================
+
+
+class TestScheduledShutdown:
+    """Tests for scheduled instance shutdown functionality."""
+
+    def test_stop_with_in_option_schedules_shutdown(self, mocker):
+        """Test that --in option schedules shutdown via SSH."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+        mock_config = mocker.patch("remote.instance.config_manager")
+
+        # Mock instance lookup
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        # Mock config values
+        mock_config.get_value.side_effect = lambda k: "ubuntu" if k == "ssh_user" else None
+
+        # Mock subprocess success
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 0
+        mock_result.stderr = ""
+        mock_subprocess.return_value = mock_result
+
+        result = runner.invoke(app, ["stop", "test-instance", "--in", "3h"])
+
+        assert result.exit_code == 0
+        assert "will shut down in 3h" in result.stdout
+
+        # Verify SSH command was called with shutdown command
+        mock_subprocess.assert_called_once()
+        ssh_command = mock_subprocess.call_args[0][0]
+        assert "ssh" in ssh_command
+        assert "sudo shutdown -h +180" in ssh_command
+
+    def test_stop_with_in_option_invalid_duration(self, mocker):
+        """Test that --in option with invalid duration shows error."""
+        mocker.patch("remote.instance.get_instance_name", return_value="test-instance")
+        mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+        mocker.patch("remote.instance.is_instance_running", return_value=True)
+
+        result = runner.invoke(app, ["stop", "test-instance", "--in", "invalid"])
+
+        assert result.exit_code == 1
+        assert "Invalid duration format" in result.stdout
+
+    def test_stop_with_in_option_not_running(self, mocker):
+        """Test that --in option on stopped instance shows warning."""
+        mocker.patch("remote.instance.get_instance_name", return_value="test-instance")
+        mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+        mocker.patch("remote.instance.is_instance_running", return_value=False)
+
+        result = runner.invoke(app, ["stop", "test-instance", "--in", "3h"])
+
+        assert result.exit_code == 0
+        assert "is not running" in result.stdout
+        assert "cannot schedule shutdown" in result.stdout
+
+    def test_stop_with_cancel_option(self, mocker):
+        """Test that --cancel option cancels scheduled shutdown."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+        mock_config = mocker.patch("remote.instance.config_manager")
+
+        # Mock instance lookup
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        # Mock config values
+        mock_config.get_value.side_effect = lambda k: "ubuntu" if k == "ssh_user" else None
+
+        # Mock subprocess success
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 0
+        mock_result.stderr = ""
+        mock_subprocess.return_value = mock_result
+
+        result = runner.invoke(app, ["stop", "test-instance", "--cancel"])
+
+        assert result.exit_code == 0
+        assert "Cancelled scheduled shutdown" in result.stdout
+
+        # Verify SSH command was called with shutdown -c
+        mock_subprocess.assert_called_once()
+        ssh_command = mock_subprocess.call_args[0][0]
+        assert "sudo shutdown -c" in ssh_command
+
+    def test_stop_with_cancel_not_running(self, mocker):
+        """Test that --cancel on stopped instance shows warning."""
+        mocker.patch("remote.instance.get_instance_name", return_value="test-instance")
+        mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+        mocker.patch("remote.instance.is_instance_running", return_value=False)
+
+        result = runner.invoke(app, ["stop", "test-instance", "--cancel"])
+
+        assert result.exit_code == 0
+        assert "is not running" in result.stdout
+        assert "cannot cancel shutdown" in result.stdout
+
+
+class TestStartWithStopIn:
+    """Tests for start command with --stop-in option."""
+
+    def test_start_with_stop_in_option_invalid_duration(self, mocker):
+        """Test that --stop-in option with invalid duration fails early."""
+        mocker.patch("remote.instance.get_instance_name", return_value="test-instance")
+        mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+
+        result = runner.invoke(app, ["start", "test-instance", "--stop-in", "bad"])
+
+        assert result.exit_code == 1
+        assert "Invalid duration format" in result.stdout
+
+    def test_start_with_stop_in_already_running(self, mocker):
+        """Test that --stop-in on running instance still schedules shutdown."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+        mock_config = mocker.patch("remote.instance.config_manager")
+
+        # Mock instance already running
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        mock_config.get_value.side_effect = lambda k: "ubuntu" if k == "ssh_user" else None
+
+        # Mock subprocess success
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 0
+        mock_result.stderr = ""
+        mock_subprocess.return_value = mock_result
+
+        result = runner.invoke(app, ["start", "test-instance", "--stop-in", "2h"])
+
+        assert result.exit_code == 0
+        assert "already running" in result.stdout
+        assert "Scheduling automatic shutdown" in result.stdout
+        assert "will shut down in 2h" in result.stdout
+
+
+class TestScheduledShutdownSSHErrors:
+    """Tests for SSH error handling in scheduled shutdown."""
+
+    def test_schedule_shutdown_ssh_timeout(self, mocker):
+        """Test that SSH timeout is handled gracefully."""
+        import subprocess
+
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+        mock_config = mocker.patch("remote.instance.config_manager")
+
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        mock_config.get_value.side_effect = lambda k: "ubuntu" if k == "ssh_user" else None
+
+        # Mock subprocess timeout
+        mock_subprocess.side_effect = subprocess.TimeoutExpired(cmd="ssh", timeout=30)
+
+        result = runner.invoke(app, ["stop", "test-instance", "--in", "1h"])
+
+        assert result.exit_code == 1
+        assert "SSH connection timed out" in result.stdout
+
+    def test_schedule_shutdown_no_ssh_client(self, mocker):
+        """Test that missing SSH client is handled."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+        mock_config = mocker.patch("remote.instance.config_manager")
+
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        mock_config.get_value.side_effect = lambda k: "ubuntu" if k == "ssh_user" else None
+
+        # Mock SSH not found
+        mock_subprocess.side_effect = FileNotFoundError("ssh not found")
+
+        result = runner.invoke(app, ["stop", "test-instance", "--in", "1h"])
+
+        assert result.exit_code == 1
+        assert "SSH client not found" in result.stdout
+
+    def test_schedule_shutdown_no_public_dns(self, mocker):
+        """Test that missing public DNS is handled."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_config = mocker.patch("remote.instance.config_manager")
+
+        # Instance has no public DNS
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "PublicDnsName": "",  # No public DNS
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        mock_config.get_value.side_effect = lambda k: "ubuntu" if k == "ssh_user" else None
+
+        result = runner.invoke(app, ["stop", "test-instance", "--in", "1h"])
+
+        assert result.exit_code == 1
+        assert "has no public DNS" in result.stdout
+
+    def test_schedule_shutdown_uses_config_ssh_key(self, mocker):
+        """Test that SSH key from config is used."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+        mock_config = mocker.patch("remote.instance.config_manager")
+
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        # Return SSH key from config
+        def get_config_value(key):
+            if key == "ssh_user":
+                return "ec2-user"
+            elif key == "ssh_key_path":
+                return "/path/to/key.pem"
+            return None
+
+        mock_config.get_value.side_effect = get_config_value
+
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 0
+        mock_result.stderr = ""
+        mock_subprocess.return_value = mock_result
+
+        result = runner.invoke(app, ["stop", "test-instance", "--in", "30m"])
+
+        assert result.exit_code == 0
+
+        # Verify SSH command includes the key
+        ssh_command = mock_subprocess.call_args[0][0]
+        assert "-i" in ssh_command
+        assert "/path/to/key.pem" in ssh_command
+        assert "ec2-user@" in ssh_command[-2]  # User from config
+
+
+# ============================================================================
+# Issue 41: Instance List Cost Flag Tests
+# ============================================================================
+
+
+class TestInstanceListCostFlag:
+    """Tests for the --cost flag on instance ls command."""
+
+    def test_list_shows_cost_columns_with_cost_flag(self, mocker):
+        """Test that --cost flag adds uptime, hourly rate, and estimated cost columns."""
+        import datetime
+
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+
+        launch_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=2)
+
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [
+            {
+                "Reservations": [
+                    {
+                        "Instances": [
+                            {
+                                "InstanceId": "i-0123456789abcdef0",
+                                "InstanceType": "t3.micro",
+                                "State": {"Name": "running", "Code": 16},
+                                "LaunchTime": launch_time,
+                                "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                                "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        # Mock pricing
+        mocker.patch(
+            "remote.instance.get_instance_price_with_fallback", return_value=(0.0104, False)
+        )
+
+        result = runner.invoke(app, ["list", "--cost"])
+
+        assert result.exit_code == 0
+        # Verify cost-related columns are present
+        assert "Uptime" in result.stdout
+        assert "$/hr" in result.stdout
+        assert "Est. Cost" in result.stdout
+        # Verify instance data is present
+        assert "test-instance" in result.stdout
+        assert "i-0123456789abcdef0" in result.stdout
+
+    def test_list_shows_cost_columns_with_short_flag(self, mocker):
+        """Test that -c short flag adds cost columns."""
+        import datetime
+
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+
+        launch_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)
+
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [
+            {
+                "Reservations": [
+                    {
+                        "Instances": [
+                            {
+                                "InstanceId": "i-0123456789abcdef0",
+                                "InstanceType": "t3.micro",
+                                "State": {"Name": "running", "Code": 16},
+                                "LaunchTime": launch_time,
+                                "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                                "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        mocker.patch(
+            "remote.instance.get_instance_price_with_fallback", return_value=(0.0104, False)
+        )
+
+        result = runner.invoke(app, ["list", "-c"])
+
+        assert result.exit_code == 0
+        assert "Uptime" in result.stdout
+        assert "$/hr" in result.stdout
+        assert "Est. Cost" in result.stdout
+
+    def test_list_hides_cost_columns_by_default(self, mocker):
+        """Test that cost columns are not shown by default (without --cost flag)."""
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [{"Reservations": []}]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 0
+        assert "Uptime" not in result.stdout
+        assert "$/hr" not in result.stdout
+        assert "Est. Cost" not in result.stdout
+
+    def test_list_cost_shows_uptime_and_estimated_cost(self, mocker):
+        """Test that cost flag shows actual uptime and calculated estimated cost."""
+        import datetime
+
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+
+        # Instance running for 2 hours
+        launch_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=2)
+
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [
+            {
+                "Reservations": [
+                    {
+                        "Instances": [
+                            {
+                                "InstanceId": "i-0123456789abcdef0",
+                                "InstanceType": "t3.micro",
+                                "State": {"Name": "running", "Code": 16},
+                                "LaunchTime": launch_time,
+                                "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                                "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        # Mock $0.01/hr pricing
+        mocker.patch("remote.instance.get_instance_price_with_fallback", return_value=(0.01, False))
+
+        result = runner.invoke(app, ["list", "--cost"])
+
+        assert result.exit_code == 0
+        # Check uptime is shown (approximately 2h)
+        assert "2h" in result.stdout
+        # Check hourly rate is shown
+        assert "$0.01" in result.stdout
+        # Check estimated cost (2 hours * $0.01 = $0.02)
+        assert "$0.02" in result.stdout
+
+    def test_list_cost_handles_stopped_instance(self, mocker):
+        """Test that cost flag shows dash for stopped instances."""
+
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [
+            {
+                "Reservations": [
+                    {
+                        "Instances": [
+                            {
+                                "InstanceId": "i-0123456789abcdef0",
+                                "InstanceType": "t3.micro",
+                                "State": {"Name": "stopped", "Code": 80},
+                                "PublicDnsName": "",
+                                "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        result = runner.invoke(app, ["list", "--cost"])
+
+        assert result.exit_code == 0
+        # Stopped instances should show dash for uptime and cost
+        assert "stopped" in result.stdout
+
+    def test_list_cost_handles_unavailable_pricing(self, mocker):
+        """Test that cost flag handles unavailable pricing gracefully."""
+        import datetime
+
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+
+        launch_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)
+
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [
+            {
+                "Reservations": [
+                    {
+                        "Instances": [
+                            {
+                                "InstanceId": "i-0123456789abcdef0",
+                                "InstanceType": "t3.micro",
+                                "State": {"Name": "running", "Code": 16},
+                                "LaunchTime": launch_time,
+                                "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                                "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        # Mock pricing to return None
+        mocker.patch("remote.instance.get_instance_price_with_fallback", return_value=(None, False))
+
+        result = runner.invoke(app, ["list", "--cost"])
+
+        assert result.exit_code == 0
+        # Should show "-" for unavailable pricing
+        assert "-" in result.stdout
+
+    def test_list_cost_does_not_call_pricing_without_flag(self, mocker):
+        """Test that pricing API is not called without --cost flag."""
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [{"Reservations": []}]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        mock_get_price = mocker.patch("remote.instance.get_instance_price_with_fallback")
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 0
+        mock_get_price.assert_not_called()
+
+
+class TestFormatUptime:
+    """Tests for the _format_uptime helper function."""
+
+    def test_format_uptime_minutes_only(self):
+        """Test formatting uptime with minutes only."""
+        from remote.instance import _format_uptime
+
+        assert _format_uptime(300) == "5m"  # 5 minutes
+        assert _format_uptime(0) == "0m"
+
+    def test_format_uptime_hours_and_minutes(self):
+        """Test formatting uptime with hours and minutes."""
+        from remote.instance import _format_uptime
+
+        assert _format_uptime(3900) == "1h 5m"  # 1 hour 5 minutes
+        assert _format_uptime(7200) == "2h"  # 2 hours exactly
+
+    def test_format_uptime_days_hours_minutes(self):
+        """Test formatting uptime with days, hours, and minutes."""
+        from remote.instance import _format_uptime
+
+        assert _format_uptime(90000) == "1d 1h"  # 25 hours
+        assert _format_uptime(180000) == "2d 2h"  # 50 hours
+
+    def test_format_uptime_none(self):
+        """Test formatting None uptime."""
+        from remote.instance import _format_uptime
+
+        assert _format_uptime(None) == "-"
+
+    def test_format_uptime_negative(self):
+        """Test formatting negative uptime."""
+        from remote.instance import _format_uptime
+
+        assert _format_uptime(-100) == "-"
+
+
+class TestGetRawLaunchTimes:
+    """Tests for the _get_raw_launch_times helper function."""
+
+    def test_get_raw_launch_times_for_running_instance(self):
+        """Test that running instances return their launch time."""
+        import datetime
+
+        from remote.instance import _get_raw_launch_times
+
+        launch_time = datetime.datetime(2024, 1, 15, 10, 30, 0, tzinfo=datetime.timezone.utc)
+
+        instances = [
+            {
+                "Instances": [
+                    {
+                        "InstanceId": "i-0123456789abcdef0",
+                        "State": {"Name": "running", "Code": 16},
+                        "LaunchTime": launch_time,
+                        "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                    }
+                ]
+            }
+        ]
+
+        result = _get_raw_launch_times(instances)
+
+        assert len(result) == 1
+        assert result[0] == launch_time
+
+    def test_get_raw_launch_times_for_stopped_instance(self):
+        """Test that stopped instances return None for launch time."""
+        from remote.instance import _get_raw_launch_times
+
+        instances = [
+            {
+                "Instances": [
+                    {
+                        "InstanceId": "i-0123456789abcdef0",
+                        "State": {"Name": "stopped", "Code": 80},
+                        "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                    }
+                ]
+            }
+        ]
+
+        result = _get_raw_launch_times(instances)
+
+        assert len(result) == 1
+        assert result[0] is None
+
+    def test_get_raw_launch_times_skips_nameless_instances(self):
+        """Test that instances without Name tag are skipped."""
+        import datetime
+
+        from remote.instance import _get_raw_launch_times
+
+        launch_time = datetime.datetime(2024, 1, 15, 10, 30, 0, tzinfo=datetime.timezone.utc)
+
+        instances = [
+            {
+                "Instances": [
+                    {
+                        "InstanceId": "i-0123456789abcdef0",
+                        "State": {"Name": "running", "Code": 16},
+                        "LaunchTime": launch_time,
+                        "Tags": [],  # No Name tag
+                    }
+                ]
+            }
+        ]
+
+        result = _get_raw_launch_times(instances)
+
+        assert len(result) == 0
+
+
+# ============================================================================
+# Issue 46: Connect Stopped Instance Behavior Tests
+# ============================================================================
+
+
+class TestConnectStoppedInstanceBehavior:
+    """Tests for connect command behavior when instance is stopped."""
+
+    def test_connect_with_start_flag_auto_starts_instance(self, mocker):
+        """Test that --start flag automatically starts a stopped instance."""
+        # Need to patch both locations since instance.py imports get_ec2_client at module level
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mocker.patch("remote.instance.get_ec2_client", mock_ec2)
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+        mocker.patch("remote.instance.time.sleep")
+
+        # Mock instance lookup
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running", "Code": 16},
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+
+        # Instance starts as stopped, then becomes running after start
+        # Need enough responses for:
+        # 1. Initial is_instance_running check in connect (stopped)
+        # 2. While loop check in connect (stopped)
+        # 3. is_instance_running check in _start_instance (stopped - triggers start)
+        # 4. Check after start in while loop (running)
+        mock_ec2.return_value.describe_instance_status.side_effect = [
+            {"InstanceStatuses": []},  # Initial check: stopped
+            {"InstanceStatuses": []},  # While loop first check: still not running
+            {"InstanceStatuses": []},  # _start_instance check: not running, so actually starts
+            {"InstanceStatuses": [{"InstanceState": {"Name": "running"}}]},  # After start: running
+        ]
+
+        # Mock subprocess success
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 0
+        mock_subprocess.return_value = mock_result
+
+        result = runner.invoke(app, ["connect", "test-instance", "--start"])
+
+        assert result.exit_code == 0
+        assert "is not running" in result.stdout
+        assert "trying to start it" in result.stdout
+
+    def test_connect_with_no_start_flag_fails_immediately(self, mocker):
+        """Test that --no-start flag fails immediately when instance is stopped."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+
+        # Mock instance lookup - stopped
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "stopped", "Code": 80},
+                            "PublicDnsName": "",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {"InstanceStatuses": []}
+
+        result = runner.invoke(app, ["connect", "test-instance", "--no-start"])
+
+        assert result.exit_code == 1
+        assert "is not running" in result.stdout
+        assert "Use --start to automatically start" in result.stdout
+
+    def test_connect_mutually_exclusive_start_no_start(self, mocker):
+        """Test that --start and --no-start flags are mutually exclusive."""
+        mocker.patch("remote.instance.get_instance_name", return_value="test-instance")
+        mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+
+        result = runner.invoke(app, ["connect", "test-instance", "--start", "--no-start"])
+
+        assert result.exit_code == 1
+        assert "--start and --no-start are mutually exclusive" in result.stdout
+
+    def test_connect_non_interactive_without_flags_fails(self, mocker):
+        """Test that non-interactive mode without flags fails with helpful message."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mocker.patch("remote.instance.sys.stdin.isatty", return_value=False)
+
+        # Mock instance lookup - stopped
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "stopped", "Code": 80},
+                            "PublicDnsName": "",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {"InstanceStatuses": []}
+
+        result = runner.invoke(app, ["connect", "test-instance"])
+
+        assert result.exit_code == 1
+        assert "is not running" in result.stdout
+        assert "Non-interactive mode" in result.stdout
+
+    def test_connect_running_instance_ignores_start_flag(self, mocker):
+        """Test that --start flag is ignored when instance is already running."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+
+        # Mock instance lookup - already running
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running", "Code": 16},
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        # Mock subprocess success
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 0
+        mock_subprocess.return_value = mock_result
+
+        result = runner.invoke(app, ["connect", "test-instance", "--start"])
+
+        assert result.exit_code == 0
+        # Should not mention starting
+        assert "trying to start it" not in result.stdout
+
+    def test_connect_running_instance_ignores_no_start_flag(self, mocker):
+        """Test that --no-start flag is ignored when instance is already running."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+
+        # Mock instance lookup - already running
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running", "Code": 16},
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        # Mock subprocess success
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 0
+        mock_subprocess.return_value = mock_result
+
+        result = runner.invoke(app, ["connect", "test-instance", "--no-start"])
+
+        assert result.exit_code == 0

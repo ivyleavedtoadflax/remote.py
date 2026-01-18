@@ -1,4 +1,6 @@
-from configparser import ConfigParser
+import random
+import re
+import string
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, cast
@@ -7,6 +9,8 @@ import boto3
 import typer
 from botocore.exceptions import ClientError, NoCredentialsError
 from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
 
 from .exceptions import (
     AWSServiceError,
@@ -18,10 +22,10 @@ from .exceptions import (
 from .validation import (
     ensure_non_empty_array,
     safe_get_array_item,
+    validate_array_index,
     validate_aws_response_structure,
     validate_instance_id,
     validate_instance_name,
-    validate_snapshot_id,
     validate_volume_id,
 )
 
@@ -30,8 +34,6 @@ if TYPE_CHECKING:
     from mypy_boto3_sts.client import STSClient
 
 console = Console(force_terminal=True, width=200)
-
-app = typer.Typer()
 
 
 @lru_cache
@@ -58,24 +60,6 @@ def get_sts_client() -> "STSClient":
     return boto3.client("sts")
 
 
-# Backwards compatibility: ec2_client is now accessed lazily via __getattr__
-# to avoid creating the client at import time (which breaks tests without AWS region)
-# The module-level ec2_client attribute is still available for backwards compatibility
-# but is deprecated and will be removed in v0.5.0
-
-
-def __getattr__(name: str) -> Any:
-    """Lazy module attribute access for backwards compatibility.
-
-    Provides lazy access to ec2_client for backwards compatibility.
-    This pattern allows the client to be created on first access rather
-    than at module import time, which is necessary for testing.
-    """
-    if name == "ec2_client":
-        return get_ec2_client()
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
 def get_account_id() -> str:
     """Returns the caller id, this is the AWS account id not the AWS user id.
 
@@ -86,7 +70,7 @@ def get_account_id() -> str:
         AWSServiceError: If AWS API call fails
     """
     try:
-        response = boto3.client("sts").get_caller_identity()
+        response = get_sts_client().get_caller_identity()
 
         # Validate response structure
         validate_aws_response_structure(response, ["Account"], "get_caller_identity")
@@ -281,11 +265,8 @@ def get_instance_dns(instance_id: str) -> str:
         raise AWSServiceError("EC2", "describe_instances", error_code, error_message)
 
 
-def get_instance_name(cfg: ConfigParser | None = None) -> str:
+def get_instance_name() -> str:
     """Returns the name of the instance as defined in the config file.
-
-    Args:
-        cfg: Legacy config parser (for backward compatibility)
 
     Returns:
         str: Instance name if found
@@ -306,7 +287,7 @@ def get_instance_name(cfg: ConfigParser | None = None) -> str:
 
 
 def get_instance_info(
-    instances: list[dict[str, Any]], name_filter: str | None = None, drop_nameless: bool = False
+    instances: list[dict[str, Any]], name_filter: str | None = None
 ) -> tuple[list[str], list[str], list[str], list[str], list[str | None]]:
     """
     Get all instance names for the given account from aws cli.
@@ -315,10 +296,12 @@ def get_instance_info(
         instances: List of instances returned by get_instances()
         name_filter: Filter to apply to the instance names. If not found in the
             instance name, it will be excluded from the list.
-        drop_nameless: Whether to exclude instances without a Name tag
 
     Returns:
         Tuple of (names, public_dnss, statuses, instance_types, launch_times)
+
+    Note:
+        Instances without a Name tag are automatically excluded.
 
     Raises:
         ValidationError: If instances data is malformed
@@ -381,24 +364,25 @@ def get_instance_info(
 def get_instance_ids(instances: list[dict[str, Any]]) -> list[str]:
     """Returns a list of instance ids extracted from the output of get_instances().
 
+    Only includes instances that have a Name tag, to match the filtering behavior
+    of get_instance_info().
+
     Args:
         instances: List of reservation dictionaries from describe_instances()
 
     Returns:
-        List of instance IDs
-
-    Raises:
-        ValidationError: If any reservation has no instances
+        List of instance IDs (only for instances with Name tags)
     """
     instance_ids = []
 
-    for _i, reservation in enumerate(instances):
+    for reservation in instances:
         instances_list = reservation.get("Instances", [])
-        if not instances_list:
-            # Skip reservations with no instances instead of crashing
-            continue
 
-        instance_ids.append(instances_list[0]["InstanceId"])
+        for instance in instances_list:
+            # Only include instances with a Name tag (matches get_instance_info filtering)
+            tags = {k["Key"]: k["Value"] for k in instance.get("Tags", [])}
+            if tags and "Name" in tags:
+                instance_ids.append(instance["InstanceId"])
 
     return instance_ids
 
@@ -432,45 +416,6 @@ def is_instance_running(instance_id: str) -> bool | None:
         state_name = instance_state.get("Name", "unknown")
 
         return bool(state_name == "running")
-
-    except (AWSServiceError, ResourceNotFoundError, ValidationError):
-        # Re-raise specific errors
-        raise
-    except (KeyError, TypeError, AttributeError) as e:
-        # For data structure errors, log and return None
-        console.print(f"[yellow]Warning: Unexpected instance status structure: {e}[/yellow]")
-        return None
-
-
-def is_instance_stopped(instance_id: str) -> bool | None:
-    """Returns True if the instance is stopped, False if not, None if unknown.
-
-    Args:
-        instance_id: The instance ID to check
-
-    Returns:
-        True if stopped, False if not stopped, None if status unknown
-
-    Raises:
-        AWSServiceError: If AWS API call fails
-    """
-    # Validate input
-    instance_id = validate_instance_id(instance_id)
-
-    try:
-        status = get_instance_status(instance_id)
-
-        # Handle case where InstanceStatuses is empty
-        instance_statuses = status.get("InstanceStatuses", [])
-        if not instance_statuses:
-            return None  # Status unknown
-
-        # Safely access the state information
-        first_status = safe_get_array_item(instance_statuses, 0, "instance statuses")
-        instance_state = first_status.get("InstanceState", {})
-        state_name = instance_state.get("Name", "unknown")
-
-        return bool(state_name == "stopped")
 
     except (AWSServiceError, ResourceNotFoundError, ValidationError):
         # Re-raise specific errors
@@ -601,41 +546,6 @@ def get_volume_name(volume_id: str) -> str:
         raise AWSServiceError("EC2", "describe_volumes", error_code, error_message)
 
 
-def get_snapshot_status(snapshot_id: str) -> str:
-    """Returns the status of the snapshot.
-
-    Args:
-        snapshot_id: The snapshot ID to get status for
-
-    Returns:
-        The snapshot status (e.g., 'pending', 'completed', 'error')
-
-    Raises:
-        ResourceNotFoundError: If snapshot not found
-        AWSServiceError: If AWS API call fails
-    """
-    # Validate input
-    snapshot_id = validate_snapshot_id(snapshot_id)
-
-    try:
-        response = get_ec2_client().describe_snapshots(SnapshotIds=[snapshot_id])
-
-        # Validate response structure
-        validate_aws_response_structure(response, ["Snapshots"], "describe_snapshots")
-
-        snapshots = ensure_non_empty_array(list(response["Snapshots"]), "snapshots")
-
-        return str(snapshots[0]["State"])
-
-    except ClientError as e:
-        error_code = e.response["Error"]["Code"]
-        if error_code == "InvalidSnapshotID.NotFound":
-            raise ResourceNotFoundError("Snapshot", snapshot_id)
-
-        error_message = e.response["Error"]["Message"]
-        raise AWSServiceError("EC2", "describe_snapshots", error_code, error_message)
-
-
 def get_launch_templates(name_filter: str | None = None) -> list[dict[str, Any]]:
     """Get launch templates, optionally filtered by name pattern.
 
@@ -752,3 +662,205 @@ def get_launch_template_id(launch_template_name: str) -> str:
         error_code = e.response["Error"]["Code"]
         error_message = e.response["Error"]["Message"]
         raise AWSServiceError("EC2", "describe_launch_templates", error_code, error_message)
+
+
+def parse_duration_to_minutes(duration_str: str) -> int:
+    """Parse duration string like '3h', '30m', '1h30m' into minutes.
+
+    Args:
+        duration_str: A duration string in format like '3h', '30m', '1h30m', '2h15m'
+
+    Returns:
+        Total duration in minutes
+
+    Raises:
+        ValidationError: If the duration format is invalid or results in 0 minutes
+    """
+    if not duration_str or not duration_str.strip():
+        raise ValidationError("Duration cannot be empty")
+
+    duration_str = duration_str.strip().lower()
+
+    # Pattern matches: optional hours (Nh) followed by optional minutes (Nm)
+    pattern = r"^(?:(\d+)h)?(?:(\d+)m)?$"
+    match = re.fullmatch(pattern, duration_str)
+
+    if not match or not any(match.groups()):
+        raise ValidationError(
+            f"Invalid duration format: '{duration_str}'. Use formats like '3h', '30m', or '1h30m'"
+        )
+
+    hours = int(match.group(1) or 0)
+    minutes = int(match.group(2) or 0)
+
+    total_minutes = hours * 60 + minutes
+
+    if total_minutes <= 0:
+        raise ValidationError("Duration must be greater than 0 minutes")
+
+    return total_minutes
+
+
+def format_duration(minutes: int) -> str:
+    """Format minutes into a human-readable duration string.
+
+    Args:
+        minutes: Total duration in minutes
+
+    Returns:
+        Human-readable string like '2h 30m' or '45m'
+    """
+    if minutes <= 0:
+        return "0m"
+
+    hours = minutes // 60
+    remaining_minutes = minutes % 60
+
+    if hours > 0 and remaining_minutes > 0:
+        return f"{hours}h {remaining_minutes}m"
+    elif hours > 0:
+        return f"{hours}h"
+    else:
+        return f"{remaining_minutes}m"
+
+
+def launch_instance_from_template(
+    name: str | None = None,
+    launch_template: str | None = None,
+    version: str = "$Latest",
+) -> None:
+    """Launch a new EC2 instance from a launch template.
+
+    This is a shared utility function used by both the instance and ami modules.
+    Uses default template from config if not specified.
+    If no launch template is configured, lists available templates for selection.
+    If no name is provided, suggests a name based on the template name.
+
+    Args:
+        name: Name for the new instance. If None, prompts for name.
+        launch_template: Launch template name. If None, uses default or interactive selection.
+        version: Launch template version. Defaults to "$Latest".
+
+    Raises:
+        typer.Exit: If no templates found or user cancels selection.
+        ValidationError: If user input is invalid.
+        AWSServiceError: If AWS API call fails.
+    """
+    from remote.config import config_manager
+
+    # Variables to track launch template details
+    launch_template_name: str = ""
+    launch_template_id: str = ""
+
+    # Check for default template from config if not specified
+    if not launch_template:
+        default_template = config_manager.get_value("default_launch_template")
+        if default_template:
+            typer.secho(f"Using default template: {default_template}", fg=typer.colors.YELLOW)
+            launch_template = default_template
+
+    # if no launch template is specified, list all the launch templates
+    if not launch_template:
+        typer.secho("Please specify a launch template", fg=typer.colors.RED)
+        typer.secho("Available launch templates:", fg=typer.colors.YELLOW)
+        templates = get_launch_templates()
+
+        if not templates:
+            typer.secho("No launch templates found", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        # Display templates
+        table = Table(title="Launch Templates")
+        table.add_column("Number", justify="right")
+        table.add_column("LaunchTemplateId", style="green")
+        table.add_column("LaunchTemplateName", style="cyan")
+        table.add_column("Version", justify="right")
+
+        for i, template in enumerate(templates, 1):
+            table.add_row(
+                str(i),
+                template["LaunchTemplateId"],
+                template["LaunchTemplateName"],
+                str(template["LatestVersionNumber"]),
+            )
+
+        console.print(table)
+
+        typer.secho("Select a launch template by number", fg=typer.colors.YELLOW)
+        launch_template_number = typer.prompt("Launch template", type=str)
+        # Validate user input and safely access array
+        try:
+            template_index = validate_array_index(
+                launch_template_number, len(templates), "launch templates"
+            )
+            selected_template = templates[template_index]
+        except ValidationError as e:
+            typer.secho(f"Error: {e}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+        launch_template_name = str(selected_template["LaunchTemplateName"])
+        launch_template_id = str(selected_template["LaunchTemplateId"])
+
+        typer.secho(f"Launch template {launch_template_name} selected", fg=typer.colors.YELLOW)
+        typer.secho(
+            f"Defaulting to latest version: {selected_template['LatestVersionNumber']}",
+            fg=typer.colors.YELLOW,
+        )
+        typer.secho(f"Launching instance based on launch template {launch_template_name}")
+    else:
+        # launch_template was provided as a string
+        launch_template_name = launch_template
+        launch_template_id = get_launch_template_id(launch_template)
+
+    # if no name is specified, ask the user for the name
+    if not name:
+        random_string = "".join(random.choices(string.ascii_letters + string.digits, k=6))
+        name_suggestion = launch_template_name + "-" + random_string
+        name = typer.prompt(
+            "Please enter a name for the instance", type=str, default=name_suggestion
+        )
+
+    # Launch the instance with the specified launch template, version, and name
+    instance = get_ec2_client().run_instances(
+        LaunchTemplate={"LaunchTemplateId": launch_template_id, "Version": version},
+        MaxCount=1,
+        MinCount=1,
+        TagSpecifications=[
+            {
+                "ResourceType": "instance",
+                "Tags": [
+                    {"Key": "Name", "Value": name},
+                ],
+            },
+        ],
+    )
+
+    # Safely access the launched instance ID
+    try:
+        instances = instance.get("Instances", [])
+        if not instances:
+            typer.secho(
+                "Warning: No instance information returned from launch", fg=typer.colors.YELLOW
+            )
+            return
+
+        launched_instance = safe_get_array_item(instances, 0, "launched instances")
+        instance_id = launched_instance.get("InstanceId", "unknown")
+        instance_type = launched_instance.get("InstanceType", "unknown")
+
+        # Display launch summary as Rich panel
+        summary_lines = [
+            f"[cyan]Instance ID:[/cyan] {instance_id}",
+            f"[cyan]Name:[/cyan]        {name}",
+            f"[cyan]Template:[/cyan]    {launch_template_name}",
+            f"[cyan]Type:[/cyan]        {instance_type}",
+        ]
+        panel = Panel(
+            "\n".join(summary_lines),
+            title="[green]Instance Launched[/green]",
+            border_style="green",
+            expand=False,
+        )
+        console.print(panel)
+    except ValidationError as e:
+        typer.secho(f"Error accessing launch result: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)

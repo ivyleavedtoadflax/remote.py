@@ -207,8 +207,8 @@ def test_list_launch_templates_empty(mocker):
 
 
 def test_launch_with_template_name(mocker):
-    mock_ec2_client = mocker.patch("remote.ami.get_ec2_client")
-    mocker.patch("remote.ami.get_launch_template_id", return_value="lt-0123456789abcdef0")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+    mocker.patch("remote.utils.get_launch_template_id", return_value="lt-0123456789abcdef0")
 
     mock_ec2_client.return_value.run_instances.return_value = {
         "Instances": [{"InstanceId": "i-0123456789abcdef0", "InstanceType": "t3.micro"}]
@@ -246,8 +246,8 @@ def test_launch_with_template_name(mocker):
 
 
 def test_launch_with_default_version(mocker):
-    mock_ec2_client = mocker.patch("remote.ami.get_ec2_client")
-    mocker.patch("remote.ami.get_launch_template_id", return_value="lt-0123456789abcdef0")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+    mocker.patch("remote.utils.get_launch_template_id", return_value="lt-0123456789abcdef0")
 
     mock_ec2_client.return_value.run_instances.return_value = {
         "Instances": [{"InstanceId": "i-default"}]
@@ -272,12 +272,12 @@ def test_launch_with_default_version(mocker):
 
 
 def test_launch_without_template_interactive(mocker, mock_launch_template_response):
-    mock_ec2_client = mocker.patch("remote.ami.get_ec2_client")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
     mock_get_templates = mocker.patch(
-        "remote.ami.get_launch_templates",
+        "remote.utils.get_launch_templates",
         return_value=mock_launch_template_response["LaunchTemplates"],
     )
-    mocker.patch("remote.ami.config_manager.get_value", return_value=None)
+    mocker.patch("remote.config.config_manager.get_value", return_value=None)
 
     mock_ec2_client.return_value.run_instances.return_value = {
         "Instances": [{"InstanceId": "i-interactive"}]
@@ -295,11 +295,11 @@ def test_launch_without_template_interactive(mocker, mock_launch_template_respon
 
 
 def test_launch_without_name_uses_suggestion(mocker):
-    mock_ec2_client = mocker.patch("remote.ami.get_ec2_client")
-    mocker.patch("remote.ami.get_launch_template_id", return_value="lt-0123456789abcdef0")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+    mocker.patch("remote.utils.get_launch_template_id", return_value="lt-0123456789abcdef0")
 
     # Mock random string generation for name suggestion
-    mocker.patch("remote.ami.random.choices", return_value=list("abc123"))
+    mocker.patch("remote.utils.random.choices", return_value=list("abc123"))
 
     mock_ec2_client.return_value.run_instances.return_value = {
         "Instances": [{"InstanceId": "i-suggested"}]
@@ -319,8 +319,8 @@ def test_launch_without_name_uses_suggestion(mocker):
 
 def test_launch_no_instances_returned(mocker):
     """Test launch when AWS returns no instances in the response."""
-    mock_ec2_client = mocker.patch("remote.ami.get_ec2_client")
-    mocker.patch("remote.ami.get_launch_template_id", return_value="lt-0123456789abcdef0")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+    mocker.patch("remote.utils.get_launch_template_id", return_value="lt-0123456789abcdef0")
 
     # Return empty instances list
     mock_ec2_client.return_value.run_instances.return_value = {"Instances": []}
@@ -335,13 +335,13 @@ def test_launch_no_instances_returned(mocker):
 
 def test_launch_validation_error_accessing_results(mocker):
     """Test launch when ValidationError occurs accessing launch results."""
-    mock_ec2_client = mocker.patch("remote.ami.get_ec2_client")
-    mocker.patch("remote.ami.get_launch_template_id", return_value="lt-0123456789abcdef0")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+    mocker.patch("remote.utils.get_launch_template_id", return_value="lt-0123456789abcdef0")
 
     # Mock safe_get_array_item to raise ValidationError
     from remote.exceptions import ValidationError
 
-    mock_safe_get = mocker.patch("remote.ami.safe_get_array_item")
+    mock_safe_get = mocker.patch("remote.utils.safe_get_array_item")
     mock_safe_get.side_effect = ValidationError("Array access failed")
 
     # Return instances but safe_get_array_item will fail
@@ -359,12 +359,12 @@ def test_launch_validation_error_accessing_results(mocker):
 
 def test_launch_invalid_template_number(mocker, mock_launch_template_response):
     """Test launch with invalid template number selection (out of bounds)."""
-    mocker.patch("remote.ami.get_ec2_client")
+    mocker.patch("remote.utils.get_ec2_client")
     mocker.patch(
-        "remote.ami.get_launch_templates",
+        "remote.utils.get_launch_templates",
         return_value=mock_launch_template_response["LaunchTemplates"],
     )
-    mocker.patch("remote.ami.config_manager.get_value", return_value=None)
+    mocker.patch("remote.config.config_manager.get_value", return_value=None)
 
     # User enters invalid template number (3, but only 2 templates exist)
     result = runner.invoke(app, ["launch"], input="3\n")
@@ -375,12 +375,12 @@ def test_launch_invalid_template_number(mocker, mock_launch_template_response):
 
 def test_launch_zero_template_number(mocker, mock_launch_template_response):
     """Test launch with zero as template number selection."""
-    mocker.patch("remote.ami.get_ec2_client")
+    mocker.patch("remote.utils.get_ec2_client")
     mocker.patch(
-        "remote.ami.get_launch_templates",
+        "remote.utils.get_launch_templates",
         return_value=mock_launch_template_response["LaunchTemplates"],
     )
-    mocker.patch("remote.ami.config_manager.get_value", return_value=None)
+    mocker.patch("remote.config.config_manager.get_value", return_value=None)
 
     # User enters 0 (invalid since templates are 1-indexed)
     result = runner.invoke(app, ["launch"], input="0\n")
@@ -391,12 +391,12 @@ def test_launch_zero_template_number(mocker, mock_launch_template_response):
 
 def test_launch_negative_template_number(mocker, mock_launch_template_response):
     """Test launch with negative template number selection."""
-    mocker.patch("remote.ami.get_ec2_client")
+    mocker.patch("remote.utils.get_ec2_client")
     mocker.patch(
-        "remote.ami.get_launch_templates",
+        "remote.utils.get_launch_templates",
         return_value=mock_launch_template_response["LaunchTemplates"],
     )
-    mocker.patch("remote.ami.config_manager.get_value", return_value=None)
+    mocker.patch("remote.config.config_manager.get_value", return_value=None)
 
     # User enters negative number
     result = runner.invoke(app, ["launch"], input="-1\n")
@@ -467,9 +467,9 @@ def test_list_launch_templates_with_details_no_versions(mocker):
 
 def test_launch_with_default_template_from_config(mocker):
     """Test launch using default template from config."""
-    mock_ec2_client = mocker.patch("remote.ami.get_ec2_client")
-    mocker.patch("remote.ami.get_launch_template_id", return_value="lt-default")
-    mocker.patch("remote.ami.config_manager.get_value", return_value="default-template")
+    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+    mocker.patch("remote.utils.get_launch_template_id", return_value="lt-default")
+    mocker.patch("remote.config.config_manager.get_value", return_value="default-template")
 
     mock_ec2_client.return_value.run_instances.return_value = {
         "Instances": [{"InstanceId": "i-from-default"}]
@@ -484,9 +484,9 @@ def test_launch_with_default_template_from_config(mocker):
 
 def test_launch_no_templates_found(mocker):
     """Test launch when no templates are available."""
-    mocker.patch("remote.ami.get_ec2_client")
-    mocker.patch("remote.ami.get_launch_templates", return_value=[])
-    mocker.patch("remote.ami.config_manager.get_value", return_value=None)
+    mocker.patch("remote.utils.get_ec2_client")
+    mocker.patch("remote.utils.get_launch_templates", return_value=[])
+    mocker.patch("remote.config.config_manager.get_value", return_value=None)
 
     result = runner.invoke(app, ["launch"])
 

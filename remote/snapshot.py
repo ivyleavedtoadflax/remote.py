@@ -1,8 +1,8 @@
 import typer
-from rich.console import Console
 from rich.table import Table
 
 from remote.utils import (
+    console,
     get_ec2_client,
     get_instance_id,
     get_instance_name,
@@ -10,7 +10,6 @@ from remote.utils import (
 )
 
 app = typer.Typer()
-console = Console(force_terminal=True, width=200)
 
 
 @app.command()
@@ -84,7 +83,3 @@ def list_snapshots(instance_name: str | None = typer.Argument(None, help="Instan
             )
 
     console.print(table)
-
-
-if __name__ == "__main__":
-    app()

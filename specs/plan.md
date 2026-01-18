@@ -1,22 +1,4 @@
-# Remote.py Specs
-
-## Instructions
-
-0. Checkout main
-1. Pick an issue from the recommended order below
-2. Read the linked spec file for details
-3. Checkout a branch a branch
-4. Implement the fix
-5. Run tests: `uv run pytest`
-6. Run type check: `uv run mypy remotepy/`
-7. Run linter: `uv run ruff check . && uv run ruff format .`
-8. Update spec file status to COMPLETED
-9. Atomic commit with descriptive messages
-10. Push to branch
-11. Fix any high priority security issues
-12. Create a PR
-13. Merge to main
-14. Quit
+# Remote.py Plan
 
 ## Recommended Order
 
@@ -82,43 +64,20 @@ Final polish and release preparation.
 | 16 | 30 | Remove root-level instance commands | Breaking change for v1.0.0 | [issue-30](./issue-30-remove-root-instance-commands.md) | COMPLETED |
 | 17 | 33 | v1.0.0 release preparation | Final checklist | [issue-33](./issue-33-v1-release-preparation.md) | COMPLETED |
 
----
+### Phase 8: Post-v1.0.0 Enhancements
+Features and improvements for future releases.
 
-## Issue Index by Priority
-
-### High Priority
-
-| ID | Issue | Spec | Status |
-|----|-------|------|--------|
-| 13 | Logic bug in get_instance_by_name() | [issue-13-get-instance-by-name-bug.md](./issue-13-get-instance-by-name-bug.md) | COMPLETED |
-| 14 | SSH subprocess error handling | [issue-14-ssh-error-handling.md](./issue-14-ssh-error-handling.md) | COMPLETED |
-| 15 | Unvalidated array index in AMI launch | [issue-15-ami-array-index.md](./issue-15-ami-array-index.md) | COMPLETED |
-| 33 | v1.0.0 release preparation | [issue-33-v1-release-preparation.md](./issue-33-v1-release-preparation.md) | COMPLETED |
-| 34 | Security review | [issue-34-security-review.md](./issue-34-security-review.md) | COMPLETED |
-
-### Medium Priority
-
-| ID | Issue | Spec | Status |
-|----|-------|------|--------|
-| 16 | Deprecated datetime API | [issue-16-datetime-deprecation.md](./issue-16-datetime-deprecation.md) | COMPLETED |
-| 17 | Inconsistent output in config.py | [issue-17-config-output.md](./issue-17-config-output.md) | COMPLETED |
-| 18 | Standardize exit patterns | [issue-18-exit-patterns.md](./issue-18-exit-patterns.md) | COMPLETED |
-| 21 | Replace wasabi with rich | [issue-21-replace-wasabi-with-rich.md](./issue-21-replace-wasabi-with-rich.md) | COMPLETED |
-| 26 | Improve template workflow | [issue-26-template-workflow.md](./issue-26-template-workflow.md) | COMPLETED |
-| 27 | Improve config workflow | [issue-27-config-workflow.md](./issue-27-config-workflow.md) | COMPLETED |
-| 28 | Improve CLI help documentation | [issue-28-cli-help.md](./issue-28-cli-help.md) | COMPLETED |
-| 29 | Compartmentalize subcommands | [issue-29-subcommand-structure.md](./issue-29-subcommand-structure.md) | COMPLETED |
-| 31 | SSH key config not used by connect | [issue-31-ssh-key-config.md](./issue-31-ssh-key-config.md) | COMPLETED |
-| 32 | Rich output enhancements | [issue-32-rich-output-enhancements.md](./issue-32-rich-output-enhancements.md) | COMPLETED |
-
-### Low Priority
-
-| ID | Issue | Spec | Status |
-|----|-------|------|--------|
-| 19 | Function shadows builtin | [issue-19-list-function-name.md](./issue-19-list-function-name.md) | COMPLETED |
-| 20 | Test coverage edge cases | [issue-20-test-coverage.md](./issue-20-test-coverage.md) | COMPLETED |
-| 22 | Add instance pricing | [issue-22-instance-pricing.md](./issue-22-instance-pricing.md) | COMPLETED |
-| 23 | Rename package to `remote` | [issue-23-rename-package.md](./issue-23-rename-package.md) | Not started |
-| 24 | Pydantic config validation | [issue-24-pydantic-config.md](./issue-24-pydantic-config.md) | Not started |
-| 25 | Contributing guide | [issue-25-contributing-guide.md](./issue-25-contributing-guide.md) | COMPLETED |
-| 30 | Remove root-level instance commands | [issue-30-remove-root-instance-commands.md](./issue-30-remove-root-instance-commands.md) | COMPLETED |
+| Order | ID | Issue | Rationale | Spec | Status |
+|-------|-----|-------|-----------|------|--------|
+| 18 | 35 | Built-in watch mode | Fix garbled output when using `watch` command with Rich | [issue-35](./issue-35-watch-mode.md) | COMPLETED |
+| 19 | 36 | Config validate panel too wide | Panel stretches beyond console width; also redundant "All checks passed" and "Status: Valid" | [issue-36](./issue-36-config-validate-output.md) | COMPLETED |
+| 20 | 37 | Pricing API region fallback | Pricing API only works in us-east-1; fallback to us-east-1 pricing for other regions | [issue-37](./issue-37-pricing-region-fallback.md) | COMPLETED |
+| 21 | 38 | Instance cost command | Add command to show estimated cost of instance based on uptime | [issue-38](./issue-38-instance-cost-command.md) | COMPLETED |
+| 22 | 39 | Scheduled instance shutdown | Schedule instance to stop after specified duration (e.g., "3 hours") | [issue-39](./issue-39-scheduled-shutdown.md) | COMPLETED |
+| 23 | 40 | Standardize console output styles | Align all command output to match `config show` style for consistency | [issue-40](./issue-40-console-output-consistency.md) | COMPLETED |
+| 24 | 41 | Fix instance cost integration | Cost not displaying, panel too wide, integrate into `instance ls` instead of separate command | [issue-41](./issue-41-instance-cost-fixes.md) | COMPLETED |
+| 25 | 42 | Clarify instance ls vs status | Evaluate overlap between commands; ensure distinct purposes or consolidate | [issue-42](./issue-42-ls-vs-status.md) | COMPLETED |
+| 26 | 43 | Fix Rich Panel width globally | Panels expand to full terminal width; audit all Panel usage and set expand=False | [issue-43](./issue-43-panel-width-fix.md) | COMPLETED |
+| 27 | 44 | Validate tests against real API formats | Mocked tests can pass while real API fails; add validation against actual AWS response formats | [issue-44](./issue-44-test-api-validation.md) | COMPLETED |
+| 28 | 45 | v1.1.0 release preparation | Update changelog, version bump, final testing | [issue-45](./issue-45-v1.1-release-preparation.md) | COMPLETED |
+| 29 | 46 | Improve connect behavior for stopped instances | Add flags to control auto-start behavior; handle non-TTY gracefully | [GitHub #73](https://github.com/ivyleavedtoadflax/remote.py-sandbox/issues/73) | COMPLETED |
