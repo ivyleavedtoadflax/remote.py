@@ -710,3 +710,21 @@ These modules are library code imported into `__main__.py`, not executed directl
 
 ---
 
+## 2026-01-18: Remove unused return value from `write_config()` function
+
+**File:** `remote/config.py`
+
+**Issue:** The `write_config()` function returned a `configparser.ConfigParser` object, but this return value was never used by any caller:
+- Line 313: `write_config(config, config_path)` - return value ignored
+- Line 331: `write_config(config, config_path)` - return value ignored
+- Line 520: `write_config(config, config_path)` - return value ignored
+- Line 557: `write_config(config, config_path)` - return value ignored
+
+This created a misleading function signature - if a function's return value is never used, it shouldn't return anything. The returned value was the same `config` object that was passed in as a parameter, providing no additional information to callers.
+
+**Changes:**
+- Changed return type annotation from `-> configparser.ConfigParser` to `-> None`
+- Removed the `return config` statement from the function body
+
+---
+

@@ -194,9 +194,8 @@ def test_write_config(test_config, mocker):
     cfg = configparser.ConfigParser()
     cfg["DEFAULT"]["instance_name"] = "test"
 
-    result = config.write_config(cfg, test_config)
+    config.write_config(cfg, test_config)
 
-    assert result == cfg
     mock_create_config_dir.assert_called_once_with(test_config)
     mock_open_file.assert_called_once_with(test_config, "w")
 
