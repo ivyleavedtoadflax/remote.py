@@ -83,7 +83,7 @@ def get_account_id() -> str:
         AWSServiceError: If AWS API call fails
     """
     try:
-        response = boto3.client("sts").get_caller_identity()
+        response = get_sts_client().get_caller_identity()
 
         # Validate response structure
         validate_aws_response_structure(response, ["Account"], "get_caller_identity")
