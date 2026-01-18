@@ -296,3 +296,37 @@ The exception was designed for configuration-related errors but was never integr
 **Changes:**
 - Removed the `InvalidInstanceStateError` class definition from `remote/exceptions.py`
 - Removed the import and test class `TestInvalidInstanceStateError` from `tests/test_exceptions.py`
+
+---
+
+## 2026-01-18: Extract `_build_ssh_command()` helper to reduce SSH argument duplication
+
+**File:** `remote/instance.py`
+
+**Issue:** The SSH argument building code was duplicated in two functions:
+1. `_schedule_shutdown()` (lines 486-494) - built SSH args for scheduling shutdown
+2. `_cancel_scheduled_shutdown()` (lines 552-560) - built identical SSH args for cancelling shutdown
+
+Both functions contained the exact same SSH argument list:
+```python
+ssh_args = [
+    "ssh",
+    "-o",
+    "StrictHostKeyChecking=accept-new",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=10",
+]
+if key:
+    ssh_args.extend(["-i", key])
+ssh_args.append(f"{user}@{dns}")
+```
+
+This duplication meant any changes to SSH options (e.g., adding new options, changing timeout) would need to be made in multiple places.
+
+**Changes:**
+- Added new helper function `_build_ssh_command(dns, key, user)` that returns the base SSH command arguments
+- Updated `_schedule_shutdown()` to use the new helper
+- Updated `_cancel_scheduled_shutdown()` to use the new helper
+- Reduced code duplication by ~14 lines

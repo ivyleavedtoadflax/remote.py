@@ -459,6 +459,34 @@ def start(
         raise typer.Exit(1)
 
 
+def _build_ssh_command(dns: str, key: str | None = None, user: str = "ubuntu") -> list[str]:
+    """Build base SSH command arguments with standard options.
+
+    Args:
+        dns: The DNS hostname or IP address to connect to
+        key: Optional path to SSH private key
+        user: SSH username (default: ubuntu)
+
+    Returns:
+        List of SSH command arguments ready for subprocess
+    """
+    ssh_args = [
+        "ssh",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=10",
+    ]
+
+    if key:
+        ssh_args.extend(["-i", key])
+
+    ssh_args.append(f"{user}@{dns}")
+    return ssh_args
+
+
 def _schedule_shutdown(instance_name: str, instance_id: str, minutes: int) -> None:
     """Schedule instance shutdown via SSH using the Linux shutdown command.
 
@@ -483,20 +511,7 @@ def _schedule_shutdown(instance_name: str, instance_id: str, minutes: int) -> No
     key = config_manager.get_value("ssh_key_path")
 
     # Build SSH command to run shutdown
-    ssh_args = [
-        "ssh",
-        "-o",
-        "StrictHostKeyChecking=accept-new",
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "ConnectTimeout=10",
-    ]
-
-    if key:
-        ssh_args.extend(["-i", key])
-
-    ssh_args.append(f"{user}@{dns}")
+    ssh_args = _build_ssh_command(dns, key, user)
     ssh_args.append(f"sudo shutdown -h +{minutes}")
 
     typer.secho(f"Scheduling shutdown for {instance_name}...", fg=typer.colors.YELLOW)
@@ -549,20 +564,7 @@ def _cancel_scheduled_shutdown(instance_name: str, instance_id: str) -> None:
     key = config_manager.get_value("ssh_key_path")
 
     # Build SSH command to cancel shutdown
-    ssh_args = [
-        "ssh",
-        "-o",
-        "StrictHostKeyChecking=accept-new",
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "ConnectTimeout=10",
-    ]
-
-    if key:
-        ssh_args.extend(["-i", key])
-
-    ssh_args.append(f"{user}@{dns}")
+    ssh_args = _build_ssh_command(dns, key, user)
     ssh_args.append("sudo shutdown -c")
 
     typer.secho(f"Cancelling scheduled shutdown for {instance_name}...", fg=typer.colors.YELLOW)
