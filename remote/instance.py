@@ -41,7 +41,8 @@ from remote.validation import safe_get_array_item, safe_get_nested_value
 # Time-related constants
 SECONDS_PER_MINUTE = 60
 SECONDS_PER_HOUR = 3600
-MINUTES_PER_DAY = 24 * 60
+MINUTES_PER_HOUR = 60
+MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR
 
 # Instance startup/connection constants
 MAX_STARTUP_WAIT_SECONDS = 60
@@ -1029,8 +1030,8 @@ def _format_uptime(seconds: float | None) -> str:
     total_minutes = int(seconds // SECONDS_PER_MINUTE)
     days = total_minutes // MINUTES_PER_DAY
     remaining = total_minutes % MINUTES_PER_DAY
-    hours = remaining // SECONDS_PER_MINUTE
-    minutes = remaining % SECONDS_PER_MINUTE
+    hours = remaining // MINUTES_PER_HOUR
+    minutes = remaining % MINUTES_PER_HOUR
 
     parts = []
     if days > 0:
