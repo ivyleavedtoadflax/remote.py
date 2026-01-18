@@ -357,13 +357,11 @@ def create_config_dir(config_path: str) -> None:
         typer.secho(f"Created config directory: {os.path.dirname(config_path)}", fg="green")
 
 
-def write_config(config: configparser.ConfigParser, config_path: str) -> configparser.ConfigParser:
+def write_config(config: configparser.ConfigParser, config_path: str) -> None:
     create_config_dir(config_path)
 
     with open(config_path, "w") as configfile:
         config.write(configfile)
-
-    return config
 
 
 @app.command()
