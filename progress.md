@@ -780,3 +780,30 @@ This places the comment immediately before the code it documents, following the 
 
 ---
 
+## 2026-01-18: Use `config_manager.remove_value()` in `unset_value()` CLI command
+
+**File:** `remote/config.py`
+
+**Issue:** The `unset_value()` CLI command (lines 500-519) bypassed the `ConfigManager.remove_value()` method and directly manipulated the config file, while other similar CLI commands properly used the ConfigManager abstraction:
+
+- `set_value()` correctly used `config_manager.set_value(key, value, config_path)` (line 472)
+- `add()` correctly used `config_manager.set_instance_name(instance_name, config_path)` (line 449)
+- `unset_value()` incorrectly bypassed the manager:
+  ```python
+  config = read_config(config_path)
+  config.remove_option("DEFAULT", key)
+  write_config(config, config_path)
+  ```
+
+This was problematic because:
+1. **Violated encapsulation**: The proper `ConfigManager.remove_value()` method exists but wasn't used
+2. **Broke consistency**: Other similar operations use the manager abstraction
+3. **Missing state management**: `ConfigManager.remove_value()` properly resets the cached pydantic config with `self._pydantic_config = None`, but the direct approach didn't, which could lead to stale cached configuration data
+
+**Changes:**
+- Replaced direct config file manipulation with `config_manager.remove_value(key, config_path)`
+- Simplified the logic using the boolean return value to check if the key existed
+- Reduced code duplication by using the existing abstraction
+
+---
+

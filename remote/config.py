@@ -320,9 +320,8 @@ class ConfigManager:
         if config_path is None:
             config_path = str(Settings.get_config_path())
 
-        # Reload config to get latest state
-        self.reload()
-        config = self.file_config
+        # Read from specified config path
+        config = read_config(config_path)
 
         if "DEFAULT" not in config or key not in config["DEFAULT"]:
             return False
@@ -330,7 +329,8 @@ class ConfigManager:
         config.remove_option("DEFAULT", key)
         write_config(config, config_path)
 
-        # Reset pydantic config to reload on next access
+        # Reset cached configs to reload on next access
+        self._file_config = None
         self._pydantic_config = None
         return True
 
@@ -508,14 +508,10 @@ def unset_value(
     Examples:
         remote config unset ssh_key_path
     """
-    config = read_config(config_path)
-
-    if "DEFAULT" not in config or key not in config["DEFAULT"]:
+    if not config_manager.remove_value(key, config_path):
         typer.secho(f"Key '{key}' not found in config", fg=typer.colors.YELLOW)
         raise typer.Exit(1)
 
-    config.remove_option("DEFAULT", key)
-    write_config(config, config_path)
     typer.secho(f"Removed {key}", fg=typer.colors.GREEN)
 
 
