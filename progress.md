@@ -761,3 +761,22 @@ This created a misleading function signature - if a function's return value is n
 
 ---
 
+## 2026-01-18: Move misplaced Terraform comment in `terminate()` function
+
+**File:** `remote/instance.py`
+
+**Issue:** The comment "# If the instance is managed by Terraform, warn user" on line 963 was separated from the code it described by 20 lines. The actual Terraform check (`terraform_managed = any(...)`) was on line 983, with the confirmation prompts and user input validation in between.
+
+This is a code smell because:
+1. Orphaned comments reduce readability
+2. The comment implied the next line would be the Terraform check, but it wasn't
+3. Readers had to mentally reconnect the comment to its relevant code
+
+**Changes:**
+- Removed the comment from line 963 (after the tag fetching try-except block)
+- Added the comment directly above line 981 where `terraform_managed` is assigned
+
+This places the comment immediately before the code it documents, following the principle that comments should be adjacent to the code they describe.
+
+---
+

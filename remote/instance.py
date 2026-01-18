@@ -960,8 +960,6 @@ def terminate(instance_name: str | None = typer.Argument(None, help="Instance na
         typer.secho(f"Error accessing instance information: {e}", fg=typer.colors.RED)
         # Continue with empty tags
 
-    # If the instance is managed by Terraform, warn user
-
     # Confirmation step
     typer.secho(
         f"WARNING: You are about to terminate instance {instance_name}. "
@@ -980,6 +978,7 @@ def terminate(instance_name: str | None = typer.Argument(None, help="Instance na
 
         return
 
+    # If the instance is managed by Terraform, warn user
     terraform_managed = any("terraform" in tag["Value"].lower() for tag in tags)
 
     if terraform_managed:
