@@ -837,3 +837,28 @@ This was problematic because:
 
 ---
 
+## 2026-01-18: Remove unused `get_monthly_estimate()` function and `HOURS_PER_MONTH` constant
+
+**Files:** `remote/pricing.py`, `tests/test_pricing.py`
+
+**Issue:** The `get_monthly_estimate()` function (lines 174-185) and `HOURS_PER_MONTH` constant (line 48) were defined but never used anywhere in the application code:
+1. No code in the `remote/` directory called `get_monthly_estimate()`
+2. `HOURS_PER_MONTH` was only used by `get_monthly_estimate()`
+3. The function was only exercised by tests
+4. This is similar to `get_instance_pricing_info()` which was removed in a previous refactor
+
+The function calculated monthly cost estimates from hourly prices, but the actual application displays hourly prices directly without converting to monthly estimates.
+
+**Changes:**
+- Removed the `HOURS_PER_MONTH = 730` constant from `remote/pricing.py`
+- Removed the `get_monthly_estimate()` function from `remote/pricing.py`
+- Removed the `HOURS_PER_MONTH` and `get_monthly_estimate` imports from `tests/test_pricing.py`
+- Removed the `TestGetMonthlyEstimate` test class from `tests/test_pricing.py`
+
+**Impact:**
+- ~15 lines of dead code removed from production code
+- ~24 lines of tests for dead code removed
+- Cleaner module API surface
+
+---
+

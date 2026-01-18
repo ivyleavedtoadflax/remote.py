@@ -6,14 +6,12 @@ from unittest.mock import MagicMock
 from botocore.exceptions import ClientError, NoCredentialsError
 
 from remote.pricing import (
-    HOURS_PER_MONTH,
     REGION_TO_LOCATION,
     clear_price_cache,
     format_price,
     get_current_region,
     get_instance_price,
     get_instance_price_with_fallback,
-    get_monthly_estimate,
     get_pricing_client,
 )
 
@@ -205,30 +203,6 @@ class TestGetInstancePrice:
         # Should only call API once due to caching
         assert mock_client.get_products.call_count == 1
         assert result1 == result2 == 0.0104
-
-
-class TestGetMonthlyEstimate:
-    """Test the get_monthly_estimate function."""
-
-    def test_should_calculate_monthly_estimate(self):
-        """Should calculate monthly cost from hourly price."""
-        hourly = 0.01
-        result = get_monthly_estimate(hourly)
-
-        assert result == hourly * HOURS_PER_MONTH
-        assert result == 7.30
-
-    def test_should_return_none_for_none_input(self):
-        """Should return None when hourly price is None."""
-        result = get_monthly_estimate(None)
-
-        assert result is None
-
-    def test_should_handle_zero_price(self):
-        """Should handle zero hourly price."""
-        result = get_monthly_estimate(0.0)
-
-        assert result == 0.0
 
 
 class TestFormatPrice:
