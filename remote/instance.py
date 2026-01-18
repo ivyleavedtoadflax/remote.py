@@ -291,6 +291,7 @@ def _build_status_table(instance_name: str, instance_id: str) -> Panel | str:
             "\n".join(lines),
             title="[bold]Instance Details[/bold]",
             border_style="blue",
+            expand=False,
         )
         return panel
 
@@ -1049,6 +1050,7 @@ def launch(
             "\n".join(summary_lines),
             title="[green]Instance Launched[/green]",
             border_style="green",
+            expand=False,
         )
         console.print(panel)
     except ValidationError as e:

@@ -291,6 +291,7 @@ def launch(
             "\n".join(summary_lines),
             title="[green]Instance Launched[/green]",
             border_style="green",
+            expand=False,
         )
         console.print(panel)
     except ValidationError as e:

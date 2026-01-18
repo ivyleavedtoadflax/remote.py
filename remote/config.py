@@ -596,7 +596,7 @@ def validate(
 
     # Display as Rich panel
     panel_content = "\n".join(output_lines)
-    panel = Panel(panel_content, title="Config Validation", border_style=border_style)
+    panel = Panel(panel_content, title="Config Validation", border_style=border_style, expand=False)
     console.print(panel)
 
     if not result.is_valid:

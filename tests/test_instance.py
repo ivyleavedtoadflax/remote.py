@@ -329,6 +329,52 @@ class TestBuildStatusTable:
 
         assert isinstance(result, Panel)
 
+    def test_should_return_panel_with_expand_false(self, mocker):
+        """Panel should not expand to full terminal width."""
+        from rich.panel import Panel
+
+        from remote.instance import _build_status_table
+
+        mocker.patch(
+            "remote.instance.get_instance_status",
+            return_value={
+                "InstanceStatuses": [
+                    {
+                        "InstanceId": "i-0123456789abcdef0",
+                        "InstanceState": {"Name": "running"},
+                        "SystemStatus": {"Status": "ok"},
+                        "InstanceStatus": {"Status": "ok", "Details": [{"Status": "passed"}]},
+                    }
+                ]
+            },
+        )
+        mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+        mock_ec2_client.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running"},
+                            "InstanceType": "t2.micro",
+                            "PublicIpAddress": "1.2.3.4",
+                            "PrivateIpAddress": "10.0.0.1",
+                            "PublicDnsName": "ec2-1-2-3-4.compute-1.amazonaws.com",
+                            "KeyName": "my-key",
+                            "Placement": {"AvailabilityZone": "us-east-1a"},
+                            "SecurityGroups": [{"GroupName": "default"}],
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+
+        result = _build_status_table("test-instance", "i-0123456789abcdef0")
+
+        assert isinstance(result, Panel)
+        assert result.expand is False
+
     def test_should_return_panel_for_stopped_instance(self, mocker):
         """Should return a Panel for stopped instances (without health section)."""
         from rich.panel import Panel
