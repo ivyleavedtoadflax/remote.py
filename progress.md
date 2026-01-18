@@ -1,5 +1,18 @@
 # Progress Log
 
+## 2026-01-18: Remove unused `validate_snapshot_id()` function
+
+**Files:** `remote/validation.py`, `tests/test_validation.py`
+
+**Issue:** The `validate_snapshot_id()` function was defined in `validation.py` but never used anywhere in the application. While it was tested in `test_validation.py`, the function itself had no callers in the actual codebase. This is dead code that should be removed to keep the codebase clean.
+
+**Changes:**
+- Removed the `validate_snapshot_id()` function from `remote/validation.py` (lines 104-129)
+- Removed the `TestValidateSnapshotId` test class from `tests/test_validation.py` (lines 190-219)
+- Removed the `validate_snapshot_id` import from `tests/test_validation.py`
+
+---
+
 ## 2026-01-18: Standardize Typer parameter style in `status()` command
 
 **File:** `remote/instance.py`
