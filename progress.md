@@ -263,3 +263,20 @@ Users can use `remote ami list-templates` which provides the same functionality 
 **Changes:**
 - Removed the `list_launch_templates()` function from `remote/instance.py`
 - Removed the corresponding test `test_list_launch_templates_command()` from `tests/test_instance.py`
+
+---
+
+## 2026-01-18: Remove unused `ConfigurationError` exception class
+
+**File:** `remote/exceptions.py`
+
+**Issue:** The `ConfigurationError` exception class (lines 132-142) was defined but never used anywhere in the codebase:
+1. No code raised this exception
+2. No code caught this exception
+3. No tests referenced this exception class
+4. The class was complete dead code adding unnecessary lines to the module
+
+The exception was designed for configuration-related errors but was never integrated into the config handling code.
+
+**Changes:**
+- Removed the `ConfigurationError` class definition from `remote/exceptions.py`
