@@ -241,6 +241,15 @@ class ConfigManager:
         self._file_config = None
         self._pydantic_config = None
 
+    def _handle_config_error(self, error: Exception) -> None:
+        """Handle and display config-related errors."""
+        if isinstance(error, configparser.Error | OSError | PermissionError):
+            typer.secho(f"Warning: Could not read config file: {error}", fg=typer.colors.YELLOW)
+        elif isinstance(error, KeyError | TypeError | AttributeError):
+            typer.secho("Warning: Config file structure is invalid", fg=typer.colors.YELLOW)
+        elif isinstance(error, ValueError):
+            typer.secho(f"Warning: Config validation error: {error}", fg=typer.colors.YELLOW)
+
     def get_instance_name(self) -> str | None:
         """Get default instance name from config file or environment variable."""
         try:
@@ -252,18 +261,17 @@ class ConfigManager:
             # Fall back to file config for backwards compatibility
             if "DEFAULT" in self.file_config and "instance_name" in self.file_config["DEFAULT"]:
                 return self.file_config["DEFAULT"]["instance_name"]
-        except (configparser.Error, OSError, PermissionError) as e:
-            # Config file might be corrupted or inaccessible
-            # Log the specific error but don't crash the application
-            typer.secho(f"Warning: Could not read config file: {e}", fg=typer.colors.YELLOW)
-        except (KeyError, TypeError, AttributeError):
-            # Handle malformed config structure
-            typer.secho("Warning: Config file structure is invalid", fg=typer.colors.YELLOW)
-        except ValueError as e:
-            # Handle Pydantic validation errors
-            typer.secho(f"Warning: Config validation error: {e}", fg=typer.colors.YELLOW)
+        except (
+            configparser.Error,
+            OSError,
+            PermissionError,
+            KeyError,
+            TypeError,
+            AttributeError,
+            ValueError,
+        ) as e:
+            self._handle_config_error(e)
 
-        # No configuration found
         return None
 
     def set_instance_name(self, instance_name: str, config_path: str | None = None) -> None:
@@ -282,12 +290,16 @@ class ConfigManager:
             # Fall back to file config for backwards compatibility
             if "DEFAULT" in self.file_config and key in self.file_config["DEFAULT"]:
                 return self.file_config["DEFAULT"][key]
-        except (configparser.Error, OSError, PermissionError) as e:
-            typer.secho(f"Warning: Could not read config file: {e}", fg=typer.colors.YELLOW)
-        except (KeyError, TypeError, AttributeError):
-            typer.secho("Warning: Config file structure is invalid", fg=typer.colors.YELLOW)
-        except ValueError as e:
-            typer.secho(f"Warning: Config validation error: {e}", fg=typer.colors.YELLOW)
+        except (
+            configparser.Error,
+            OSError,
+            PermissionError,
+            KeyError,
+            TypeError,
+            AttributeError,
+            ValueError,
+        ) as e:
+            self._handle_config_error(e)
         return None
 
     def set_value(self, key: str, value: str, config_path: str | None = None) -> None:
