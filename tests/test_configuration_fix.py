@@ -10,7 +10,7 @@ def test_config_manager_works_without_local_config(mock_aws_clients):
     if no configuration was set up locally.
     """
     # Import after fixtures have been applied
-    from remotepy.config import config_manager
+    from remote.config import config_manager
 
     # The config manager should return the test instance name from our fixture
     # instead of calling sys.exit(1) like the old implementation
@@ -23,7 +23,7 @@ def test_config_manager_works_without_local_config(mock_aws_clients):
 
 def test_config_manager_graceful_none_return():
     """Test that config manager returns None gracefully when no config exists."""
-    from remotepy.config import ConfigManager
+    from remote.config import ConfigManager
 
     # Create a fresh config manager (not mocked)
     real_config_manager = ConfigManager()
@@ -40,7 +40,7 @@ def test_config_manager_graceful_none_return():
 
 def test_settings_only_testing_flags():
     """Test that Settings only contains testing-related configuration."""
-    from remotepy.settings import Settings
+    from remote.settings import Settings
 
     settings = Settings()
 
@@ -57,7 +57,7 @@ def test_no_sys_exit_on_missing_config(mock_aws_clients):
     This is the core fix for Issue #27 - the application should handle
     missing configuration gracefully instead of crashing tests.
     """
-    from remotepy.utils import get_instance_name
+    from remote.utils import get_instance_name
 
     # In our test environment, this will get the test instance name
     # The key improvement is that this raises typer.Exit instead of sys.exit(1)

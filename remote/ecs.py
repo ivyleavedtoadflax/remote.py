@@ -1,18 +1,65 @@
+from functools import lru_cache
+from typing import TYPE_CHECKING, Any
+
 import boto3
 import typer
 from botocore.exceptions import ClientError, NoCredentialsError
+from rich.console import Console
+from rich.table import Table
 
-from remotepy.exceptions import AWSServiceError, ValidationError
-from remotepy.validation import safe_get_array_item, validate_array_index, validate_positive_integer
+from remote.exceptions import AWSServiceError, ValidationError
+from remote.validation import safe_get_array_item, validate_array_index, validate_positive_integer
 
-ecs_client = boto3.client("ecs")
+if TYPE_CHECKING:
+    from mypy_boto3_ecs.client import ECSClient
+
+
+@lru_cache
+def get_ecs_client() -> "ECSClient":
+    """Get or create the ECS client.
+
+    Uses lazy initialization and caches the client for reuse.
+
+    Returns:
+        boto3 ECS client instance
+    """
+    return boto3.client("ecs")
+
+
+# Backwards compatibility: ecs_client is now accessed lazily via __getattr__
+# to avoid creating the client at import time (which breaks tests without AWS region)
+
+
+def __getattr__(name: str) -> Any:
+    """Lazy module attribute access for backwards compatibility."""
+    if name == "ecs_client":
+        return get_ecs_client()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 app = typer.Typer()
+console = Console(force_terminal=True, width=200)
+
+
+def _extract_name_from_arn(arn: str) -> str:
+    """Extract the resource name from an AWS ARN.
+
+    Args:
+        arn: Full AWS ARN (e.g., arn:aws:ecs:us-east-1:123456789:cluster/prod)
+
+    Returns:
+        The resource name (e.g., prod)
+    """
+    if "/" in arn:
+        return arn.split("/")[-1]
+    return arn
 
 
 def get_all_clusters() -> list[str]:
     """
     Get all ECS clusters.
+
+    Uses pagination to handle large numbers of clusters (>100).
 
     Returns:
         list: A list of all ECS clusters
@@ -21,8 +68,14 @@ def get_all_clusters() -> list[str]:
         AWSServiceError: If AWS API call fails
     """
     try:
-        response = ecs_client.list_clusters()
-        return response.get("clusterArns", [])
+        # Use paginator to handle >100 clusters
+        paginator = get_ecs_client().get_paginator("list_clusters")
+        clusters: list[str] = []
+
+        for page in paginator.paginate():
+            clusters.extend(page.get("clusterArns", []))
+
+        return clusters
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
         error_message = e.response["Error"]["Message"]
@@ -37,6 +90,8 @@ def get_all_services(cluster_name: str) -> list[str]:
     """
     Get all ECS services.
 
+    Uses pagination to handle large numbers of services (>100).
+
     Args:
         cluster_name: The name of the cluster
 
@@ -47,8 +102,14 @@ def get_all_services(cluster_name: str) -> list[str]:
         AWSServiceError: If AWS API call fails
     """
     try:
-        response = ecs_client.list_services(cluster=cluster_name)
-        return response.get("serviceArns", [])
+        # Use paginator to handle >100 services
+        paginator = get_ecs_client().get_paginator("list_services")
+        services: list[str] = []
+
+        for page in paginator.paginate(cluster=cluster_name):
+            services.extend(page.get("serviceArns", []))
+
+        return services
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
         error_message = e.response["Error"]["Message"]
@@ -72,7 +133,7 @@ def scale_service(cluster_name: str, service_name: str, desired_count: int) -> N
         AWSServiceError: If AWS API call fails
     """
     try:
-        ecs_client.update_service(
+        get_ecs_client().update_service(
             cluster=cluster_name, service=service_name, desiredCount=desired_count
         )
     except ClientError as e:
@@ -101,12 +162,22 @@ def prompt_for_cluster_name() -> str:
         # Safely access the single cluster
         cluster = safe_get_array_item(clusters, 0, "clusters")
         typer.secho(f"Using cluster: {cluster}", fg=typer.colors.BLUE)
-        return cluster
+        return str(cluster)
     else:
         typer.echo("Please select a cluster from the following list:")
 
-        for i, cluster in enumerate(clusters):
-            typer.secho(f"{i + 1}. {cluster}", fg=typer.colors.BLUE)
+        # Display clusters in a Rich table
+        table = Table(title="ECS Clusters")
+        table.add_column("Number", justify="right")
+        table.add_column("Cluster", style="cyan")
+        table.add_column("ARN", style="dim")
+
+        for i, cluster in enumerate(clusters, 1):
+            cluster_name = _extract_name_from_arn(cluster)
+            table.add_row(str(i), cluster_name, cluster)
+
+        console.print(table)
+
         cluster_choice = typer.prompt("Enter the number of the cluster")
 
         # Validate user input and safely access array
@@ -144,8 +215,18 @@ def prompt_for_services_name(cluster_name: str) -> list[str]:
             fg=typer.colors.YELLOW,
         )
 
-        for i, service in enumerate(services):
-            typer.secho(f"{i + 1}. {service}", fg=typer.colors.BLUE)
+        # Display services in a Rich table
+        table = Table(title="ECS Services")
+        table.add_column("Number", justify="right")
+        table.add_column("Service", style="cyan")
+        table.add_column("ARN", style="dim")
+
+        for i, service in enumerate(services, 1):
+            service_name = _extract_name_from_arn(service)
+            table.add_row(str(i), service_name, service)
+
+        console.print(table)
+
         service_choices = typer.prompt("Enter the numbers of the services (comma separated)")
         # Validate user input and safely access services
         try:
@@ -182,7 +263,9 @@ def prompt_for_services_name(cluster_name: str) -> list[str]:
 @app.command(name="list-clusters")
 def list_clusters() -> None:
     """
-    List ECS clusters
+    List all ECS clusters.
+
+    Displays cluster ARNs for all clusters in the current region.
     """
     clusters = get_all_clusters()
 
@@ -193,10 +276,9 @@ def list_clusters() -> None:
 @app.command(name="list-services")
 def list_services(cluster_name: str = typer.Argument(None, help="Cluster name")) -> None:
     """
-    List ECS services
+    List ECS services in a cluster.
 
-    Args:
-    cluster_name (str): The name of the cluster
+    If no cluster is specified, prompts for selection.
     """
 
     if not cluster_name:
@@ -215,7 +297,10 @@ def scale(
     desired_count: int = typer.Option(None, "-n", "--count", help="Desired count of tasks"),
 ) -> None:
     """
-    Scale ECS services
+    Scale ECS service task count.
+
+    If no cluster or service is specified, prompts for selection.
+    Prompts for confirmation before scaling.
     """
 
     if not cluster_name:

@@ -5,8 +5,8 @@ from unittest.mock import mock_open
 import pytest
 from typer.testing import CliRunner
 
-from remotepy import config
-from remotepy.config import ConfigManager
+from remote import config
+from remote.config import ConfigManager
 
 runner = CliRunner()
 
@@ -59,7 +59,7 @@ class TestConfigManager:
         assert manager._file_config is None
 
     def test_file_config_loads_existing_file(self, mocker):
-        mock_settings = mocker.patch("remotepy.config.Settings")
+        mock_settings = mocker.patch("remote.config.Settings")
         mock_path = mocker.MagicMock()
         mock_path.exists.return_value = True
         mock_settings.get_config_path.return_value = mock_path
@@ -74,7 +74,7 @@ class TestConfigManager:
         mock_config_instance.read.assert_called_once_with(mock_path)
 
     def test_file_config_nonexistent_file(self, mocker):
-        mock_settings = mocker.patch("remotepy.config.Settings")
+        mock_settings = mocker.patch("remote.config.Settings")
         mock_path = mocker.MagicMock()
         mock_path.exists.return_value = False
         mock_settings.get_config_path.return_value = mock_path
@@ -127,9 +127,9 @@ class TestConfigManager:
         assert result is None
 
     def test_set_instance_name_with_default_path(self, mocker):
-        mock_settings = mocker.patch("remotepy.config.Settings")
+        mock_settings = mocker.patch("remote.config.Settings")
         mock_settings.get_config_path.return_value = Path("/test/config.ini")
-        mock_write_config = mocker.patch("remotepy.config.write_config")
+        mock_write_config = mocker.patch("remote.config.write_config")
 
         manager = ConfigManager()
         manager._file_config = configparser.ConfigParser()
@@ -140,7 +140,7 @@ class TestConfigManager:
         assert manager.file_config["DEFAULT"]["instance_name"] == "new-instance"
 
     def test_set_instance_name_with_custom_path(self, mocker):
-        mock_write_config = mocker.patch("remotepy.config.write_config")
+        mock_write_config = mocker.patch("remote.config.write_config")
 
         manager = ConfigManager()
         manager._file_config = configparser.ConfigParser()
@@ -151,7 +151,7 @@ class TestConfigManager:
         assert manager.file_config["DEFAULT"]["instance_name"] == "new-instance"
 
     def test_set_instance_name_creates_default_section(self, mocker):
-        mocker.patch("remotepy.config.write_config")
+        mocker.patch("remote.config.write_config")
 
         manager = ConfigManager()
         manager._file_config = configparser.ConfigParser()
@@ -184,11 +184,11 @@ def test_read_config(mocker):
     result = config.read_config("/test/path")
 
     assert result == mock_config_instance
-    mock_config_instance.read.assert_called_once_with(config.CONFIG_PATH)
+    mock_config_instance.read.assert_called_once_with("/test/path")
 
 
 def test_write_config(test_config, mocker):
-    mock_create_config_dir = mocker.patch("remotepy.config.create_config_dir")
+    mock_create_config_dir = mocker.patch("remote.config.create_config_dir")
     mock_open_file = mocker.patch("builtins.open", mock_open())
 
     cfg = configparser.ConfigParser()
@@ -202,7 +202,7 @@ def test_write_config(test_config, mocker):
 
 
 def test_show_command(mocker):
-    mock_read_config = mocker.patch("remotepy.config.read_config")
+    mock_read_config = mocker.patch("remote.config.read_config")
     mock_config = mocker.MagicMock()
     mock_config.__getitem__.return_value = {"instance_name": "test-instance", "region": "us-east-1"}
     mock_read_config.return_value = mock_config
@@ -215,7 +215,7 @@ def test_show_command(mocker):
 
 
 def test_show_command_with_custom_path(mocker):
-    mock_read_config = mocker.patch("remotepy.config.read_config")
+    mock_read_config = mocker.patch("remote.config.read_config")
     mock_config = mocker.MagicMock()
     mock_config.__getitem__.return_value = {}
     mock_read_config.return_value = mock_config
@@ -227,7 +227,7 @@ def test_show_command_with_custom_path(mocker):
 
 
 def test_add_with_instance_name(mocker):
-    mock_config_manager = mocker.patch("remotepy.config.config_manager")
+    mock_config_manager = mocker.patch("remote.config.config_manager")
 
     result = runner.invoke(config.app, ["add", "my-instance"])
 
@@ -237,7 +237,7 @@ def test_add_with_instance_name(mocker):
 
 
 def test_add_with_custom_config_path(mocker):
-    mock_config_manager = mocker.patch("remotepy.config.config_manager")
+    mock_config_manager = mocker.patch("remote.config.config_manager")
 
     result = runner.invoke(config.app, ["add", "my-instance", "--config", "/custom/path"])
 
@@ -246,20 +246,20 @@ def test_add_with_custom_config_path(mocker):
 
 
 def test_add_no_instances(mocker):
-    mocker.patch("remotepy.config.get_instances", return_value=[])
+    mocker.patch("remote.config.get_instances", return_value=[])
     result = runner.invoke(config.app, ["add"], input="1\n")
     assert "Invalid number. No changes made" in result.stdout
 
 
 def test_add_interactive_valid_selection(mocker, mock_instances_data):
     mock_get_instances = mocker.patch(
-        "remotepy.config.get_instances", return_value=mock_instances_data
+        "remote.config.get_instances", return_value=mock_instances_data
     )
     mock_get_instance_ids = mocker.patch(
-        "remotepy.config.get_instance_ids", return_value=["i-123", "i-456"]
+        "remote.config.get_instance_ids", return_value=["i-123", "i-456"]
     )
     mock_get_instance_info = mocker.patch(
-        "remotepy.config.get_instance_info",
+        "remote.config.get_instance_info",
         return_value=(
             ["test-instance-1", "test-instance-2"],
             ["dns1", "dns2"],
@@ -268,7 +268,7 @@ def test_add_interactive_valid_selection(mocker, mock_instances_data):
             ["time1", "time2"],
         ),
     )
-    mock_config_manager = mocker.patch("remotepy.config.config_manager")
+    mock_config_manager = mocker.patch("remote.config.config_manager")
 
     result = runner.invoke(config.app, ["add"], input="1\n")
 
@@ -283,10 +283,10 @@ def test_add_interactive_valid_selection(mocker, mock_instances_data):
 
 
 def test_add_interactive_invalid_selection_too_high(mocker, mock_instances_data):
-    mocker.patch("remotepy.config.get_instances", return_value=mock_instances_data)
-    mocker.patch("remotepy.config.get_instance_ids", return_value=["i-123", "i-456"])
+    mocker.patch("remote.config.get_instances", return_value=mock_instances_data)
+    mocker.patch("remote.config.get_instance_ids", return_value=["i-123", "i-456"])
     mocker.patch(
-        "remotepy.config.get_instance_info",
+        "remote.config.get_instance_info",
         return_value=(
             ["test-instance-1", "test-instance-2"],
             ["dns1", "dns2"],
@@ -295,7 +295,7 @@ def test_add_interactive_invalid_selection_too_high(mocker, mock_instances_data)
             ["time1", "time2"],
         ),
     )
-    mock_config_manager = mocker.patch("remotepy.config.config_manager")
+    mock_config_manager = mocker.patch("remote.config.config_manager")
 
     result = runner.invoke(config.app, ["add"], input="5\n")
 
@@ -305,10 +305,10 @@ def test_add_interactive_invalid_selection_too_high(mocker, mock_instances_data)
 
 
 def test_add_interactive_invalid_selection_zero(mocker, mock_instances_data):
-    mocker.patch("remotepy.config.get_instances", return_value=mock_instances_data)
-    mocker.patch("remotepy.config.get_instance_ids", return_value=["i-123", "i-456"])
+    mocker.patch("remote.config.get_instances", return_value=mock_instances_data)
+    mocker.patch("remote.config.get_instance_ids", return_value=["i-123", "i-456"])
     mocker.patch(
-        "remotepy.config.get_instance_info",
+        "remote.config.get_instance_info",
         return_value=(
             ["test-instance-1", "test-instance-2"],
             ["dns1", "dns2"],
@@ -317,7 +317,7 @@ def test_add_interactive_invalid_selection_zero(mocker, mock_instances_data):
             ["time1", "time2"],
         ),
     )
-    mock_config_manager = mocker.patch("remotepy.config.config_manager")
+    mock_config_manager = mocker.patch("remote.config.config_manager")
 
     result = runner.invoke(config.app, ["add"], input="0\n")
 
@@ -327,10 +327,10 @@ def test_add_interactive_invalid_selection_zero(mocker, mock_instances_data):
 
 
 def test_add_interactive_valid_selection_second_instance(mocker, mock_instances_data):
-    mocker.patch("remotepy.config.get_instances", return_value=mock_instances_data)
-    mocker.patch("remotepy.config.get_instance_ids", return_value=["i-123", "i-456"])
+    mocker.patch("remote.config.get_instances", return_value=mock_instances_data)
+    mocker.patch("remote.config.get_instance_ids", return_value=["i-123", "i-456"])
     mocker.patch(
-        "remotepy.config.get_instance_info",
+        "remote.config.get_instance_info",
         return_value=(
             ["test-instance-1", "test-instance-2"],
             ["dns1", "dns2"],
@@ -339,7 +339,7 @@ def test_add_interactive_valid_selection_second_instance(mocker, mock_instances_
             ["time1", "time2"],
         ),
     )
-    mock_config_manager = mocker.patch("remotepy.config.config_manager")
+    mock_config_manager = mocker.patch("remote.config.config_manager")
 
     result = runner.invoke(config.app, ["add"], input="2\n")
 
@@ -364,7 +364,7 @@ class TestConfigurationEdgeCases:
         config_path = tmpdir.join("config.ini")
         config_path.write("this is not valid ini format [[[")
 
-        mock_settings = mocker.patch("remotepy.config.Settings")
+        mock_settings = mocker.patch("remote.config.Settings")
         mock_settings.return_value.get_config_path.return_value = str(config_path)
 
         config_manager = ConfigManager()
@@ -376,9 +376,9 @@ class TestConfigurationEdgeCases:
         """Should create config directory when it doesn't exist."""
         nonexistent_path = tmpdir.join("nonexistent", "config.ini")
 
-        mock_settings = mocker.patch("remotepy.config.Settings")
+        mock_settings = mocker.patch("remote.config.Settings")
         mock_settings.return_value.get_config_path.return_value = str(nonexistent_path)
-        mock_write_config = mocker.patch("remotepy.config.write_config")
+        mock_write_config = mocker.patch("remote.config.write_config")
 
         config_manager = ConfigManager()
         config_manager.set_instance_name("test-instance")
@@ -401,7 +401,7 @@ class TestConfigurationEdgeCases:
 
     def test_should_validate_instance_name_format(self, mocker):
         """Should validate instance name format when setting."""
-        mock_write_config = mocker.patch("remotepy.config.write_config")
+        mock_write_config = mocker.patch("remote.config.write_config")
         config_manager = ConfigManager()
 
         # Test with valid instance name
@@ -419,7 +419,7 @@ class TestSettingsConfiguration:
 
     def test_should_use_testing_mode_in_test_environment(self):
         """Should correctly identify testing mode."""
-        from remotepy.settings import Settings
+        from remote.settings import Settings
 
         test_settings = Settings(testing_mode=True)
         assert test_settings.testing_mode is True
@@ -429,7 +429,7 @@ class TestSettingsConfiguration:
 
     def test_should_handle_config_path_generation(self, mocker, tmpdir):
         """Should generate correct config paths."""
-        from remotepy.settings import Settings
+        from remote.settings import Settings
 
         with mocker.patch("pathlib.Path.home", return_value=tmpdir):
             settings = Settings()
@@ -439,3 +439,219 @@ class TestSettingsConfiguration:
             assert "config.ini" in str(config_path)
             assert ".config" in str(config_path)
             assert "remote.py" in str(config_path)
+
+
+class TestConfigSetCommand:
+    """Test the config set command."""
+
+    def test_set_valid_key(self, mocker, tmpdir):
+        """Should set a valid config key."""
+        config_path = str(tmpdir / "config.ini")
+
+        result = runner.invoke(config.app, ["set", "ssh_user", "ec2-user", "-c", config_path])
+
+        assert result.exit_code == 0
+        assert "Set ssh_user = ec2-user" in result.stdout
+
+        # Verify value was written
+        import configparser
+
+        cfg = configparser.ConfigParser()
+        cfg.read(config_path)
+        assert cfg["DEFAULT"]["ssh_user"] == "ec2-user"
+
+    def test_set_invalid_key(self, tmpdir):
+        """Should reject unknown config keys."""
+        config_path = str(tmpdir / "config.ini")
+
+        result = runner.invoke(config.app, ["set", "invalid_key", "value", "-c", config_path])
+
+        assert result.exit_code == 1
+        assert "Unknown config key" in result.stdout
+
+
+class TestConfigGetCommand:
+    """Test the config get command."""
+
+    def test_get_existing_value(self, tmpdir):
+        """Should return existing config value."""
+        config_path = str(tmpdir / "config.ini")
+
+        # Create config file with value
+        import configparser
+
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"ssh_user": "ubuntu"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = runner.invoke(config.app, ["get", "ssh_user", "-c", config_path])
+
+        assert result.exit_code == 0
+        assert "ubuntu" in result.stdout
+
+    def test_get_missing_value(self, tmpdir):
+        """Should exit with code 1 for missing value."""
+        config_path = str(tmpdir / "config.ini")
+
+        # Create empty config file
+        import configparser
+
+        cfg = configparser.ConfigParser()
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = runner.invoke(config.app, ["get", "missing_key", "-c", config_path])
+
+        assert result.exit_code == 1
+
+
+class TestConfigUnsetCommand:
+    """Test the config unset command."""
+
+    def test_unset_existing_key(self, tmpdir):
+        """Should remove existing config key."""
+        config_path = str(tmpdir / "config.ini")
+
+        # Create config file with value
+        import configparser
+
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"ssh_user": "ubuntu"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = runner.invoke(config.app, ["unset", "ssh_user", "-c", config_path])
+
+        assert result.exit_code == 0
+        assert "Removed ssh_user" in result.stdout
+
+        # Verify value was removed
+        cfg = configparser.ConfigParser()
+        cfg.read(config_path)
+        assert "ssh_user" not in cfg["DEFAULT"]
+
+    def test_unset_missing_key(self, tmpdir):
+        """Should exit with code 1 for missing key."""
+        config_path = str(tmpdir / "config.ini")
+
+        # Create empty config file
+        import configparser
+
+        cfg = configparser.ConfigParser()
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = runner.invoke(config.app, ["unset", "missing_key", "-c", config_path])
+
+        assert result.exit_code == 1
+        assert "not found" in result.stdout
+
+
+class TestConfigInitCommand:
+    """Test the config init command."""
+
+    def test_init_creates_config(self, tmpdir):
+        """Should create config file with prompted values."""
+        config_path = str(tmpdir / "config.ini")
+
+        result = runner.invoke(
+            config.app, ["init", "-c", config_path], input="my-server\nec2-user\n~/.ssh/key.pem\n"
+        )
+
+        assert result.exit_code == 0
+        assert "Config written" in result.stdout
+
+        # Verify config was created
+        import configparser
+
+        cfg = configparser.ConfigParser()
+        cfg.read(config_path)
+        assert cfg["DEFAULT"]["instance_name"] == "my-server"
+        assert cfg["DEFAULT"]["ssh_user"] == "ec2-user"
+        assert cfg["DEFAULT"]["ssh_key_path"] == "~/.ssh/key.pem"
+
+    def test_init_skips_empty_values(self, tmpdir):
+        """Should skip empty optional values."""
+        config_path = str(tmpdir / "config.ini")
+
+        result = runner.invoke(
+            config.app,
+            ["init", "-c", config_path],
+            input="\nubuntu\n\n",  # Empty instance_name and ssh_key
+        )
+
+        assert result.exit_code == 0
+
+        # Verify only ssh_user was written
+        import configparser
+
+        cfg = configparser.ConfigParser()
+        cfg.read(config_path)
+        assert "instance_name" not in cfg["DEFAULT"]
+        assert cfg["DEFAULT"]["ssh_user"] == "ubuntu"
+        assert "ssh_key_path" not in cfg["DEFAULT"]
+
+
+class TestConfigValidateCommand:
+    """Test the config validate command."""
+
+    def test_validate_valid_config(self, tmpdir):
+        """Should report valid config."""
+        config_path = str(tmpdir / "config.ini")
+
+        # Create valid config file
+        import configparser
+
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"ssh_user": "ubuntu"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = runner.invoke(config.app, ["validate", "-c", config_path])
+
+        assert result.exit_code == 0
+        # Rich panel displays validation result
+        assert "Config Validation" in result.stdout
+        assert "Status: Valid" in result.stdout
+
+    def test_validate_missing_config(self, tmpdir):
+        """Should report missing config file."""
+        config_path = str(tmpdir / "nonexistent.ini")
+
+        result = runner.invoke(config.app, ["validate", "-c", config_path])
+
+        assert result.exit_code == 1
+        assert "not found" in result.stdout
+
+    def test_validate_missing_ssh_key(self, tmpdir):
+        """Should report missing SSH key file."""
+        config_path = str(tmpdir / "config.ini")
+
+        # Create config with missing SSH key path
+        import configparser
+
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"ssh_key_path": "/nonexistent/key.pem"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = runner.invoke(config.app, ["validate", "-c", config_path])
+
+        assert result.exit_code == 1
+        assert "SSH key not found" in result.stdout
+
+
+class TestConfigKeysCommand:
+    """Test the config keys command."""
+
+    def test_keys_lists_all_valid_keys(self):
+        """Should list all valid configuration keys."""
+        result = runner.invoke(config.app, ["keys"])
+
+        assert result.exit_code == 0
+        assert "instance_name" in result.stdout
+        assert "ssh_user" in result.stdout
+        assert "ssh_key_path" in result.stdout
+        assert "aws_region" in result.stdout
+        assert "default_launch_template" in result.stdout

@@ -21,10 +21,37 @@ repos:
         types: [python]
         stages: [pre-push]
 
-      # Run tests (quiet mode - CI has full output)
+      # Type checking
+      - id: mypy
+        name: mypy
+        entry: uv run mypy remote/
+        language: system
+        pass_filenames: false
+        types: [python]
+        stages: [pre-push]
+
+      # Security scanning - static analysis
+      # Skips: B311 (random for non-crypto), B404/B603 (subprocess is needed for SSH)
+      - id: bandit
+        name: bandit
+        entry: uv run bandit -r remote/ -q -s B311,B404,B603
+        language: system
+        pass_filenames: false
+        types: [python]
+        stages: [pre-push]
+
+      # Security scanning - dependency vulnerabilities
+      - id: pip-audit
+        name: pip-audit
+        entry: uv run pip-audit
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+      # Run tests with coverage (quiet mode)
       - id: pytest
         name: pytest
-        entry: uv run pytest -q --tb=line
+        entry: uv run pytest -q --tb=line --cov=remote --cov-report=term-missing:skip-covered
         language: system
         pass_filenames: false
         types: [python]

@@ -1,10 +1,12 @@
 from configparser import ConfigParser
-from datetime import datetime
+from datetime import datetime, timezone
+from functools import lru_cache
+from typing import TYPE_CHECKING, Any, cast
 
 import boto3
 import typer
-import wasabi
 from botocore.exceptions import ClientError, NoCredentialsError
+from rich.console import Console
 
 from .exceptions import (
     AWSServiceError,
@@ -23,11 +25,55 @@ from .validation import (
     validate_volume_id,
 )
 
-msg = wasabi.Printer()
+if TYPE_CHECKING:
+    from mypy_boto3_ec2.client import EC2Client
+    from mypy_boto3_sts.client import STSClient
+
+console = Console(force_terminal=True, width=200)
 
 app = typer.Typer()
 
-ec2_client = boto3.client("ec2")
+
+@lru_cache
+def get_ec2_client() -> "EC2Client":
+    """Get or create the EC2 client.
+
+    Uses lazy initialization and caches the client for reuse.
+
+    Returns:
+        boto3 EC2 client instance
+    """
+    return boto3.client("ec2")
+
+
+@lru_cache
+def get_sts_client() -> "STSClient":
+    """Get or create the STS client.
+
+    Uses lazy initialization and caches the client for reuse.
+
+    Returns:
+        boto3 STS client instance
+    """
+    return boto3.client("sts")
+
+
+# Backwards compatibility: ec2_client is now accessed lazily via __getattr__
+# to avoid creating the client at import time (which breaks tests without AWS region)
+# The module-level ec2_client attribute is still available for backwards compatibility
+# but is deprecated and will be removed in v0.5.0
+
+
+def __getattr__(name: str) -> Any:
+    """Lazy module attribute access for backwards compatibility.
+
+    Provides lazy access to ec2_client for backwards compatibility.
+    This pattern allows the client to be created on first access rather
+    than at module import time, which is necessary for testing.
+    """
+    if name == "ec2_client":
+        return get_ec2_client()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def get_account_id() -> str:
@@ -75,7 +121,7 @@ def get_instance_id(instance_name: str) -> str:
     instance_name = validate_instance_name(instance_name)
 
     try:
-        response = ec2_client.describe_instances(
+        response = get_ec2_client().describe_instances(
             Filters=[
                 {"Name": "tag:Name", "Values": [instance_name]},
                 {
@@ -114,7 +160,7 @@ def get_instance_id(instance_name: str) -> str:
         )
 
 
-def get_instance_status(instance_id: str = None) -> dict:
+def get_instance_status(instance_id: str | None = None) -> dict[str, Any]:
     """Returns the status of the instance.
 
     Args:
@@ -130,9 +176,10 @@ def get_instance_status(instance_id: str = None) -> dict:
         if instance_id:
             # Validate input if provided
             instance_id = validate_instance_id(instance_id)
-            return ec2_client.describe_instance_status(InstanceIds=[instance_id])
+            response = get_ec2_client().describe_instance_status(InstanceIds=[instance_id])
         else:
-            return ec2_client.describe_instance_status()
+            response = get_ec2_client().describe_instance_status()
+        return dict(response)
 
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
@@ -147,9 +194,11 @@ def get_instance_status(instance_id: str = None) -> dict:
         )
 
 
-def get_instances(exclude_terminated: bool = False) -> list[dict]:
+def get_instances(exclude_terminated: bool = False) -> list[dict[str, Any]]:
     """
     Get all instances, optionally excluding those in a 'terminated' state.
+
+    Uses pagination to handle large numbers of instances (>100).
 
     Args:
         exclude_terminated: Whether to exclude terminated instances
@@ -161,7 +210,7 @@ def get_instances(exclude_terminated: bool = False) -> list[dict]:
         AWSServiceError: If AWS API call fails
     """
     try:
-        filters = []
+        filters: list[dict[str, Any]] = []
         if exclude_terminated:
             filters.append(
                 {
@@ -170,15 +219,19 @@ def get_instances(exclude_terminated: bool = False) -> list[dict]:
                 }
             )
 
+        # Use paginator to handle >100 instances
+        paginator = get_ec2_client().get_paginator("describe_instances")
+        reservations: list[dict[str, Any]] = []
+
         if filters:
-            response = ec2_client.describe_instances(Filters=filters)
+            page_iterator = paginator.paginate(Filters=filters)  # type: ignore[arg-type]
         else:
-            response = ec2_client.describe_instances()
+            page_iterator = paginator.paginate()
 
-        # Validate response structure
-        validate_aws_response_structure(response, ["Reservations"], "describe_instances")
+        for page in page_iterator:
+            reservations.extend(cast(list[dict[str, Any]], page.get("Reservations", [])))
 
-        return response["Reservations"]
+        return reservations
 
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
@@ -207,15 +260,17 @@ def get_instance_dns(instance_id: str) -> str:
     instance_id = validate_instance_id(instance_id)
 
     try:
-        response = ec2_client.describe_instances(InstanceIds=[instance_id])
+        response = get_ec2_client().describe_instances(InstanceIds=[instance_id])
 
         # Validate response structure
         validate_aws_response_structure(response, ["Reservations"], "describe_instances")
 
-        reservations = ensure_non_empty_array(response["Reservations"], "instance reservations")
-        instances = ensure_non_empty_array(reservations[0].get("Instances", []), "instances")
+        reservations = ensure_non_empty_array(
+            list(response["Reservations"]), "instance reservations"
+        )
+        instances = ensure_non_empty_array(list(reservations[0].get("Instances", [])), "instances")
 
-        return instances[0].get("PublicDnsName", "")
+        return str(instances[0].get("PublicDnsName", ""))
 
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
@@ -226,7 +281,7 @@ def get_instance_dns(instance_id: str) -> str:
         raise AWSServiceError("EC2", "describe_instances", error_code, error_message)
 
 
-def get_instance_name(cfg: ConfigParser = None):
+def get_instance_name(cfg: ConfigParser | None = None) -> str:
     """Returns the name of the instance as defined in the config file.
 
     Args:
@@ -238,7 +293,7 @@ def get_instance_name(cfg: ConfigParser = None):
     Raises:
         typer.Exit: If no instance name is configured
     """
-    from remotepy.config import config_manager
+    from remote.config import config_manager
 
     instance_name = config_manager.get_instance_name()
 
@@ -246,15 +301,13 @@ def get_instance_name(cfg: ConfigParser = None):
         return instance_name
     else:
         typer.secho("No default instance configured.", fg=typer.colors.RED)
-        typer.secho(
-            "Run `remotepy config add` to set up your default instance.", fg=typer.colors.RED
-        )
+        typer.secho("Run `remote config add` to set up your default instance.", fg=typer.colors.RED)
         raise typer.Exit(1)
 
 
 def get_instance_info(
-    instances: list[dict], name_filter: str = None, drop_nameless: bool = False
-) -> tuple[list[str], list[str], list[str], list[str], list[str]]:
+    instances: list[dict[str, Any]], name_filter: str | None = None, drop_nameless: bool = False
+) -> tuple[list[str], list[str], list[str], list[str], list[str | None]]:
     """
     Get all instance names for the given account from aws cli.
 
@@ -286,10 +339,8 @@ def get_instance_info(
                 tags = {k["Key"]: k["Value"] for k in instance.get("Tags", [])}
 
                 if not tags or "Name" not in tags:
-                    if drop_nameless:
-                        continue
-                    else:
-                        break
+                    # Skip instances without a Name tag and continue to next instance
+                    continue
 
                 instance_name = tags["Name"]
 
@@ -309,7 +360,7 @@ def get_instance_info(
                 if status == "running" and "LaunchTime" in instance:
                     try:
                         launch_time = instance["LaunchTime"].timestamp()
-                        launch_time = datetime.utcfromtimestamp(launch_time)
+                        launch_time = datetime.fromtimestamp(launch_time, tz=timezone.utc)
                         launch_time = launch_time.strftime("%Y-%m-%d %H:%M:%S UTC")
                     except (AttributeError, ValueError):
                         launch_time = None
@@ -321,13 +372,13 @@ def get_instance_info(
 
             except (KeyError, TypeError) as e:
                 # Skip malformed instance data but continue processing others
-                msg.warn(f"Skipping malformed instance data: {e}")
+                console.print(f"[yellow]Warning: Skipping malformed instance data: {e}[/yellow]")
                 continue
 
     return names, public_dnss, statuses, instance_types, launch_times
 
 
-def get_instance_ids(instances: list[dict]) -> list[str]:
+def get_instance_ids(instances: list[dict[str, Any]]) -> list[str]:
     """Returns a list of instance ids extracted from the output of get_instances().
 
     Args:
@@ -380,14 +431,14 @@ def is_instance_running(instance_id: str) -> bool | None:
         instance_state = first_status.get("InstanceState", {})
         state_name = instance_state.get("Name", "unknown")
 
-        return state_name == "running"
+        return bool(state_name == "running")
 
     except (AWSServiceError, ResourceNotFoundError, ValidationError):
         # Re-raise specific errors
         raise
     except (KeyError, TypeError, AttributeError) as e:
         # For data structure errors, log and return None
-        msg.warn(f"Unexpected instance status structure: {e}")
+        console.print(f"[yellow]Warning: Unexpected instance status structure: {e}[/yellow]")
         return None
 
 
@@ -419,14 +470,14 @@ def is_instance_stopped(instance_id: str) -> bool | None:
         instance_state = first_status.get("InstanceState", {})
         state_name = instance_state.get("Name", "unknown")
 
-        return state_name == "stopped"
+        return bool(state_name == "stopped")
 
     except (AWSServiceError, ResourceNotFoundError, ValidationError):
         # Re-raise specific errors
         raise
     except (KeyError, TypeError, AttributeError) as e:
         # For data structure errors, log and return None
-        msg.warn(f"Unexpected instance status structure: {e}")
+        console.print(f"[yellow]Warning: Unexpected instance status structure: {e}[/yellow]")
         return None
 
 
@@ -447,15 +498,17 @@ def get_instance_type(instance_id: str) -> str:
     instance_id = validate_instance_id(instance_id)
 
     try:
-        response = ec2_client.describe_instances(InstanceIds=[instance_id])
+        response = get_ec2_client().describe_instances(InstanceIds=[instance_id])
 
         # Validate response structure
         validate_aws_response_structure(response, ["Reservations"], "describe_instances")
 
-        reservations = ensure_non_empty_array(response["Reservations"], "instance reservations")
-        instances = ensure_non_empty_array(reservations[0].get("Instances", []), "instances")
+        reservations = ensure_non_empty_array(
+            list(response["Reservations"]), "instance reservations"
+        )
+        instances = ensure_non_empty_array(list(reservations[0].get("Instances", [])), "instances")
 
-        return instances[0]["InstanceType"]
+        return str(instances[0]["InstanceType"])
 
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
@@ -482,7 +535,7 @@ def get_volume_ids(instance_id: str) -> list[str]:
     instance_id = validate_instance_id(instance_id)
 
     try:
-        response = ec2_client.describe_volumes(
+        response = get_ec2_client().describe_volumes(
             Filters=[{"Name": "attachment.instance-id", "Values": [instance_id]}]
         )
 
@@ -524,18 +577,18 @@ def get_volume_name(volume_id: str) -> str:
     volume_id = validate_volume_id(volume_id)
 
     try:
-        response = ec2_client.describe_volumes(VolumeIds=[volume_id])
+        response = get_ec2_client().describe_volumes(VolumeIds=[volume_id])
 
         # Validate response structure
         validate_aws_response_structure(response, ["Volumes"], "describe_volumes")
 
-        volumes = ensure_non_empty_array(response["Volumes"], "volumes")
+        volumes = ensure_non_empty_array(list(response["Volumes"]), "volumes")
         volume = volumes[0]
 
         # Look for Name tag
         for tag in volume.get("Tags", []):
             if tag["Key"] == "Name":
-                return tag["Value"]
+                return str(tag["Value"])
 
         return ""  # No name tag found
 
@@ -565,14 +618,14 @@ def get_snapshot_status(snapshot_id: str) -> str:
     snapshot_id = validate_snapshot_id(snapshot_id)
 
     try:
-        response = ec2_client.describe_snapshots(SnapshotIds=[snapshot_id])
+        response = get_ec2_client().describe_snapshots(SnapshotIds=[snapshot_id])
 
         # Validate response structure
         validate_aws_response_structure(response, ["Snapshots"], "describe_snapshots")
 
-        snapshots = ensure_non_empty_array(response["Snapshots"], "snapshots")
+        snapshots = ensure_non_empty_array(list(response["Snapshots"]), "snapshots")
 
-        return snapshots[0]["State"]
+        return str(snapshots[0]["State"])
 
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
@@ -581,6 +634,81 @@ def get_snapshot_status(snapshot_id: str) -> str:
 
         error_message = e.response["Error"]["Message"]
         raise AWSServiceError("EC2", "describe_snapshots", error_code, error_message)
+
+
+def get_launch_templates(name_filter: str | None = None) -> list[dict[str, Any]]:
+    """Get launch templates, optionally filtered by name pattern.
+
+    Args:
+        name_filter: Optional string to filter templates by name (case-insensitive)
+
+    Returns:
+        List of launch template dictionaries
+
+    Raises:
+        AWSServiceError: If AWS API call fails
+    """
+    try:
+        response = get_ec2_client().describe_launch_templates()
+        validate_aws_response_structure(response, ["LaunchTemplates"], "describe_launch_templates")
+
+        templates = response["LaunchTemplates"]
+
+        if name_filter:
+            templates = [
+                t for t in templates if name_filter.lower() in t["LaunchTemplateName"].lower()
+            ]
+
+        return cast(list[dict[str, Any]], templates)
+
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        error_message = e.response["Error"]["Message"]
+        raise AWSServiceError("EC2", "describe_launch_templates", error_code, error_message)
+    except NoCredentialsError:
+        raise AWSServiceError(
+            "EC2",
+            "describe_launch_templates",
+            "NoCredentials",
+            "AWS credentials not found or invalid",
+        )
+
+
+def get_launch_template_versions(template_name: str) -> list[dict[str, Any]]:
+    """Get all versions of a launch template.
+
+    Args:
+        template_name: Name of the launch template
+
+    Returns:
+        List of launch template version dictionaries
+
+    Raises:
+        ResourceNotFoundError: If template not found
+        AWSServiceError: If AWS API call fails
+    """
+    try:
+        response = get_ec2_client().describe_launch_template_versions(
+            LaunchTemplateName=template_name
+        )
+        validate_aws_response_structure(
+            response, ["LaunchTemplateVersions"], "describe_launch_template_versions"
+        )
+        return cast(list[dict[str, Any]], response["LaunchTemplateVersions"])
+
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        if error_code == "InvalidLaunchTemplateName.NotFoundException":
+            raise ResourceNotFoundError("Launch Template", template_name)
+        error_message = e.response["Error"]["Message"]
+        raise AWSServiceError("EC2", "describe_launch_template_versions", error_code, error_message)
+    except NoCredentialsError:
+        raise AWSServiceError(
+            "EC2",
+            "describe_launch_template_versions",
+            "NoCredentials",
+            "AWS credentials not found or invalid",
+        )
 
 
 def get_launch_template_id(launch_template_name: str) -> str:
@@ -607,7 +735,7 @@ def get_launch_template_id(launch_template_name: str) -> str:
         raise ValidationError("Launch template name cannot be empty")
 
     try:
-        response = ec2_client.describe_launch_templates(
+        response = get_ec2_client().describe_launch_templates(
             Filters=[{"Name": "tag:Name", "Values": [launch_template_name]}]
         )
 

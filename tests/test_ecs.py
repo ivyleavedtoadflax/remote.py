@@ -5,7 +5,7 @@ from botocore.exceptions import ClientError, NoCredentialsError
 from click.exceptions import Exit
 from typer.testing import CliRunner
 
-from remotepy.ecs import (
+from remote.ecs import (
     app,
     get_all_clusters,
     get_all_services,
@@ -13,7 +13,7 @@ from remotepy.ecs import (
     prompt_for_services_name,
     scale_service,
 )
-from remotepy.exceptions import AWSServiceError
+from remote.exceptions import AWSServiceError
 
 runner = CliRunner()
 
@@ -22,8 +22,12 @@ runner = CliRunner()
 
 
 def test_get_all_clusters(mocker, mock_ecs_clusters):
-    mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
-    mock_ecs_client.list_clusters.return_value = mock_ecs_clusters
+    mock_ecs_client = mocker.patch("remote.ecs.get_ecs_client")
+
+    # Mock the paginator
+    mock_paginator = mocker.MagicMock()
+    mock_paginator.paginate.return_value = [mock_ecs_clusters]
+    mock_ecs_client.return_value.get_paginator.return_value = mock_paginator
 
     result = get_all_clusters()
 
@@ -31,12 +35,17 @@ def test_get_all_clusters(mocker, mock_ecs_clusters):
         "arn:aws:ecs:us-east-1:123456789012:cluster/test-cluster-1",
         "arn:aws:ecs:us-east-1:123456789012:cluster/test-cluster-2",
     ]
-    mock_ecs_client.list_clusters.assert_called_once()
+    mock_ecs_client.return_value.get_paginator.assert_called_once_with("list_clusters")
+    mock_paginator.paginate.assert_called_once()
 
 
 def test_get_all_services(mocker, mock_ecs_services):
-    mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
-    mock_ecs_client.list_services.return_value = mock_ecs_services
+    mock_ecs_client = mocker.patch("remote.ecs.get_ecs_client")
+
+    # Mock the paginator
+    mock_paginator = mocker.MagicMock()
+    mock_paginator.paginate.return_value = [mock_ecs_services]
+    mock_ecs_client.return_value.get_paginator.return_value = mock_paginator
 
     result = get_all_services("test-cluster")
 
@@ -44,22 +53,23 @@ def test_get_all_services(mocker, mock_ecs_services):
         "arn:aws:ecs:us-east-1:123456789012:service/test-cluster/test-service-1",
         "arn:aws:ecs:us-east-1:123456789012:service/test-cluster/test-service-2",
     ]
-    mock_ecs_client.list_services.assert_called_once_with(cluster="test-cluster")
+    mock_ecs_client.return_value.get_paginator.assert_called_once_with("list_services")
+    mock_paginator.paginate.assert_called_once_with(cluster="test-cluster")
 
 
 def test_scale_service(mocker):
-    mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
+    mock_ecs_client = mocker.patch("remote.ecs.get_ecs_client")
 
     scale_service("test-cluster", "test-service", 5)
 
-    mock_ecs_client.update_service.assert_called_once_with(
+    mock_ecs_client.return_value.update_service.assert_called_once_with(
         cluster="test-cluster", service="test-service", desiredCount=5
     )
 
 
 def test_prompt_for_cluster_name_single_cluster(mocker, capsys):
     mock_get_all_clusters = mocker.patch(
-        "remotepy.ecs.get_all_clusters", return_value=["test-cluster"]
+        "remote.ecs.get_all_clusters", return_value=["test-cluster"]
     )
 
     result = prompt_for_cluster_name()
@@ -72,7 +82,7 @@ def test_prompt_for_cluster_name_single_cluster(mocker, capsys):
 
 def test_prompt_for_cluster_name_multiple_clusters(mocker, capsys):
     mock_get_all_clusters = mocker.patch(
-        "remotepy.ecs.get_all_clusters", return_value=["test-cluster-1", "test-cluster-2"]
+        "remote.ecs.get_all_clusters", return_value=["test-cluster-1", "test-cluster-2"]
     )
     mock_prompt = mocker.patch("typer.prompt", return_value="2")
 
@@ -83,12 +93,14 @@ def test_prompt_for_cluster_name_multiple_clusters(mocker, capsys):
     mock_prompt.assert_called_once_with("Enter the number of the cluster")
     captured = capsys.readouterr()
     assert "Please select a cluster from the following list:" in captured.out
-    assert "1. test-cluster-1" in captured.out
-    assert "2. test-cluster-2" in captured.out
+    # Rich table displays cluster names in table format
+    assert "ECS Clusters" in captured.out
+    assert "test-cluster-1" in captured.out
+    assert "test-cluster-2" in captured.out
 
 
 def test_prompt_for_cluster_name_no_clusters(mocker):
-    mock_get_all_clusters = mocker.patch("remotepy.ecs.get_all_clusters", return_value=[])
+    mock_get_all_clusters = mocker.patch("remote.ecs.get_all_clusters", return_value=[])
 
     with pytest.raises(Exit):
         prompt_for_cluster_name()
@@ -97,7 +109,7 @@ def test_prompt_for_cluster_name_no_clusters(mocker):
 
 
 def test_prompt_for_services_name_single_service_found(capsys):
-    with patch("remotepy.ecs.get_all_services", return_value=["test-service"]):
+    with patch("remote.ecs.get_all_services", return_value=["test-service"]):
         result = prompt_for_services_name("test-cluster")
         assert result == ["test-service"]
         captured = capsys.readouterr()
@@ -106,7 +118,7 @@ def test_prompt_for_services_name_single_service_found(capsys):
 
 def test_prompt_for_services_name_multiple_services_found(capsys):
     with patch(
-        "remotepy.ecs.get_all_services",
+        "remote.ecs.get_all_services",
         return_value=["test-service-1", "test-service-2"],
     ):
         with patch("typer.prompt", return_value="1, 2"):
@@ -114,12 +126,14 @@ def test_prompt_for_services_name_multiple_services_found(capsys):
             assert result == ["test-service-1", "test-service-2"]
             captured = capsys.readouterr()
             assert "Please select one or more services" in captured.out
-            assert "1. test-service-1" in captured.out
-            assert "2. test-service-2" in captured.out
+            # Rich table displays service names in table format
+            assert "ECS Services" in captured.out
+            assert "test-service-1" in captured.out
+            assert "test-service-2" in captured.out
 
 
 def test_prompt_for_services_name_no_services(mocker):
-    mock_get_all_services = mocker.patch("remotepy.ecs.get_all_services", return_value=[])
+    mock_get_all_services = mocker.patch("remote.ecs.get_all_services", return_value=[])
 
     with pytest.raises(Exit):
         prompt_for_services_name("test-cluster")
@@ -129,7 +143,7 @@ def test_prompt_for_services_name_no_services(mocker):
 
 def test_prompt_for_services_name_single_service_selection(mocker, capsys):
     mock_get_all_services = mocker.patch(
-        "remotepy.ecs.get_all_services",
+        "remote.ecs.get_all_services",
         return_value=["test-service-1", "test-service-2", "test-service-3"],
     )
     mocker.patch("typer.prompt", return_value="2")
@@ -144,7 +158,7 @@ def test_prompt_for_services_name_single_service_selection(mocker, capsys):
 
 def test_list_clusters_command(mocker):
     mock_get_all_clusters = mocker.patch(
-        "remotepy.ecs.get_all_clusters", return_value=["test-cluster-1", "test-cluster-2"]
+        "remote.ecs.get_all_clusters", return_value=["test-cluster-1", "test-cluster-2"]
     )
 
     result = runner.invoke(app, ["list-clusters"])
@@ -156,7 +170,7 @@ def test_list_clusters_command(mocker):
 
 
 def test_list_clusters_command_empty(mocker):
-    mock_get_all_clusters = mocker.patch("remotepy.ecs.get_all_clusters", return_value=[])
+    mock_get_all_clusters = mocker.patch("remote.ecs.get_all_clusters", return_value=[])
 
     result = runner.invoke(app, ["list-clusters"])
 
@@ -166,7 +180,7 @@ def test_list_clusters_command_empty(mocker):
 
 def test_list_services_command_with_cluster_name(mocker):
     mock_get_all_services = mocker.patch(
-        "remotepy.ecs.get_all_services", return_value=["test-service-1", "test-service-2"]
+        "remote.ecs.get_all_services", return_value=["test-service-1", "test-service-2"]
     )
 
     result = runner.invoke(app, ["list-services", "test-cluster"])
@@ -179,11 +193,9 @@ def test_list_services_command_with_cluster_name(mocker):
 
 def test_list_services_command_without_cluster_name(mocker):
     mock_prompt_for_cluster_name = mocker.patch(
-        "remotepy.ecs.prompt_for_cluster_name", return_value="selected-cluster"
+        "remote.ecs.prompt_for_cluster_name", return_value="selected-cluster"
     )
-    mock_get_all_services = mocker.patch(
-        "remotepy.ecs.get_all_services", return_value=["service-1"]
-    )
+    mock_get_all_services = mocker.patch("remote.ecs.get_all_services", return_value=["service-1"])
 
     result = runner.invoke(app, ["list-services"])
 
@@ -193,7 +205,7 @@ def test_list_services_command_without_cluster_name(mocker):
 
 
 def test_scale_command_with_all_params(mocker):
-    mock_scale_service = mocker.patch("remotepy.ecs.scale_service")
+    mock_scale_service = mocker.patch("remote.ecs.scale_service")
 
     result = runner.invoke(
         app, ["scale", "test-cluster", "test-service", "--count", "3"], input="y\n"
@@ -206,12 +218,12 @@ def test_scale_command_with_all_params(mocker):
 
 def test_scale_command_without_cluster_name(mocker):
     mock_prompt_for_cluster_name = mocker.patch(
-        "remotepy.ecs.prompt_for_cluster_name", return_value="selected-cluster"
+        "remote.ecs.prompt_for_cluster_name", return_value="selected-cluster"
     )
     mock_prompt_for_services_name = mocker.patch(
-        "remotepy.ecs.prompt_for_services_name", return_value=["test-service"]
+        "remote.ecs.prompt_for_services_name", return_value=["test-service"]
     )
-    mock_scale_service = mocker.patch("remotepy.ecs.scale_service")
+    mock_scale_service = mocker.patch("remote.ecs.scale_service")
 
     result = runner.invoke(app, ["scale", "--count", "2"], input="y\n")
 
@@ -223,9 +235,9 @@ def test_scale_command_without_cluster_name(mocker):
 
 def test_scale_command_without_service_name(mocker):
     mock_prompt_for_services_name = mocker.patch(
-        "remotepy.ecs.prompt_for_services_name", return_value=["selected-service"]
+        "remote.ecs.prompt_for_services_name", return_value=["selected-service"]
     )
-    mock_scale_service = mocker.patch("remotepy.ecs.scale_service")
+    mock_scale_service = mocker.patch("remote.ecs.scale_service")
 
     result = runner.invoke(app, ["scale", "test-cluster", "--count", "4"], input="y\n")
 
@@ -235,7 +247,7 @@ def test_scale_command_without_service_name(mocker):
 
 
 def test_scale_command_without_desired_count(mocker):
-    mock_scale_service = mocker.patch("remotepy.ecs.scale_service")
+    mock_scale_service = mocker.patch("remote.ecs.scale_service")
 
     result = runner.invoke(app, ["scale", "test-cluster", "test-service"], input="5\ny\n")
 
@@ -244,7 +256,7 @@ def test_scale_command_without_desired_count(mocker):
 
 
 def test_scale_command_cancelled(mocker):
-    mock_scale_service = mocker.patch("remotepy.ecs.scale_service")
+    mock_scale_service = mocker.patch("remote.ecs.scale_service")
 
     result = runner.invoke(
         app, ["scale", "test-cluster", "test-service", "--count", "3"], input="n\n"
@@ -256,9 +268,9 @@ def test_scale_command_cancelled(mocker):
 
 def test_scale_command_multiple_services(mocker):
     mock_prompt_for_services_name = mocker.patch(
-        "remotepy.ecs.prompt_for_services_name", return_value=["service-1", "service-2"]
+        "remote.ecs.prompt_for_services_name", return_value=["service-1", "service-2"]
     )
-    mock_scale_service = mocker.patch("remotepy.ecs.scale_service")
+    mock_scale_service = mocker.patch("remote.ecs.scale_service")
 
     result = runner.invoke(app, ["scale", "test-cluster", "--count", "2"], input="y\ny\n")
 
@@ -274,10 +286,14 @@ def test_scale_command_multiple_services(mocker):
 
 def test_get_all_clusters_client_error(mocker):
     """Test get_all_clusters with ClientError."""
-    mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
+    mock_ecs_client = mocker.patch("remote.ecs.get_ecs_client")
 
     error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Access denied"}}
-    mock_ecs_client.list_clusters.side_effect = ClientError(error_response, "list_clusters")
+
+    # Mock paginator that raises error during iteration
+    mock_paginator = mocker.MagicMock()
+    mock_paginator.paginate.side_effect = ClientError(error_response, "list_clusters")
+    mock_ecs_client.return_value.get_paginator.return_value = mock_paginator
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_all_clusters()
@@ -289,9 +305,12 @@ def test_get_all_clusters_client_error(mocker):
 
 def test_get_all_clusters_no_credentials_error(mocker):
     """Test get_all_clusters with NoCredentialsError."""
-    mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
+    mock_ecs_client = mocker.patch("remote.ecs.get_ecs_client")
 
-    mock_ecs_client.list_clusters.side_effect = NoCredentialsError()
+    # Mock paginator that raises error during iteration
+    mock_paginator = mocker.MagicMock()
+    mock_paginator.paginate.side_effect = NoCredentialsError()
+    mock_ecs_client.return_value.get_paginator.return_value = mock_paginator
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_all_clusters()
@@ -303,10 +322,14 @@ def test_get_all_clusters_no_credentials_error(mocker):
 
 def test_get_all_services_client_error(mocker):
     """Test get_all_services with ClientError."""
-    mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
+    mock_ecs_client = mocker.patch("remote.ecs.get_ecs_client")
 
     error_response = {"Error": {"Code": "ClusterNotFoundException", "Message": "Cluster not found"}}
-    mock_ecs_client.list_services.side_effect = ClientError(error_response, "list_services")
+
+    # Mock paginator that raises error during iteration
+    mock_paginator = mocker.MagicMock()
+    mock_paginator.paginate.side_effect = ClientError(error_response, "list_services")
+    mock_ecs_client.return_value.get_paginator.return_value = mock_paginator
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_all_services("nonexistent-cluster")
@@ -318,9 +341,12 @@ def test_get_all_services_client_error(mocker):
 
 def test_get_all_services_no_credentials_error(mocker):
     """Test get_all_services with NoCredentialsError."""
-    mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
+    mock_ecs_client = mocker.patch("remote.ecs.get_ecs_client")
 
-    mock_ecs_client.list_services.side_effect = NoCredentialsError()
+    # Mock paginator that raises error during iteration
+    mock_paginator = mocker.MagicMock()
+    mock_paginator.paginate.side_effect = NoCredentialsError()
+    mock_ecs_client.return_value.get_paginator.return_value = mock_paginator
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_all_services("test-cluster")
@@ -332,10 +358,12 @@ def test_get_all_services_no_credentials_error(mocker):
 
 def test_scale_service_client_error(mocker):
     """Test scale_service with ClientError."""
-    mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
+    mock_ecs_client = mocker.patch("remote.ecs.get_ecs_client")
 
     error_response = {"Error": {"Code": "ServiceNotFoundException", "Message": "Service not found"}}
-    mock_ecs_client.update_service.side_effect = ClientError(error_response, "update_service")
+    mock_ecs_client.return_value.update_service.side_effect = ClientError(
+        error_response, "update_service"
+    )
 
     with pytest.raises(AWSServiceError) as exc_info:
         scale_service("test-cluster", "nonexistent-service", 5)
@@ -347,9 +375,9 @@ def test_scale_service_client_error(mocker):
 
 def test_scale_service_no_credentials_error(mocker):
     """Test scale_service with NoCredentialsError."""
-    mock_ecs_client = mocker.patch("remotepy.ecs.ecs_client")
+    mock_ecs_client = mocker.patch("remote.ecs.get_ecs_client")
 
-    mock_ecs_client.update_service.side_effect = NoCredentialsError()
+    mock_ecs_client.return_value.update_service.side_effect = NoCredentialsError()
 
     with pytest.raises(AWSServiceError) as exc_info:
         scale_service("test-cluster", "test-service", 3)

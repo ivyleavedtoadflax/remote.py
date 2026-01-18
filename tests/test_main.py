@@ -1,14 +1,12 @@
 from typer.testing import CliRunner
 
-from remotepy.__main__ import app
+from remote.__main__ import app
 
 runner = CliRunner()
 
 
 def test_version_command(mocker):
-    mock_version = mocker.patch(
-        "remotepy.__main__.importlib.metadata.version", return_value="0.2.5"
-    )
+    mock_version = mocker.patch("remote.__main__.importlib.metadata.version", return_value="0.2.5")
 
     result = runner.invoke(app, ["version"])
 
@@ -20,11 +18,10 @@ def test_version_command(mocker):
 def test_main_app_imports():
     """Test that all sub-apps are properly imported and added to main app."""
     # Test that the main app structure exists
-    from remotepy.__main__ import app as main_app
-    from remotepy.instance import app as instance_app
+    from remote.__main__ import app as main_app
 
-    # The main app should be the same as instance app (enhanced with sub-apps)
-    assert main_app is instance_app
+    # The main app has only service subcommands registered (no root-level instance commands)
+    assert main_app is not None
 
     # Test that the app has commands and groups registered
     assert len(app.registered_commands) > 0
@@ -35,7 +32,7 @@ def test_main_app_structure():
     """Test the overall structure of the main app."""
     # Test that imports work correctly
     # Test that the main module imports exist
-    from remotepy import ami, config, ecs, instance, snapshot, volume
+    from remote import ami, config, ecs, instance, snapshot, volume
 
     # Verify that we can access the apps
     assert hasattr(ami, "app")
@@ -94,11 +91,41 @@ def test_ecs_subcommand_exists():
     assert "ecs" in result.stdout.lower()
 
 
-def test_default_instance_commands_work():
-    """Test that instance commands work as default commands."""
-    # Test that we can call instance commands directly without 'instance' prefix
+def test_root_level_does_not_have_instance_commands():
+    """Test that instance commands are NOT available at root level (breaking change v1.0.0)."""
     result = runner.invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    # Should see instance commands in the main help
-    assert "list" in result.stdout or "List" in result.stdout
+    # Root help should only show service subcommands, not individual instance commands
+    # Should see subcommand names
+    assert "instance" in result.stdout.lower()
+    assert "ami" in result.stdout.lower()
+    # Should NOT see individual instance commands at root
+    assert "start" not in result.stdout.lower() or "start" in "not started"
+    assert "stop" not in result.stdout.lower()
+    assert "connect" not in result.stdout.lower()
+
+
+def test_instance_subcommand_exists():
+    """Test that instance subcommand is properly registered."""
+    result = runner.invoke(app, ["instance", "--help"])
+    assert result.exit_code == 0
+    # Should show instance management help
+    assert "Manage EC2 instances" in result.stdout
+    # Should list instance commands
+    assert "list" in result.stdout.lower()
+    assert "start" in result.stdout.lower()
+    assert "stop" in result.stdout.lower()
+    assert "connect" in result.stdout.lower()
+
+
+def test_instance_commands_require_prefix():
+    """Test that instance commands require the 'instance' prefix."""
+    instance_help = runner.invoke(app, ["instance", "--help"])
+
+    assert instance_help.exit_code == 0
+
+    # Instance subcommand should show all instance commands
+    instance_commands = ["list", "start", "stop", "connect", "status", "launch", "terminate"]
+    for cmd in instance_commands:
+        assert cmd in instance_help.stdout.lower(), f"'{cmd}' not found in instance help"

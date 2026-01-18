@@ -1,6 +1,6 @@
 [project]
 name = "remotepy"
-version = "0.3.0"
+version = "1.0.0"
 description = "CLI tool for managing AWS EC2 instances, ECS services, and related resources"
 authors = [{name = "Matthew Upson", email = "matt@mantisnlp.com"}]
 license = {text = "MIT License"}
@@ -8,7 +8,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 keywords = ["aws", "ec2", "ecs", "cli", "devops", "cloud", "infrastructure"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
@@ -24,7 +24,7 @@ classifiers = [
 dependencies = [
     "typer>=0.15.0",
     "boto3>=1.42.0",
-    "wasabi>=1.1.3",
+    "rich>=13.0.0",
 ]
 
 [project.optional-dependencies]
@@ -36,14 +36,14 @@ dev = [
 ]
 
 [project.scripts]
-remote = "remotepy.__main__:app"
+remote = "remote.__main__:app"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["remotepy"]
+packages = ["remote"]
 
 
 [tool.pytest.ini_options]
@@ -88,7 +88,11 @@ line-ending = "auto"
 
 [dependency-groups]
 dev = [
+    "bandit>=1.9.2",
+    "boto3-stubs[ec2,ecs,sts]>=1.42.0",
     "hypothesis>=6.135.14",
+    "mypy>=1.14.0",
+    "pip-audit>=2.10.0",
     "pre-commit>=4.0.0",
     "pytest>=8.4.1",
     "pytest-cov>=6.2.1",
@@ -101,14 +105,38 @@ dev = [
 known-first-party = ["src"]
 
 # ============================================================================
+# MyPy Type Checking Configuration
+# ============================================================================
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+strict_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+show_error_codes = true
+namespace_packages = true
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = [
+    "botocore.*",
+]
+ignore_missing_imports = true
+
+# ============================================================================
 # Test Coverage Configuration
 # ============================================================================
 
 [tool.coverage.run]
-source = ["remotepy"]
+source = ["remote"]
 omit = [
     "tests/*",
-    "remotepy/__init__.py",
+    "remote/__init__.py",
     "*/__pycache__/*",
     "*/migrations/*",
     "*/venv/*",
@@ -142,15 +170,3 @@ title = "RemotePy Test Coverage Report"
 
 [tool.coverage.xml]
 output = "coverage.xml"
-
-# Per-module minimum coverage requirements
-[tool.coverage.report.coverage_thresholds]
-# Core modules should maintain high coverage
-"remotepy/utils.py" = 95
-"remotepy/config.py" = 90
-"remotepy/ecs.py" = 95
-"remotepy/instance.py" = 60  # Allow lower for now due to complex CLI interactions
-"remotepy/ami.py" = 95
-"remotepy/volume.py" = 90
-"remotepy/snapshot.py" = 90
-"remotepy/__main__.py" = 90

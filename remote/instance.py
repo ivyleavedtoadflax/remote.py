@@ -1,21 +1,26 @@
+import builtins
 import random
 import string
 import subprocess
-import sys
 import time
+from typing import Any
 
 import typer
-import wasabi
 from botocore.exceptions import ClientError, NoCredentialsError
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
 
-from remotepy.exceptions import (
+from remote.config import config_manager
+from remote.exceptions import (
     AWSServiceError,
     InstanceNotFoundError,
     ResourceNotFoundError,
     ValidationError,
 )
-from remotepy.utils import (
-    ec2_client,
+from remote.pricing import format_price, get_instance_price, get_monthly_estimate
+from remote.utils import (
+    get_ec2_client,
     get_instance_dns,
     get_instance_id,
     get_instance_ids,
@@ -24,46 +29,95 @@ from remotepy.utils import (
     get_instance_status,
     get_instance_type,
     get_instances,
+    get_launch_template_id,
+    get_launch_templates,
     is_instance_running,
-    msg,
 )
-from remotepy.validation import safe_get_array_item, safe_get_nested_value, validate_array_index
+from remote.validation import safe_get_array_item, safe_get_nested_value, validate_array_index
 
 app = typer.Typer()
+console = Console(force_terminal=True, width=200)
+
+
+def _get_status_style(status: str) -> str:
+    """Get the rich style for a status value."""
+    status_lower = status.lower()
+    if status_lower == "running":
+        return "green"
+    elif status_lower == "stopped":
+        return "red"
+    elif status_lower in ("pending", "stopping", "shutting-down"):
+        return "yellow"
+    return "white"
 
 
 @app.command("ls")
 @app.command("list")
-def list():
+def list_instances(
+    no_pricing: bool = typer.Option(
+        False, "--no-pricing", help="Skip pricing lookup (faster, no cost columns)"
+    ),
+) -> None:
     """
-    List all instances with id, dns and status
+    List all EC2 instances.
+
+    Displays a table with instance name, ID, public DNS, status, type, launch time,
+    and pricing information (hourly and monthly estimates).
+
+    Examples:
+        remote list                # List with pricing
+        remote list --no-pricing   # List without pricing (faster)
     """
     instances = get_instances()
     ids = get_instance_ids(instances)
 
     names, public_dnss, statuses, instance_types, launch_times = get_instance_info(instances)
 
-    # Format table using wasabi
+    # Format table using rich
+    table = Table(title="EC2 Instances")
+    table.add_column("Name", style="cyan")
+    table.add_column("InstanceId", style="green")
+    table.add_column("PublicDnsName")
+    table.add_column("Status")
+    table.add_column("Type")
+    table.add_column("Launch Time")
 
-    header = ["Name", "InstanceId", "PublicDnsName", "Status", "Type", "Launch Time"]
-    aligns = ["l", "l", "l", "l", "l", "l"]
-    data = [
-        (name, id, dns, status, it, lt)
-        for name, id, dns, status, it, lt in zip(
-            names, ids, public_dnss, statuses, instance_types, launch_times, strict=False
-        )
-    ]
+    if not no_pricing:
+        table.add_column("$/hr", justify="right")
+        table.add_column("$/month", justify="right")
 
-    # Return the status in a nicely formatted table
+    for name, instance_id, dns, status, it, lt in zip(
+        names, ids, public_dnss, statuses, instance_types, launch_times, strict=False
+    ):
+        status_style = _get_status_style(status)
 
-    formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
-    typer.secho(formatted, fg=typer.colors.YELLOW)
+        row_data = [
+            name or "",
+            instance_id or "",
+            dns or "",
+            f"[{status_style}]{status}[/{status_style}]",
+            it or "",
+            lt or "",
+        ]
+
+        if not no_pricing:
+            hourly_price = get_instance_price(it) if it else None
+            monthly_price = get_monthly_estimate(hourly_price)
+            row_data.append(format_price(hourly_price))
+            row_data.append(format_price(monthly_price))
+
+        table.add_row(*row_data)
+
+    console.print(table)
 
 
 @app.command()
-def status(instance_name: str = typer.Argument(None, help="Instance name")):
+def status(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
     """
-    Get the status of an instance
+    Get detailed status of an instance.
+
+    Shows instance state, system status, and reachability information.
+    Uses the default instance from config if no name is provided.
     """
     try:
         if not instance_name:
@@ -96,30 +150,26 @@ def status(instance_name: str = typer.Argument(None, help="Instance name")):
                 )
                 reachability = first_detail.get("Status", "unknown")
 
-            # Format table using wasabi
-            header = [
-                "Name",
-                "InstanceId",
-                "InstanceState",
-                "SystemStatus",
-                "InstanceStatus",
-                "Reachability",
-            ]
-            aligns = ["l", "l", "l", "l", "l", "l"]
-            data = [
-                [
-                    instance_name,
-                    instance_id_value,
-                    state_name,
-                    system_status,
-                    instance_status,
-                    reachability,
-                ]
-            ]
+            # Format table using rich
+            table = Table(title="Instance Status")
+            table.add_column("Name", style="cyan")
+            table.add_column("InstanceId", style="green")
+            table.add_column("InstanceState")
+            table.add_column("SystemStatus")
+            table.add_column("InstanceStatus")
+            table.add_column("Reachability")
 
-            # Return the status in a nicely formatted table
-            formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
-            typer.secho(formatted, fg=typer.colors.YELLOW)
+            state_style = _get_status_style(state_name)
+            table.add_row(
+                instance_name or "",
+                instance_id_value,
+                f"[{state_style}]{state_name}[/{state_style}]",
+                system_status,
+                instance_status,
+                reachability,
+            )
+
+            console.print(table)
         else:
             typer.secho(f"{instance_name} is not in running state", fg=typer.colors.RED)
 
@@ -135,9 +185,11 @@ def status(instance_name: str = typer.Argument(None, help="Instance name")):
 
 
 @app.command()
-def start(instance_name: str = typer.Argument(None, help="Instance name")):
+def start(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
     """
-    Start the instance
+    Start an EC2 instance.
+
+    Uses the default instance from config if no name is provided.
     """
 
     if not instance_name:
@@ -150,7 +202,7 @@ def start(instance_name: str = typer.Argument(None, help="Instance name")):
         return
 
     try:
-        ec2_client.start_instances(InstanceIds=[instance_id])
+        get_ec2_client().start_instances(InstanceIds=[instance_id])
         typer.secho(f"Instance {instance_name} started", fg=typer.colors.GREEN)
     except ClientError as e:
         error_code = e.response["Error"]["Code"]
@@ -166,9 +218,12 @@ def start(instance_name: str = typer.Argument(None, help="Instance name")):
 
 
 @app.command()
-def stop(instance_name: str = typer.Argument(None, help="Instance name")):
+def stop(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
     """
-    Stop the instance
+    Stop an EC2 instance.
+
+    Prompts for confirmation before stopping.
+    Uses the default instance from config if no name is provided.
     """
 
     if not instance_name:
@@ -187,7 +242,7 @@ def stop(instance_name: str = typer.Argument(None, help="Instance name")):
         )
 
         if confirm:
-            ec2_client.stop_instances(InstanceIds=[instance_id])
+            get_ec2_client().stop_instances(InstanceIds=[instance_id])
             typer.secho(f"Instance {instance_name} is stopping", fg=typer.colors.GREEN)
         else:
             typer.secho(f"Instance {instance_name} is still running", fg=typer.colors.YELLOW)
@@ -206,19 +261,36 @@ def stop(instance_name: str = typer.Argument(None, help="Instance name")):
 
 @app.command()
 def connect(
-    instance_name: str = typer.Argument(None, help="Instance name"),
-    port_forward: str = typer.Option(
+    instance_name: str | None = typer.Argument(None, help="Instance name"),
+    port_forward: str | None = typer.Option(
         None,
         "--port-forward",
         "-p",
         help="Port forwarding configuration (local:remote)",
     ),
     user: str = typer.Option("ubuntu", "--user", "-u", help="User to be used for ssh connection."),
-    key: str = typer.Option(None, "--key", "-k", help="Path to SSH private key file."),
+    key: str | None = typer.Option(
+        None, "--key", "-k", help="Path to SSH private key file. Falls back to config ssh_key."
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose mode"),
-):
+    no_strict_host_key: bool = typer.Option(
+        False,
+        "--no-strict-host-key",
+        help="Disable strict host key checking (less secure, use StrictHostKeyChecking=no)",
+    ),
+) -> None:
     """
-    Connect to the instance with ssh
+    Connect to an EC2 instance via SSH.
+
+    If the instance is not running, prompts to start it first.
+    Uses the default instance from config if no name is provided.
+
+    Examples:
+        remote connect                           # Connect to default instance
+        remote connect my-server                 # Connect to specific instance
+        remote connect -u ec2-user               # Connect as ec2-user
+        remote connect -p 8080:80                # With port forwarding
+        remote connect -k ~/.ssh/my-key.pem     # With specific SSH key
     """
 
     if not instance_name:
@@ -254,7 +326,7 @@ def connect(
                         f"Instance {instance_name} could not be started",
                         fg=typer.colors.RED,
                     )
-                    sys.exit(1)
+                    raise typer.Exit(1)
 
                 time.sleep(10)
 
@@ -274,12 +346,19 @@ def connect(
         fg="yellow",
     )
 
+    # Use accept-new by default (secure: accepts new keys, rejects changed keys)
+    # Use no if --no-strict-host-key flag is set (legacy behavior, less secure)
+    strict_host_key_value = "no" if no_strict_host_key else "accept-new"
     arguments = [
         "-o",
-        "StrictHostKeyChecking=no",
+        f"StrictHostKeyChecking={strict_host_key_value}",
     ]
 
-    # If SSH key is specified, add the -i option
+    # Check for default key from config if not provided
+    if not key:
+        key = config_manager.get_value("ssh_key")
+
+    # If SSH key is specified (from option or config), add the -i option
     if key:
         arguments.extend(["-i", key])
 
@@ -293,18 +372,43 @@ def connect(
     # Connect via SSH
 
     dns = get_instance_dns(instance_id)
+    ssh_command = ["ssh"] + arguments + [f"{user}@{dns}"]
 
-    subprocess.run(["ssh"] + arguments + [f"{user}@{dns}"])
+    try:
+        result = subprocess.run(ssh_command)
+        if result.returncode != 0:
+            typer.secho(
+                f"SSH connection failed with exit code {result.returncode}", fg=typer.colors.RED
+            )
+            raise typer.Exit(result.returncode)
+    except FileNotFoundError:
+        typer.secho("SSH client not found. Please install OpenSSH.", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    except OSError as e:
+        typer.secho(f"SSH connection error: {e}", fg=typer.colors.RED)
+        raise typer.Exit(1)
 
 
 @app.command()
 def type(
-    type: str = typer.Argument(
+    type: str | None = typer.Argument(
         None,
         help="Type of instance to convert to. If none, will print the current instance type.",
     ),
-    instance_name: str = typer.Argument(None, help="Instance name"),
-):
+    instance_name: str | None = typer.Argument(None, help="Instance name"),
+) -> None:
+    """
+    View or change an instance's type.
+
+    Without TYPE argument, displays the current instance type.
+    With TYPE argument, changes the instance type (instance must be stopped).
+
+    Examples:
+        remote type                    # Show default instance type
+        remote type my-server          # Show specific instance type
+        remote type t3.large           # Change default instance to t3.large
+        remote type t3.large my-server # Change specific instance type
+    """
     if not instance_name:
         instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
@@ -332,12 +436,12 @@ def type(
                     fg=typer.colors.RED,
                 )
 
-                sys.exit(1)
+                raise typer.Exit(1)
 
             # Change instance type
 
             try:
-                ec2_client.modify_instance_attribute(
+                get_ec2_client().modify_instance_attribute(
                     InstanceId=instance_id,
                     InstanceType={
                         "Value": type,
@@ -350,7 +454,7 @@ def type(
 
                 wait = 5
 
-                with msg.loading("Confirming type change..."):
+                with console.status("Confirming type change..."):
                     while wait > 0:
                         time.sleep(5)
                         wait -= 1
@@ -393,95 +497,119 @@ def type(
 
 
 @app.command()
-def list_launch_templates():
+def list_launch_templates() -> list[dict[str, Any]]:
     """
-    List all launch templates available in the AWS EC2.
+    List all available EC2 launch templates.
 
-    This function queries AWS EC2 to get details of all available launch templates.
-    It formats the response data into a tabular form and displays it in the console.
-    The returned table includes the following columns: Number, LaunchTemplateId, LaunchTemplateName, and Version.
-
-    Returns:
-        dict: The full response from the AWS EC2 describe_launch_templates call.
-
-    Example usage:
-        python remotepy/instance.py list_launch_templates
+    Displays template ID, name, and latest version number.
     """
-    launch_templates = ec2_client.describe_launch_templates()
+    templates = get_launch_templates()
 
-    header = ["Number", "LaunchTemplateId", "LaunchTemplateName", "Version"]
-    aligns = ["l"] * len(header)
-    data = []
+    if not templates:
+        typer.secho("No launch templates found", fg=typer.colors.YELLOW)
+        return []
 
-    for i, launch_template in enumerate(launch_templates["LaunchTemplates"], 1):
-        data.append(
-            (
-                i,
-                launch_template["LaunchTemplateId"],
-                launch_template["LaunchTemplateName"],
-                launch_template["LatestVersionNumber"],
-            )
+    # Format table using rich
+    table = Table(title="Launch Templates")
+    table.add_column("Number", justify="right")
+    table.add_column("LaunchTemplateId", style="green")
+    table.add_column("LaunchTemplateName", style="cyan")
+    table.add_column("Version", justify="right")
+
+    for i, template in enumerate(templates, 1):
+        table.add_row(
+            str(i),
+            template["LaunchTemplateId"],
+            template["LaunchTemplateName"],
+            str(template["LatestVersionNumber"]),
         )
 
-    # Format table using wasabi
-    formatted = wasabi.table(data, header=header, divider=True, aligns=aligns)
-    typer.secho(formatted, fg=typer.colors.YELLOW)
+    console.print(table)
 
-    return launch_templates
+    return templates
 
 
 @app.command()
 def launch(
-    name: str = typer.Option(None, help="Name of the instance to be launched"),
-    launch_template: str = typer.Option(None, help="Launch template name"),
+    name: str | None = typer.Option(None, help="Name of the instance to be launched"),
+    launch_template: str | None = typer.Option(None, help="Launch template name"),
     version: str = typer.Option("$Latest", help="Launch template version"),
-):
+) -> None:
     """
-    Launch an AWS EC2 instance based on a launch template.
+    Launch a new EC2 instance from a launch template.
 
-    This function will launch an instance using the specified launch template and version.
-    If no launch template is provided, the function will list all available launch templates and
-    prompt the user to select one.
+    Uses default template from config if not specified.
+    If no launch template is configured, lists available templates for selection.
+    If no name is provided, suggests a name based on the template name.
 
-    The name of the instance can be specified with the --name option. If not provided,
-    the function will prompt the user for the name and provide a suggested name based on
-    the launch template name appended with a random alphanumeric string.
-
-    Example usage:
-    python remotepy/instance.py launch --launch_template my-launch-template --version 2
-
-    Parameters:
-    name: The name of the instance to be launched. This will be used as a tag for the instance.
-    launch_template: The name of the launch template to use.
-    version: The version of the launch template to use. Default is the latest version.
+    Examples:
+        remote launch                                    # Use default or interactive
+        remote launch --launch-template my-template      # Use specific template
+        remote launch --name my-server --launch-template my-template
     """
+
+    # Variables to track launch template details
+    launch_template_name: str = ""
+    launch_template_id: str = ""
+
+    # Check for default template from config if not specified
+    if not launch_template:
+        default_template = config_manager.get_value("default_launch_template")
+        if default_template:
+            typer.secho(f"Using default template: {default_template}", fg=typer.colors.YELLOW)
+            launch_template = default_template
 
     # if no launch template is specified, list all the launch templates
-
     if not launch_template:
         typer.secho("Please specify a launch template", fg=typer.colors.RED)
         typer.secho("Available launch templates:", fg=typer.colors.YELLOW)
-        launch_templates = list_launch_templates()["LaunchTemplates"]
+        templates = get_launch_templates()
+
+        if not templates:
+            typer.secho("No launch templates found", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        # Display templates
+        table = Table(title="Launch Templates")
+        table.add_column("Number", justify="right")
+        table.add_column("LaunchTemplateId", style="green")
+        table.add_column("LaunchTemplateName", style="cyan")
+        table.add_column("Version", justify="right")
+
+        for i, template in enumerate(templates, 1):
+            table.add_row(
+                str(i),
+                template["LaunchTemplateId"],
+                template["LaunchTemplateName"],
+                str(template["LatestVersionNumber"]),
+            )
+
+        console.print(table)
+
         typer.secho("Select a launch template by number", fg=typer.colors.YELLOW)
         launch_template_number = typer.prompt("Launch template", type=str)
         # Validate user input and safely access array
         try:
             template_index = validate_array_index(
-                launch_template_number, len(launch_templates), "launch templates"
+                launch_template_number, len(templates), "launch templates"
             )
-            launch_template = launch_templates[template_index]
+            selected_template = templates[template_index]
         except ValidationError as e:
             typer.secho(f"Error: {e}", fg=typer.colors.RED)
             raise typer.Exit(1)
-        launch_template_name = launch_template["LaunchTemplateName"]
-        launch_template_id = launch_template["LaunchTemplateId"]
+        launch_template_name = str(selected_template["LaunchTemplateName"])
+        launch_template_id = str(selected_template["LaunchTemplateId"])
 
         typer.secho(f"Launch template {launch_template_name} selected", fg=typer.colors.YELLOW)
         typer.secho(
-            f"Defaulting to latest version: {launch_template['LatestVersionNumber']}",
+            f"Defaulting to latest version: {selected_template['LatestVersionNumber']}",
             fg=typer.colors.YELLOW,
         )
         typer.secho(f"Launching instance based on launch template {launch_template_name}")
+    else:
+        # launch_template was provided as a string
+        launch_template_name = launch_template
+        launch_template_id = get_launch_template_id(launch_template)
 
     # if no name is specified, ask the user for the name
 
@@ -493,7 +621,7 @@ def launch(
         )
 
     # Launch the instance with the specified launch template, version, and name
-    instance = ec2_client.run_instances(
+    instance = get_ec2_client().run_instances(
         LaunchTemplate={"LaunchTemplateId": launch_template_id, "Version": version},
         MaxCount=1,
         MinCount=1,
@@ -518,20 +646,34 @@ def launch(
 
         launched_instance = safe_get_array_item(instances, 0, "launched instances")
         instance_id = launched_instance.get("InstanceId", "unknown")
+        instance_type = launched_instance.get("InstanceType", "unknown")
 
-        typer.secho(
-            f"Instance {instance_id} with name '{name}' launched",
-            fg=typer.colors.GREEN,
+        # Display launch summary as Rich panel
+        summary_lines = [
+            f"[cyan]Instance ID:[/cyan] {instance_id}",
+            f"[cyan]Name:[/cyan]        {name}",
+            f"[cyan]Template:[/cyan]    {launch_template_name}",
+            f"[cyan]Type:[/cyan]        {instance_type}",
+        ]
+        panel = Panel(
+            "\n".join(summary_lines),
+            title="[green]Instance Launched[/green]",
+            border_style="green",
         )
+        console.print(panel)
     except ValidationError as e:
         typer.secho(f"Error accessing launch result: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)
 
 
 @app.command()
-def terminate(instance_name: str = typer.Argument(None, help="Instance name")):
+def terminate(instance_name: str | None = typer.Argument(None, help="Instance name")) -> None:
     """
-    Terminate the instance
+    Terminate an EC2 instance.
+
+    WARNING: This permanently deletes the instance and all associated data.
+    Requires confirmation by re-entering the instance name.
+    Uses the default instance from config if no name is provided.
     """
 
     if not instance_name:
@@ -539,25 +681,24 @@ def terminate(instance_name: str = typer.Argument(None, help="Instance name")):
     instance_id = get_instance_id(instance_name)
 
     # Check if instance is managed by Terraform
-    instance_info = ec2_client.describe_instances(InstanceIds=[instance_id])
+    instance_info = get_ec2_client().describe_instances(InstanceIds=[instance_id])
     # Safely access instance information
+    tags: builtins.list[dict[str, str]] = []
     try:
         reservations = instance_info.get("Reservations", [])
         if not reservations:
             typer.secho("Warning: No instance information found", fg=typer.colors.YELLOW)
-            tags = []
         else:
             reservation = safe_get_array_item(reservations, 0, "instance reservations")
             instances = reservation.get("Instances", [])
             if not instances:
                 typer.secho("Warning: No instance details found", fg=typer.colors.YELLOW)
-                tags = []
             else:
                 instance = safe_get_array_item(instances, 0, "instances")
                 tags = instance.get("Tags", [])
     except ValidationError as e:
         typer.secho(f"Error accessing instance information: {e}", fg=typer.colors.RED)
-        tags = []  # Continue with empty tags
+        # Continue with empty tags
 
     # If the instance is managed by Terraform, warn user
 
@@ -594,7 +735,7 @@ def terminate(instance_name: str = typer.Argument(None, help="Instance name")):
     )
 
     if confirm:
-        ec2_client.terminate_instances(InstanceIds=[instance_id])
+        get_ec2_client().terminate_instances(InstanceIds=[instance_id])
         typer.secho(f"Instance {instance_name} is being terminated", fg=typer.colors.GREEN)
     else:
         typer.secho(
