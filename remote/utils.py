@@ -56,24 +56,6 @@ def get_sts_client() -> "STSClient":
     return boto3.client("sts")
 
 
-# Backwards compatibility: ec2_client is now accessed lazily via __getattr__
-# to avoid creating the client at import time (which breaks tests without AWS region)
-# The module-level ec2_client attribute is still available for backwards compatibility
-# but is deprecated and will be removed in v0.5.0
-
-
-def __getattr__(name: str) -> Any:
-    """Lazy module attribute access for backwards compatibility.
-
-    Provides lazy access to ec2_client for backwards compatibility.
-    This pattern allows the client to be created on first access rather
-    than at module import time, which is necessary for testing.
-    """
-    if name == "ec2_client":
-        return get_ec2_client()
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
 def get_account_id() -> str:
     """Returns the caller id, this is the AWS account id not the AWS user id.
 
