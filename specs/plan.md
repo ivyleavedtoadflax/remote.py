@@ -74,3 +74,4 @@ Features and improvements for future releases.
 | 20 | 37 | Pricing API region fallback | Pricing API only works in us-east-1; fallback to us-east-1 pricing for other regions | [issue-37](./issue-37-pricing-region-fallback.md) | COMPLETED |
 | 21 | 38 | Instance cost command | Add command to show estimated cost of instance based on uptime | [issue-38](./issue-38-instance-cost-command.md) | TODO |
 | 22 | 39 | Scheduled instance shutdown | Schedule instance to stop after specified duration (e.g., "3 hours") | [issue-39](./issue-39-scheduled-shutdown.md) | COMPLETED |
+| 23 | 40 | Standardize console output styles | Align all command output to match `config show` style for consistency | [issue-40](./issue-40-console-output-consistency.md) | TODO |
