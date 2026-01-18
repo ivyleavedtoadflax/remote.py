@@ -1,6 +1,6 @@
 # Issue 43: Fix Rich Panel Width Globally
 
-**Status:** TODO
+**Status:** COMPLETED
 **Priority:** Medium
 **Target Version:** v1.2.0
 **Files:** Multiple files in `remotepy/`
@@ -67,12 +67,12 @@ def create_panel(content: str, title: str, **kwargs) -> Panel:
 
 ## Acceptance Criteria
 
-- [ ] Audit all `Panel(` usage in codebase
-- [ ] Fix all panels to use `expand=False` or appropriate width
-- [ ] Verify `instance status` panel fits content
-- [ ] Verify no other panels are overly wide
-- [ ] Add tests to verify panel width behavior
-- [ ] Consider helper function for consistent Panel creation
+- [x] Audit all `Panel(` usage in codebase
+- [x] Fix all panels to use `expand=False` or appropriate width
+- [x] Verify `instance status` panel fits content
+- [x] Verify no other panels are overly wide
+- [x] Add tests to verify panel width behavior
+- [x] Consider helper function for consistent Panel creation (not needed for 4 usages)
 
 ## Testing
 
