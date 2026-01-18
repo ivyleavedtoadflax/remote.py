@@ -280,3 +280,19 @@ The exception was designed for configuration-related errors but was never integr
 
 **Changes:**
 - Removed the `ConfigurationError` class definition from `remote/exceptions.py`
+
+---
+
+## 2026-01-18: Remove unused `InvalidInstanceStateError` exception class
+
+**File:** `remote/exceptions.py`
+
+**Issue:** The `InvalidInstanceStateError` exception class (lines 51-65) was defined but never raised anywhere in the codebase:
+1. No code raised this exception - grep search for `InvalidInstanceStateError` in the `remote/` directory only found the class definition itself
+2. The exception was designed for instance state validation errors but was never integrated
+3. Tests existed for the class (`tests/test_exceptions.py` lines 90-118) but only tested that the class worked correctly, not that it was actually used
+4. Similar to `ConfigurationError` which was removed in commit 50886f1
+
+**Changes:**
+- Removed the `InvalidInstanceStateError` class definition from `remote/exceptions.py`
+- Removed the import and test class `TestInvalidInstanceStateError` from `tests/test_exceptions.py`
