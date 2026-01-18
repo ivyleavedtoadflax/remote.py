@@ -1,5 +1,21 @@
 # Progress Log
 
+## 2026-01-18: Fix incorrect config key `ssh_key` → `ssh_key_path`
+
+**File:** `remote/instance.py`
+
+**Issue:** The `connect()` function was using the wrong config key name when retrieving the SSH key path from configuration:
+- Line 415 used `config_manager.get_value("ssh_key")` (incorrect)
+- The valid config key defined in `remote/config.py` is `"ssh_key_path"`
+
+This caused the SSH key configuration to fail silently - users who set `ssh_key_path` in their config would not have the key applied when connecting via SSH.
+
+**Changes:**
+- Fixed line 415: Changed `"ssh_key"` to `"ssh_key_path"` in `get_value()` call
+- Fixed line 329: Updated help text to reference `ssh_key_path` instead of `ssh_key`
+
+---
+
 ## 2026-01-18: Remove unused `cfg` parameter from `get_instance_name()`
 
 **File:** `remote/utils.py`
