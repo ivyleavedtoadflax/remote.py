@@ -1,6 +1,5 @@
 import random
 import string
-from typing import Any
 
 import typer
 from rich.panel import Panel
@@ -97,7 +96,7 @@ def list_amis() -> None:
 def list_launch_templates(
     filter: str | None = typer.Option(None, "-f", "--filter", help="Filter by name"),
     details: bool = typer.Option(False, "-d", "--details", help="Show template details"),
-) -> list[dict[str, Any]]:
+) -> None:
     """
     List all available EC2 launch templates.
 
@@ -114,7 +113,7 @@ def list_launch_templates(
 
     if not templates:
         typer.secho("No launch templates found", fg=typer.colors.YELLOW)
-        return []
+        return
 
     if details:
         # Show detailed view with version info
@@ -157,8 +156,6 @@ def list_launch_templates(
             )
 
         console.print(table)
-
-    return templates
 
 
 @app.command()
