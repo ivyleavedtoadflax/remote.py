@@ -129,3 +129,26 @@ After scanning the entire codebase, no code was found using the deprecated `ec2_
 **Changes:**
 - Removed the deprecation comment block (lines 59-62)
 - Removed the `__getattr__` function (lines 65-74)
+
+---
+
+## 2026-01-18: Remove deprecated `ecs_client` backwards compatibility shim
+
+**File:** `remote/ecs.py`
+
+**Issue:** The module contained dead code for backwards compatibility access to `ecs_client` as a module-level attribute:
+1. Lines 29-30 had a comment about backwards compatibility
+2. Lines 33-37 defined a `__getattr__` function providing lazy access to `ecs_client`
+3. The `Any` type was imported solely for this `__getattr__` function's return type
+
+After scanning the entire codebase, no code was found using the deprecated `ecs_client` attribute:
+- All ECS functions use `get_ecs_client()` function directly (lines 72, 106, 136)
+- All test files mock `get_ecs_client`, not the deprecated module attribute
+- No imports of `ecs_client` exist anywhere in the codebase
+
+This is similar to the `ec2_client` shim that was removed from `utils.py` in a previous refactor.
+
+**Changes:**
+- Removed the `Any` type from imports (no longer needed)
+- Removed the backwards compatibility comment (lines 29-30)
+- Removed the `__getattr__` function (lines 33-37)
