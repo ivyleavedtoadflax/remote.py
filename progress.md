@@ -1,5 +1,28 @@
 # Progress Log
 
+## 2026-01-18: Replace silent exception handler in `list_launch_templates()`
+
+**File:** `remote/ami.py`
+
+**Issue:** The `list_launch_templates()` function silently swallowed exceptions with a bare `pass`:
+```python
+except (ResourceNotFoundError, AWSServiceError):
+    pass
+```
+
+This is problematic because:
+1. Silently ignoring errors hides potential problems from users
+2. Users have no indication when version details fail to load
+3. Debugging becomes difficult when errors are silently discarded
+
+**Changes:**
+- Replaced silent `pass` with a warning message: `"Warning: Could not fetch version details"`
+- The warning uses the same `[yellow]` styling pattern used elsewhere in the codebase (e.g., `utils.py:354`, `config.py:264`)
+
+This maintains the non-fatal behavior (template listing continues) while informing users that some details couldn't be retrieved.
+
+---
+
 ## 2026-01-18: Replace overly broad exception handling in `list_launch_templates()`
 
 **File:** `remote/ami.py`

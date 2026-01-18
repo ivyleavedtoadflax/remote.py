@@ -138,7 +138,7 @@ def list_launch_templates(
                     if security_groups:
                         console.print(f"  Security Groups: {', '.join(security_groups)}")
             except (ResourceNotFoundError, AWSServiceError):
-                pass
+                console.print("  [yellow]Warning: Could not fetch version details[/yellow]")
     else:
         # Standard table view
         table = Table(title="Launch Templates")
