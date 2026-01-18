@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import boto3
 import typer
@@ -24,17 +24,6 @@ def get_ecs_client() -> "ECSClient":
         boto3 ECS client instance
     """
     return boto3.client("ecs")
-
-
-# Backwards compatibility: ecs_client is now accessed lazily via __getattr__
-# to avoid creating the client at import time (which breaks tests without AWS region)
-
-
-def __getattr__(name: str) -> Any:
-    """Lazy module attribute access for backwards compatibility."""
-    if name == "ecs_client":
-        return get_ecs_client()
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 app = typer.Typer()
