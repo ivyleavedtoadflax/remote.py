@@ -598,7 +598,7 @@ def _cancel_scheduled_shutdown(instance_name: str, instance_id: str) -> None:
 @app.command()
 def stop(
     instance_name: str | None = typer.Argument(None, help="Instance name"),
-    in_duration: str | None = typer.Option(
+    stop_in: str | None = typer.Option(
         None,
         "--in",
         help="Schedule stop after duration (e.g., 3h, 30m, 1h30m). Uses SSH to run 'shutdown -h'.",
@@ -638,7 +638,7 @@ def stop(
         return
 
     # Handle scheduled shutdown
-    if in_duration:
+    if stop_in:
         if not is_instance_running(instance_id):
             typer.secho(
                 f"Instance {instance_name} is not running - cannot schedule shutdown",
@@ -646,7 +646,7 @@ def stop(
             )
             return
         try:
-            minutes = parse_duration_to_minutes(in_duration)
+            minutes = parse_duration_to_minutes(stop_in)
             _schedule_shutdown(instance_name, instance_id, minutes)
         except ValidationError as e:
             typer.secho(f"Error: {e}", fg=typer.colors.RED)

@@ -167,3 +167,20 @@ This is similar to the `ec2_client` shim that was removed from `utils.py` in a p
 **Changes:**
 - Removed the unused `ENV_PREFIX = "REMOTE_"` constant
 - Removed the associated comment "Environment variable mapping for config values"
+
+---
+
+## 2026-01-18: Rename `in_duration` parameter to `stop_in` for consistency
+
+**File:** `remote/instance.py`
+
+**Issue:** The `stop()` function used parameter name `in_duration` while the `start()` function used `stop_in` for the same purpose (scheduling automatic shutdown). This inconsistency created cognitive overhead when working with both functions:
+- `start()` (line 375): parameter `stop_in` with CLI flag `--stop-in`
+- `stop()` (line 601): parameter `in_duration` with CLI flag `--in`
+
+Both parameters serve the same purpose: specifying a duration after which the instance should be stopped.
+
+**Changes:**
+- Renamed `in_duration` to `stop_in` in the `stop()` function signature (line 601)
+- Updated all references to `in_duration` within the function body (lines 641, 649)
+- The CLI flag `--in` remains unchanged for backwards compatibility
