@@ -184,7 +184,7 @@ class TestGetInstancePrice:
         call_args = mock_client.get_products.call_args
         filters = call_args.kwargs["Filters"]
         location_filter = next(f for f in filters if f["Field"] == "location")
-        assert location_filter["Value"] == "Europe (Ireland)"
+        assert location_filter["Value"] == "EU (Ireland)"
 
     def test_should_cache_results(self, mocker):
         """Should cache pricing results to reduce API calls."""
