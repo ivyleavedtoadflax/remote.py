@@ -38,6 +38,17 @@ from remote.utils import (
 )
 from remote.validation import safe_get_array_item, safe_get_nested_value
 
+# Time-related constants
+SECONDS_PER_MINUTE = 60
+SECONDS_PER_HOUR = 3600
+MINUTES_PER_DAY = 24 * 60
+
+# Instance startup/connection constants
+MAX_STARTUP_WAIT_SECONDS = 60
+STARTUP_POLL_INTERVAL_SECONDS = 5
+CONNECTION_RETRY_SLEEP_SECONDS = 20
+MAX_CONNECTION_ATTEMPTS = 5
+
 app = typer.Typer()
 
 
@@ -162,7 +173,7 @@ def list_instances(
                 if it:
                     hourly_price, _ = get_instance_price_with_fallback(it)
                     if hourly_price is not None and uptime_seconds > 0:
-                        uptime_hours = uptime_seconds / 3600
+                        uptime_hours = uptime_seconds / SECONDS_PER_HOUR
                         estimated_cost = hourly_price * uptime_hours
 
             row_data.append(uptime_str)
@@ -408,8 +419,8 @@ def start(
                 fg=typer.colors.YELLOW,
             )
             # Wait for instance to be running and reachable
-            max_wait = 60  # seconds
-            wait_interval = 5
+            max_wait = MAX_STARTUP_WAIT_SECONDS
+            wait_interval = STARTUP_POLL_INTERVAL_SECONDS
             waited = 0
             while waited < max_wait:
                 time.sleep(wait_interval)
@@ -706,8 +717,8 @@ def connect(
 
     if not instance_name:
         instance_name = get_instance_name()
-    max_attempts = 5
-    sleep_duration = 20
+    max_attempts = MAX_CONNECTION_ATTEMPTS
+    sleep_duration = CONNECTION_RETRY_SLEEP_SECONDS
     instance_id = get_instance_id(instance_name)
 
     # Check whether the instance is up, and if not prompt the user on whether
@@ -1015,11 +1026,11 @@ def _format_uptime(seconds: float | None) -> str:
     if seconds is None or seconds < 0:
         return "-"
 
-    total_minutes = int(seconds // 60)
-    days = total_minutes // (24 * 60)
-    remaining = total_minutes % (24 * 60)
-    hours = remaining // 60
-    minutes = remaining % 60
+    total_minutes = int(seconds // SECONDS_PER_MINUTE)
+    days = total_minutes // MINUTES_PER_DAY
+    remaining = total_minutes % MINUTES_PER_DAY
+    hours = remaining // SECONDS_PER_MINUTE
+    minutes = remaining % SECONDS_PER_MINUTE
 
     parts = []
     if days > 0:
