@@ -812,9 +812,9 @@ def connect(
         raise typer.Exit(1)
 
 
-@app.command()
-def type(
-    type: str | None = typer.Argument(
+@app.command("type")
+def instance_type(
+    new_type: str | None = typer.Argument(
         None,
         help="Type of instance to convert to. If none, will print the current instance type.",
     ),
@@ -837,13 +837,13 @@ def type(
     instance_id = get_instance_id(instance_name)
     current_type = get_instance_type(instance_id)
 
-    if type:
+    if new_type:
         # If the current instance type is the same as the requested type,
         # exit.
 
-        if current_type == type:
+        if current_type == new_type:
             typer.secho(
-                f"Instance {instance_name} is already of type {type}",
+                f"Instance {instance_name} is already of type {new_type}",
                 fg=typer.colors.YELLOW,
             )
 
@@ -867,11 +867,11 @@ def type(
                 get_ec2_client().modify_instance_attribute(
                     InstanceId=instance_id,
                     InstanceType={
-                        "Value": type,
+                        "Value": new_type,
                     },
                 )
                 typer.secho(
-                    f"Changing {instance_name} to {type}",
+                    f"Changing {instance_name} to {new_type}",
                     fg=typer.colors.YELLOW,
                 )
 
@@ -882,13 +882,13 @@ def type(
                         time.sleep(5)
                         wait -= 1
 
-                        if get_instance_type(instance_id) == type:
+                        if get_instance_type(instance_id) == new_type:
                             typer.secho(
                                 "Done",
                                 fg=typer.colors.YELLOW,
                             )
                             typer.secho(
-                                f"Instance {instance_name} is now of type {type}",
+                                f"Instance {instance_name} is now of type {new_type}",
                                 fg=typer.colors.GREEN,
                             )
 
@@ -902,7 +902,7 @@ def type(
                 error_code = e.response["Error"]["Code"]
                 error_message = e.response["Error"]["Message"]
                 typer.secho(
-                    f"AWS Error changing instance {instance_name} to {type}: {error_message} ({error_code})",
+                    f"AWS Error changing instance {instance_name} to {new_type}: {error_message} ({error_code})",
                     fg=typer.colors.RED,
                 )
                 raise typer.Exit(1)
@@ -911,10 +911,10 @@ def type(
                 raise typer.Exit(1)
 
     else:
-        type = get_instance_type(instance_id)
+        current_instance_type = get_instance_type(instance_id)
 
         typer.secho(
-            f"Instance {instance_name} is currently of type {type}",
+            f"Instance {instance_name} is currently of type {current_instance_type}",
             fg=typer.colors.YELLOW,
         )
 
