@@ -73,3 +73,20 @@ This was inconsistent with the pattern used for EC2 clients, where `get_ec2_clie
 **Changes:**
 - Changed line 86 from `boto3.client("sts").get_caller_identity()` to `get_sts_client().get_caller_identity()`
 - This makes the code consistent with the EC2 client pattern and utilizes the caching provided by `@lru_cache`
+
+---
+
+## 2026-01-18: Remove unnecessary `enumerate()` in `get_instance_ids()`
+
+**File:** `remote/utils.py`
+
+**Issue:** The `get_instance_ids()` function at line 390 used `enumerate()` to iterate over instances:
+```python
+for _i, reservation in enumerate(instances):
+```
+
+The loop index `_i` was never used in the function body. The underscore prefix conventionally indicates an unused variable, but in this case the `enumerate()` call itself was unnecessary.
+
+**Changes:**
+- Changed from `for _i, reservation in enumerate(instances):` to `for reservation in instances:`
+- Removes dead code and improves clarity by eliminating unused variable

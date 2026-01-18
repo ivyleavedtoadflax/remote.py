@@ -387,7 +387,7 @@ def get_instance_ids(instances: list[dict[str, Any]]) -> list[str]:
     """
     instance_ids = []
 
-    for _i, reservation in enumerate(instances):
+    for reservation in instances:
         instances_list = reservation.get("Instances", [])
         if not instances_list:
             # Skip reservations with no instances instead of crashing

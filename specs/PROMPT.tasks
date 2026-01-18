@@ -1,0 +1,20 @@
+# Remote.py Specs
+
+## Instructions
+
+0. Checkout main
+1. Read plan.md and pick an issue to work on that is not complete
+2. Read the linked spec file for details
+3. Checkout a branch
+4. Implement the fix
+5. Run tests: `uv run pytest`
+6. Run type check: `uv run mypy remote/`
+7. Run linter: `uv run ruff check . && uv run ruff format .`
+8. Update plan.md and spec file status to COMPLETED
+9. Atomic commit with descriptive messages
+10. Push to branch
+11. Fix any high priority security issues arising from pre-commit hooks
+12. Create a PR
+13. Merge to main
+14. Only work on one issue
+15. Once all the issues are completed output <promise>COMPLETE</promise>
