@@ -920,39 +920,6 @@ def instance_type(
 
 
 @app.command()
-def list_launch_templates() -> list[dict[str, Any]]:
-    """
-    List all available EC2 launch templates.
-
-    Displays template ID, name, and latest version number.
-    """
-    templates = get_launch_templates()
-
-    if not templates:
-        typer.secho("No launch templates found", fg=typer.colors.YELLOW)
-        return []
-
-    # Format table using rich
-    table = Table(title="Launch Templates")
-    table.add_column("Number", justify="right")
-    table.add_column("LaunchTemplateId", style="green")
-    table.add_column("LaunchTemplateName", style="cyan")
-    table.add_column("Version", justify="right")
-
-    for i, template in enumerate(templates, 1):
-        table.add_row(
-            str(i),
-            template["LaunchTemplateId"],
-            template["LaunchTemplateName"],
-            str(template["LatestVersionNumber"]),
-        )
-
-    console.print(table)
-
-    return templates
-
-
-@app.command()
 def launch(
     name: str | None = typer.Option(None, help="Name of the instance to be launched"),
     launch_template: str | None = typer.Option(None, help="Launch template name"),
