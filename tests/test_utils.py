@@ -435,11 +435,10 @@ def test_get_launch_template_id(mocker):
 
 def test_get_account_id_client_error(mocker):
     """Test get_account_id with ClientError."""
-    mock_boto3_client = mocker.patch("remote.utils.boto3.client")
-    mock_sts_client = mock_boto3_client.return_value
+    mock_sts_client = mocker.patch("remote.utils.get_sts_client")
 
     error_response = {"Error": {"Code": "AccessDenied", "Message": "Access denied"}}
-    mock_sts_client.get_caller_identity.side_effect = ClientError(
+    mock_sts_client.return_value.get_caller_identity.side_effect = ClientError(
         error_response, "get_caller_identity"
     )
 
@@ -453,10 +452,9 @@ def test_get_account_id_client_error(mocker):
 
 def test_get_account_id_no_credentials_error(mocker):
     """Test get_account_id with NoCredentialsError."""
-    mock_boto3_client = mocker.patch("remote.utils.boto3.client")
-    mock_sts_client = mock_boto3_client.return_value
+    mock_sts_client = mocker.patch("remote.utils.get_sts_client")
 
-    mock_sts_client.get_caller_identity.side_effect = NoCredentialsError()
+    mock_sts_client.return_value.get_caller_identity.side_effect = NoCredentialsError()
 
     with pytest.raises(AWSServiceError) as exc_info:
         get_account_id()
