@@ -4,7 +4,6 @@ from remote.exceptions import (
     AWSServiceError,
     InstanceNotFoundError,
     InvalidInputError,
-    InvalidInstanceStateError,
     MultipleInstancesFoundError,
     RemotePyError,
     ResourceNotFoundError,
@@ -83,37 +82,6 @@ class TestMultipleInstancesFoundError:
     def test_inheritance(self):
         """Should inherit from RemotePyError."""
         error = MultipleInstancesFoundError("test", 2)
-        assert isinstance(error, RemotePyError)
-        assert isinstance(error, Exception)
-
-
-class TestInvalidInstanceStateError:
-    """Test InvalidInstanceStateError exception class."""
-
-    def test_init_with_states(self):
-        """Should create error with state information."""
-        error = InvalidInstanceStateError("my-instance", "running", "stopped")
-
-        assert "Instance 'my-instance' is in state 'running', but 'stopped' is required" in str(
-            error
-        )
-        assert error.instance_name == "my-instance"
-        assert error.current_state == "running"
-        assert error.required_state == "stopped"
-
-    def test_init_with_custom_details(self):
-        """Should use custom details when provided."""
-        custom_details = "Custom state error info"
-        error = InvalidInstanceStateError("test", "pending", "running", custom_details)
-
-        assert "Instance 'test' is in state 'pending', but 'running' is required" in str(error)
-        assert error.current_state == "pending"
-        assert error.required_state == "running"
-        assert error.details == custom_details
-
-    def test_inheritance(self):
-        """Should inherit from RemotePyError."""
-        error = InvalidInstanceStateError("test", "state1", "state2")
         assert isinstance(error, RemotePyError)
         assert isinstance(error, Exception)
 

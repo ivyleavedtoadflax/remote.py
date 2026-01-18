@@ -48,23 +48,6 @@ class MultipleInstancesFoundError(RemotePyError):
         super().__init__(message, details)
 
 
-class InvalidInstanceStateError(RemotePyError):
-    """Raised when an operation is attempted on an instance in the wrong state."""
-
-    def __init__(
-        self,
-        instance_name: str,
-        current_state: str,
-        required_state: str,
-        details: str | None = None,
-    ):
-        self.instance_name = instance_name
-        self.current_state = current_state
-        self.required_state = required_state
-        message = f"Instance '{instance_name}' is in state '{current_state}', but '{required_state}' is required"
-        super().__init__(message, details)
-
-
 class InvalidInputError(RemotePyError):
     """Raised when user input is invalid or malformed."""
 
