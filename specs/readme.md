@@ -70,6 +70,17 @@ Can be done in parallel with other work.
 |-------|-----|-------|-----------|------|--------|
 | -- | 20 | Test coverage edge cases | Independent, can run in parallel | [issue-20](./issue-20-test-coverage.md) | COMPLETED |
 
+### Phase 7: v1.0.0 Release
+Final polish and release preparation.
+
+| Order | ID | Issue | Rationale | Spec | Status |
+|-------|-----|-------|-----------|------|--------|
+| 13 | 31 | SSH key config not used by connect | Config should flow to connect | [issue-31](./issue-31-ssh-key-config.md) | Not started |
+| 14 | 32 | Rich output enhancements | Better UX for tables and panels | [issue-32](./issue-32-rich-output-enhancements.md) | Not started |
+| 15 | 34 | Security review | Required before v1.0.0 | [issue-34](./issue-34-security-review.md) | Not started |
+| 16 | 30 | Remove root-level instance commands | Breaking change for v1.0.0 | [issue-30](./issue-30-remove-root-instance-commands.md) | Not started |
+| 17 | 33 | v1.0.0 release preparation | Final checklist | [issue-33](./issue-33-v1-release-preparation.md) | Not started |
+
 ---
 
 ## Issue Index by Priority
@@ -81,6 +92,8 @@ Can be done in parallel with other work.
 | 13 | Logic bug in get_instance_by_name() | [issue-13-get-instance-by-name-bug.md](./issue-13-get-instance-by-name-bug.md) | COMPLETED |
 | 14 | SSH subprocess error handling | [issue-14-ssh-error-handling.md](./issue-14-ssh-error-handling.md) | COMPLETED |
 | 15 | Unvalidated array index in AMI launch | [issue-15-ami-array-index.md](./issue-15-ami-array-index.md) | COMPLETED |
+| 33 | v1.0.0 release preparation | [issue-33-v1-release-preparation.md](./issue-33-v1-release-preparation.md) | Not started |
+| 34 | Security review | [issue-34-security-review.md](./issue-34-security-review.md) | Not started |
 
 ### Medium Priority
 
@@ -95,6 +108,7 @@ Can be done in parallel with other work.
 | 28 | Improve CLI help documentation | [issue-28-cli-help.md](./issue-28-cli-help.md) | COMPLETED |
 | 29 | Compartmentalize subcommands | [issue-29-subcommand-structure.md](./issue-29-subcommand-structure.md) | COMPLETED |
 | 31 | SSH key config not used by connect | [issue-31-ssh-key-config.md](./issue-31-ssh-key-config.md) | Not started |
+| 32 | Rich output enhancements | [issue-32-rich-output-enhancements.md](./issue-32-rich-output-enhancements.md) | Not started |
 
 ### Low Priority
 
