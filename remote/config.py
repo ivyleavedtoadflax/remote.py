@@ -480,7 +480,7 @@ def set_value(
 
 
 @app.command("get")
-def get_value(
+def get_value_cmd(
     key: str = typer.Argument(..., help="Config key to get"),
     config_path: str = typer.Option(CONFIG_PATH, "--config", "-c"),
 ) -> None:
@@ -488,14 +488,25 @@ def get_value(
     Get a configuration value.
 
     Returns just the value (useful for scripting).
+    Supports environment variable overrides (REMOTE_<KEY>).
 
     Examples:
         remote config get instance_name
         INSTANCE=$(remote config get instance_name)
     """
-    # Reload config with specified path
-    config = read_config(config_path)
-    value = config.get("DEFAULT", key, fallback=None)
+    if key not in VALID_KEYS:
+        typer.secho(f"Unknown config key: {key}", fg=typer.colors.RED)
+        typer.secho(f"Valid keys: {', '.join(VALID_KEYS.keys())}", fg=typer.colors.YELLOW)
+        raise typer.Exit(1)
+
+    # Use a temporary ConfigManager if custom config path is provided
+    if config_path != CONFIG_PATH:
+        # For custom paths, read directly from file (no env var overrides)
+        config = read_config(config_path)
+        value = config.get("DEFAULT", key, fallback=None)
+    else:
+        # Use ConfigManager for default path (includes env var overrides and validation)
+        value = config_manager.get_value(key)
 
     if value is None:
         raise typer.Exit(1)
