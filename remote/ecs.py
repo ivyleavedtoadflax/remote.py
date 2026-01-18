@@ -4,6 +4,8 @@ from typing import TYPE_CHECKING, Any
 import boto3
 import typer
 from botocore.exceptions import ClientError, NoCredentialsError
+from rich.console import Console
+from rich.table import Table
 
 from remote.exceptions import AWSServiceError, ValidationError
 from remote.validation import safe_get_array_item, validate_array_index, validate_positive_integer
@@ -36,6 +38,21 @@ def __getattr__(name: str) -> Any:
 
 
 app = typer.Typer()
+console = Console(force_terminal=True, width=200)
+
+
+def _extract_name_from_arn(arn: str) -> str:
+    """Extract the resource name from an AWS ARN.
+
+    Args:
+        arn: Full AWS ARN (e.g., arn:aws:ecs:us-east-1:123456789:cluster/prod)
+
+    Returns:
+        The resource name (e.g., prod)
+    """
+    if "/" in arn:
+        return arn.split("/")[-1]
+    return arn
 
 
 def get_all_clusters() -> list[str]:
@@ -149,8 +166,18 @@ def prompt_for_cluster_name() -> str:
     else:
         typer.echo("Please select a cluster from the following list:")
 
-        for i, cluster in enumerate(clusters):
-            typer.secho(f"{i + 1}. {cluster}", fg=typer.colors.BLUE)
+        # Display clusters in a Rich table
+        table = Table(title="ECS Clusters")
+        table.add_column("Number", justify="right")
+        table.add_column("Cluster", style="cyan")
+        table.add_column("ARN", style="dim")
+
+        for i, cluster in enumerate(clusters, 1):
+            cluster_name = _extract_name_from_arn(cluster)
+            table.add_row(str(i), cluster_name, cluster)
+
+        console.print(table)
+
         cluster_choice = typer.prompt("Enter the number of the cluster")
 
         # Validate user input and safely access array
@@ -188,8 +215,18 @@ def prompt_for_services_name(cluster_name: str) -> list[str]:
             fg=typer.colors.YELLOW,
         )
 
-        for i, service in enumerate(services):
-            typer.secho(f"{i + 1}. {service}", fg=typer.colors.BLUE)
+        # Display services in a Rich table
+        table = Table(title="ECS Services")
+        table.add_column("Number", justify="right")
+        table.add_column("Service", style="cyan")
+        table.add_column("ARN", style="dim")
+
+        for i, service in enumerate(services, 1):
+            service_name = _extract_name_from_arn(service)
+            table.add_row(str(i), service_name, service)
+
+        console.print(table)
+
         service_choices = typer.prompt("Enter the numbers of the services (comma separated)")
         # Validate user input and safely access services
         try:

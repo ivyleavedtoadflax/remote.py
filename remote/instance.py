@@ -8,6 +8,7 @@ from typing import Any
 import typer
 from botocore.exceptions import ClientError, NoCredentialsError
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 
 from remote.config import config_manager
@@ -645,11 +646,21 @@ def launch(
 
         launched_instance = safe_get_array_item(instances, 0, "launched instances")
         instance_id = launched_instance.get("InstanceId", "unknown")
+        instance_type = launched_instance.get("InstanceType", "unknown")
 
-        typer.secho(
-            f"Instance {instance_id} with name '{name}' launched",
-            fg=typer.colors.GREEN,
+        # Display launch summary as Rich panel
+        summary_lines = [
+            f"[cyan]Instance ID:[/cyan] {instance_id}",
+            f"[cyan]Name:[/cyan]        {name}",
+            f"[cyan]Template:[/cyan]    {launch_template_name}",
+            f"[cyan]Type:[/cyan]        {instance_type}",
+        ]
+        panel = Panel(
+            "\n".join(summary_lines),
+            title="[green]Instance Launched[/green]",
+            border_style="green",
         )
+        console.print(panel)
     except ValidationError as e:
         typer.secho(f"Error accessing launch result: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)

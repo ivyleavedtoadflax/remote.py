@@ -77,7 +77,7 @@ Final polish and release preparation.
 | Order | ID | Issue | Rationale | Spec | Status |
 |-------|-----|-------|-----------|------|--------|
 | 13 | 31 | SSH key config not used by connect | Config should flow to connect | [issue-31](./issue-31-ssh-key-config.md) | COMPLETED |
-| 14 | 32 | Rich output enhancements | Better UX for tables and panels | [issue-32](./issue-32-rich-output-enhancements.md) | Not started |
+| 14 | 32 | Rich output enhancements | Better UX for tables and panels | [issue-32](./issue-32-rich-output-enhancements.md) | COMPLETED |
 | 15 | 34 | Security review | Required before v1.0.0 | [issue-34](./issue-34-security-review.md) | Not started |
 | 16 | 30 | Remove root-level instance commands | Breaking change for v1.0.0 | [issue-30](./issue-30-remove-root-instance-commands.md) | Not started |
 | 17 | 33 | v1.0.0 release preparation | Final checklist | [issue-33](./issue-33-v1-release-preparation.md) | Not started |
@@ -109,7 +109,7 @@ Final polish and release preparation.
 | 28 | Improve CLI help documentation | [issue-28-cli-help.md](./issue-28-cli-help.md) | COMPLETED |
 | 29 | Compartmentalize subcommands | [issue-29-subcommand-structure.md](./issue-29-subcommand-structure.md) | COMPLETED |
 | 31 | SSH key config not used by connect | [issue-31-ssh-key-config.md](./issue-31-ssh-key-config.md) | COMPLETED |
-| 32 | Rich output enhancements | [issue-32-rich-output-enhancements.md](./issue-32-rich-output-enhancements.md) | Not started |
+| 32 | Rich output enhancements | [issue-32-rich-output-enhancements.md](./issue-32-rich-output-enhancements.md) | COMPLETED |
 
 ### Low Priority
 
