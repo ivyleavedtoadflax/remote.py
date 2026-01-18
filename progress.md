@@ -1,5 +1,37 @@
 # Progress Log
 
+## 2026-01-18: Standardize Typer parameter style in `status()` command
+
+**File:** `remote/instance.py`
+
+**Issue:** The `status()` command used the `Annotated[]` style for parameter type annotations while all other commands in the file (and throughout the codebase) used the simpler inline style:
+
+- `status()` used:
+  ```python
+  instance_name: Annotated[str | None, typer.Argument(help="Instance name")] = None
+  watch: Annotated[bool, typer.Option("--watch", "-w", help="...")] = False
+  ```
+
+- All other commands used:
+  ```python
+  instance_name: str | None = typer.Argument(None, help="Instance name")
+  watch: bool = typer.Option(False, "--watch", "-w", help="...")
+  ```
+
+This inconsistency:
+1. Made the codebase harder to read
+2. Created confusion about which style to use for new commands
+3. Required an unnecessary `Annotated` import in `instance.py`
+
+**Changes:**
+- Changed `status()` parameters from `Annotated[]` style to inline style:
+  - `instance_name`: `Annotated[str | None, typer.Argument(help="Instance name")] = None` → `str | None = typer.Argument(None, help="Instance name")`
+  - `watch`: `Annotated[bool, typer.Option("--watch", "-w", help="...")] = False` → `bool = typer.Option(False, "--watch", "-w", help="...")`
+  - `interval`: `Annotated[int, typer.Option("--interval", "-i", help="...")] = 2` → `int = typer.Option(2, "--interval", "-i", help="...")`
+- Removed the now-unused `Annotated` import from `typing`
+
+---
+
 ## 2026-01-18: Fix inconsistent docstring formatting in `ecs.py`
 
 **File:** `remote/ecs.py`
