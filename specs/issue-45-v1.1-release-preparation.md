@@ -1,6 +1,6 @@
 # Issue 45: v1.1.0 Release Preparation
 
-**Status:** TODO
+**Status:** COMPLETED
 **Priority:** High
 **Target Version:** v1.1.0
 
