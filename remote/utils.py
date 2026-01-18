@@ -30,8 +30,6 @@ if TYPE_CHECKING:
 
 console = Console(force_terminal=True, width=200)
 
-app = typer.Typer()
-
 
 @lru_cache
 def get_ec2_client() -> "EC2Client":

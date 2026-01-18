@@ -43,3 +43,19 @@ This caused the SSH key configuration to fail silently - users who set `ssh_key_
 **Changes:**
 - Removed the `import builtins` statement from line 1
 - Changed `builtins.list[dict[str, str]]` to `list[dict[str, str]]` in the `tags` variable annotation
+
+---
+
+## 2026-01-18: Remove unused Typer app instance from `utils.py`
+
+**File:** `remote/utils.py`
+
+**Issue:** Line 33 defined `app = typer.Typer()` but this app instance was never used anywhere in the codebase:
+1. No commands were registered to this app
+2. No other modules imported this app
+3. The `utils.py` module is a utility module, not a CLI entrypoint
+
+The `typer` import itself is still needed for other uses in the file (typer.Exit, typer.secho, typer.colors).
+
+**Changes:**
+- Removed the unused `app = typer.Typer()` line
