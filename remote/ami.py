@@ -291,7 +291,3 @@ def template_info(
             console.print(
                 f"  {bd.get('DeviceName', 'N/A')}: {ebs.get('VolumeSize', 'N/A')} GB ({ebs.get('VolumeType', 'N/A')})"
             )
-
-
-if __name__ == "__main__":
-    app()

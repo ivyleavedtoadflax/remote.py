@@ -689,3 +689,24 @@ This standardizes on `config` as the variable name throughout the file, which is
 
 ---
 
+## 2026-01-18: Remove unused `if __name__ == "__main__"` blocks
+
+**Files:** `remote/ami.py`, `remote/config.py`, `remote/instance.py`, `remote/snapshot.py`, `remote/volume.py`
+
+**Issue:** Five modules contained dead code in the form of unused `if __name__ == "__main__"` blocks:
+- `remote/ami.py` (line 296)
+- `remote/config.py` (line 621)
+- `remote/instance.py` (line 1036)
+- `remote/snapshot.py` (line 88)
+- `remote/volume.py` (line 61)
+
+These modules are library code imported into `__main__.py`, not executed directly. The `if __name__ == "__main__"` blocks were never executed because:
+1. The package entry point is `remote/__main__.py` which imports and composes the sub-applications
+2. Users run `remote <command>` not `python -m remote.instance` etc.
+3. These blocks added no value and cluttered the code
+
+**Changes:**
+- Removed `if __name__ == "__main__": app()` block from all five modules
+
+---
+
