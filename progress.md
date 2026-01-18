@@ -184,3 +184,21 @@ Both parameters serve the same purpose: specifying a duration after which the in
 - Renamed `in_duration` to `stop_in` in the `stop()` function signature (line 601)
 - Updated all references to `in_duration` within the function body (lines 641, 649)
 - The CLI flag `--in` remains unchanged for backwards compatibility
+
+---
+
+## 2026-01-18: Rename `type` function and parameter to avoid shadowing Python built-in
+
+**File:** `remote/instance.py`
+
+**Issue:** The `type()` command function and its `type` parameter shadowed the Python built-in `type`. This is problematic because:
+1. The function name `type` shadows the built-in `type()` function at module scope
+2. The parameter `type` shadows the built-in within the function body
+3. This prevents using the built-in `type()` for any introspection within this function
+4. It's a code smell that can cause subtle bugs and confuses static analysis tools
+
+**Changes:**
+- Renamed function from `type` to `instance_type` with `@app.command("type")` decorator to preserve CLI command name
+- Renamed parameter from `type` to `new_type` to avoid shadowing the built-in
+- Updated all references within the function body to use `new_type`
+- Changed the else branch's reassignment from `type = get_instance_type(...)` to `current_instance_type = get_instance_type(...)` to avoid confusion
