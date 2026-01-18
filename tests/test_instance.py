@@ -1741,3 +1741,193 @@ class TestGetRawLaunchTimes:
         result = _get_raw_launch_times(instances)
 
         assert len(result) == 0
+
+
+# ============================================================================
+# Issue 46: Connect Stopped Instance Behavior Tests
+# ============================================================================
+
+
+class TestConnectStoppedInstanceBehavior:
+    """Tests for connect command behavior when instance is stopped."""
+
+    def test_connect_with_start_flag_auto_starts_instance(self, mocker):
+        """Test that --start flag automatically starts a stopped instance."""
+        # Need to patch both locations since instance.py imports get_ec2_client at module level
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mocker.patch("remote.instance.get_ec2_client", mock_ec2)
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+        mocker.patch("remote.instance.time.sleep")
+
+        # Mock instance lookup
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running", "Code": 16},
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+
+        # Instance starts as stopped, then becomes running after start
+        # Need enough responses for:
+        # 1. Initial is_instance_running check in connect (stopped)
+        # 2. While loop check in connect (stopped)
+        # 3. is_instance_running check in _start_instance (stopped - triggers start)
+        # 4. Check after start in while loop (running)
+        mock_ec2.return_value.describe_instance_status.side_effect = [
+            {"InstanceStatuses": []},  # Initial check: stopped
+            {"InstanceStatuses": []},  # While loop first check: still not running
+            {"InstanceStatuses": []},  # _start_instance check: not running, so actually starts
+            {"InstanceStatuses": [{"InstanceState": {"Name": "running"}}]},  # After start: running
+        ]
+
+        # Mock subprocess success
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 0
+        mock_subprocess.return_value = mock_result
+
+        result = runner.invoke(app, ["connect", "test-instance", "--start"])
+
+        assert result.exit_code == 0
+        assert "is not running" in result.stdout
+        assert "trying to start it" in result.stdout
+
+    def test_connect_with_no_start_flag_fails_immediately(self, mocker):
+        """Test that --no-start flag fails immediately when instance is stopped."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+
+        # Mock instance lookup - stopped
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "stopped", "Code": 80},
+                            "PublicDnsName": "",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {"InstanceStatuses": []}
+
+        result = runner.invoke(app, ["connect", "test-instance", "--no-start"])
+
+        assert result.exit_code == 1
+        assert "is not running" in result.stdout
+        assert "Use --start to automatically start" in result.stdout
+
+    def test_connect_mutually_exclusive_start_no_start(self, mocker):
+        """Test that --start and --no-start flags are mutually exclusive."""
+        mocker.patch("remote.instance.get_instance_name", return_value="test-instance")
+        mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+
+        result = runner.invoke(app, ["connect", "test-instance", "--start", "--no-start"])
+
+        assert result.exit_code == 1
+        assert "--start and --no-start are mutually exclusive" in result.stdout
+
+    def test_connect_non_interactive_without_flags_fails(self, mocker):
+        """Test that non-interactive mode without flags fails with helpful message."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mocker.patch("remote.instance.sys.stdin.isatty", return_value=False)
+
+        # Mock instance lookup - stopped
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "stopped", "Code": 80},
+                            "PublicDnsName": "",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {"InstanceStatuses": []}
+
+        result = runner.invoke(app, ["connect", "test-instance"])
+
+        assert result.exit_code == 1
+        assert "is not running" in result.stdout
+        assert "Non-interactive mode" in result.stdout
+
+    def test_connect_running_instance_ignores_start_flag(self, mocker):
+        """Test that --start flag is ignored when instance is already running."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+
+        # Mock instance lookup - already running
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running", "Code": 16},
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        # Mock subprocess success
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 0
+        mock_subprocess.return_value = mock_result
+
+        result = runner.invoke(app, ["connect", "test-instance", "--start"])
+
+        assert result.exit_code == 0
+        # Should not mention starting
+        assert "trying to start it" not in result.stdout
+
+    def test_connect_running_instance_ignores_no_start_flag(self, mocker):
+        """Test that --no-start flag is ignored when instance is already running."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+
+        # Mock instance lookup - already running
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running", "Code": 16},
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        # Mock subprocess success
+        mock_result = mocker.MagicMock()
+        mock_result.returncode = 0
+        mock_subprocess.return_value = mock_result
+
+        result = runner.invoke(app, ["connect", "test-instance", "--no-start"])
+
+        assert result.exit_code == 0
