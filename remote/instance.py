@@ -21,7 +21,6 @@ from remote.exceptions import (
 from remote.pricing import (
     format_price,
     get_instance_price_with_fallback,
-    get_monthly_estimate,
 )
 from remote.utils import (
     format_duration,
@@ -57,27 +56,67 @@ def _get_status_style(status: str) -> str:
     return "white"
 
 
+def _get_raw_launch_times(instances: list[dict[str, Any]]) -> list[Any]:
+    """Extract raw launch time datetime objects from instances.
+
+    Args:
+        instances: List of reservation dictionaries from describe_instances()
+
+    Returns:
+        List of launch time datetime objects (or None for stopped instances)
+    """
+    from datetime import timezone
+
+    launch_times = []
+
+    for reservation in instances:
+        reservation_instances = reservation.get("Instances", [])
+        for instance in reservation_instances:
+            # Check if instance has a Name tag (same filtering as get_instance_info)
+            tags = {k["Key"]: k["Value"] for k in instance.get("Tags", [])}
+            if not tags or "Name" not in tags:
+                continue
+
+            state_info = instance.get("State", {})
+            status = state_info.get("Name", "unknown")
+
+            # Only include launch time for running instances
+            if status == "running" and "LaunchTime" in instance:
+                launch_time = instance["LaunchTime"]
+                # Ensure timezone awareness
+                if hasattr(launch_time, "tzinfo") and launch_time.tzinfo is None:
+                    launch_time = launch_time.replace(tzinfo=timezone.utc)
+                launch_times.append(launch_time)
+            else:
+                launch_times.append(None)
+
+    return launch_times
+
+
 @app.command("ls")
 @app.command("list")
 def list_instances(
-    no_pricing: bool = typer.Option(
-        False, "--no-pricing", help="Skip pricing lookup (faster, no cost columns)"
+    cost: bool = typer.Option(
+        False, "--cost", "-c", help="Show cost columns (uptime, hourly rate, estimated cost)"
     ),
 ) -> None:
     """
     List all EC2 instances.
 
-    Displays a table with instance name, ID, public DNS, status, type, launch time,
-    and pricing information (hourly and monthly estimates).
+    Displays a table with instance name, ID, public DNS, status, type, and launch time.
+    Use --cost to include pricing and cost information (may be slower due to pricing API).
 
     Examples:
-        remote list                # List with pricing
-        remote list --no-pricing   # List without pricing (faster)
+        remote instance ls              # List instances
+        remote instance ls --cost       # Include cost information
     """
     instances = get_instances()
     ids = get_instance_ids(instances)
 
     names, public_dnss, statuses, instance_types, launch_times = get_instance_info(instances)
+
+    # Get raw launch times for uptime calculation if cost is requested
+    raw_launch_times = _get_raw_launch_times(instances) if cost else []
 
     # Format table using rich
     table = Table(title="EC2 Instances")
@@ -88,12 +127,13 @@ def list_instances(
     table.add_column("Type")
     table.add_column("Launch Time")
 
-    if not no_pricing:
+    if cost:
+        table.add_column("Uptime", justify="right")
         table.add_column("$/hr", justify="right")
-        table.add_column("$/month", justify="right")
+        table.add_column("Est. Cost", justify="right")
 
-    for name, instance_id, dns, status, it, lt in zip(
-        names, ids, public_dnss, statuses, instance_types, launch_times, strict=False
+    for i, (name, instance_id, dns, status, it, lt) in enumerate(
+        zip(names, ids, public_dnss, statuses, instance_types, launch_times, strict=False)
     ):
         status_style = _get_status_style(status)
 
@@ -106,11 +146,32 @@ def list_instances(
             lt or "",
         ]
 
-        if not no_pricing:
-            hourly_price, _ = get_instance_price_with_fallback(it) if it else (None, False)
-            monthly_price = get_monthly_estimate(hourly_price)
+        if cost:
+            # Calculate uptime
+            uptime_str = "-"
+            estimated_cost = None
+            hourly_price = None
+
+            if i < len(raw_launch_times) and raw_launch_times[i] is not None:
+                from datetime import datetime, timezone
+
+                now = datetime.now(timezone.utc)
+                launch_time_dt = raw_launch_times[i]
+                if launch_time_dt.tzinfo is None:
+                    launch_time_dt = launch_time_dt.replace(tzinfo=timezone.utc)
+                uptime_seconds = (now - launch_time_dt).total_seconds()
+                uptime_str = _format_uptime(uptime_seconds)
+
+                # Get pricing and calculate cost
+                if it:
+                    hourly_price, _ = get_instance_price_with_fallback(it)
+                    if hourly_price is not None and uptime_seconds > 0:
+                        uptime_hours = uptime_seconds / 3600
+                        estimated_cost = hourly_price * uptime_hours
+
+            row_data.append(uptime_str)
             row_data.append(format_price(hourly_price))
-            row_data.append(format_price(monthly_price))
+            row_data.append(format_price(estimated_cost))
 
         table.add_row(*row_data)
 
@@ -1043,67 +1104,6 @@ def terminate(instance_name: str | None = typer.Argument(None, help="Instance na
         )
 
 
-def _get_instance_details(instance_id: str) -> dict[str, Any]:
-    """Get detailed information about an instance.
-
-    Args:
-        instance_id: The EC2 instance ID
-
-    Returns:
-        Dictionary with instance details including Name, InstanceType, State, LaunchTime
-
-    Raises:
-        InstanceNotFoundError: If instance not found
-        AWSServiceError: If AWS API call fails
-    """
-    from datetime import datetime, timezone
-
-    try:
-        response = get_ec2_client().describe_instances(InstanceIds=[instance_id])
-        reservations = response.get("Reservations", [])
-        if not reservations:
-            raise InstanceNotFoundError(instance_id)
-
-        reservation = safe_get_array_item(reservations, 0, "instance reservations")
-        instances = reservation.get("Instances", [])
-        if not instances:
-            raise InstanceNotFoundError(instance_id)
-
-        instance = safe_get_array_item(instances, 0, "instances")
-
-        # Extract name from tags
-        tags = {tag["Key"]: tag["Value"] for tag in instance.get("Tags", [])}
-        name = tags.get("Name", "")
-
-        # Get state
-        state = instance.get("State", {}).get("Name", "unknown")
-
-        # Get launch time
-        launch_time = instance.get("LaunchTime")
-        launch_time_str = None
-        uptime_seconds = None
-        if launch_time:
-            launch_time_str = launch_time.strftime("%Y-%m-%d %H:%M:%S UTC")
-            now = datetime.now(timezone.utc)
-            uptime_seconds = (now - launch_time.replace(tzinfo=timezone.utc)).total_seconds()
-
-        return {
-            "instance_id": instance_id,
-            "name": name,
-            "instance_type": instance.get("InstanceType", "unknown"),
-            "state": state,
-            "launch_time": launch_time,
-            "launch_time_str": launch_time_str,
-            "uptime_seconds": uptime_seconds,
-        }
-    except ClientError as e:
-        error_code = e.response["Error"]["Code"]
-        if error_code == "InvalidInstanceID.NotFound":
-            raise InstanceNotFoundError(instance_id)
-        error_message = e.response["Error"]["Message"]
-        raise AWSServiceError("EC2", "describe_instances", error_code, error_message)
-
-
 def _format_uptime(seconds: float | None) -> str:
     """Format uptime in seconds to human-readable string.
 
@@ -1131,84 +1131,6 @@ def _format_uptime(seconds: float | None) -> str:
         parts.append(f"{minutes}m")
 
     return " ".join(parts)
-
-
-@app.command()
-def cost(
-    instance_name: str | None = typer.Argument(None, help="Instance name"),
-) -> None:
-    """
-    Show estimated cost of a running instance based on uptime.
-
-    Calculates cost from launch time to now using the instance's hourly rate.
-    Uses the default instance from config if no name is provided.
-
-    Examples:
-        remote instance cost                    # Show cost of default instance
-        remote instance cost my-server          # Show cost of specific instance
-    """
-    try:
-        if not instance_name:
-            instance_name = get_instance_name()
-        instance_id = get_instance_id(instance_name)
-
-        # Get instance details
-        details = _get_instance_details(instance_id)
-
-        # Check if instance is running
-        if details["state"] != "running":
-            typer.secho(
-                f"Instance '{instance_name}' is not running (status: {details['state']})",
-                fg=typer.colors.YELLOW,
-            )
-            typer.secho("Cost calculation requires a running instance.", fg=typer.colors.YELLOW)
-            return
-
-        # Get pricing info
-        instance_type = details["instance_type"]
-        hourly_price, fallback_used = get_instance_price_with_fallback(instance_type)
-
-        # Calculate cost
-        uptime_hours = (
-            details["uptime_seconds"] / 3600 if details["uptime_seconds"] is not None else None
-        )
-        estimated_cost = hourly_price * uptime_hours if hourly_price and uptime_hours else None
-
-        # Format uptime
-        uptime_str = _format_uptime(details["uptime_seconds"])
-
-        # Build output panel
-        status_style = _get_status_style(details["state"])
-        lines = [
-            f"[cyan]Instance ID:[/cyan]    {details['instance_id']}",
-            f"[cyan]Instance Type:[/cyan]  {instance_type}",
-            f"[cyan]Status:[/cyan]         [{status_style}]{details['state']}[/{status_style}]",
-            f"[cyan]Launch Time:[/cyan]    {details['launch_time_str'] or '-'}",
-            f"[cyan]Uptime:[/cyan]         {uptime_str}",
-            f"[cyan]Hourly Rate:[/cyan]    {format_price(hourly_price)}{'*' if fallback_used else ''}",
-            f"[cyan]Estimated Cost:[/cyan] {format_price(estimated_cost)}",
-        ]
-
-        if fallback_used:
-            lines.append("")
-            lines.append("[dim]* Using us-east-1 pricing as estimate[/dim]")
-
-        panel = Panel(
-            "\n".join(lines),
-            title=f"[green]Instance Cost: {instance_name}[/green]",
-            border_style="green",
-        )
-        console.print(panel)
-
-    except (InstanceNotFoundError, ResourceNotFoundError) as e:
-        typer.secho(f"Error: {e}", fg=typer.colors.RED)
-        raise typer.Exit(1)
-    except AWSServiceError as e:
-        typer.secho(f"AWS Error: {e}", fg=typer.colors.RED)
-        raise typer.Exit(1)
-    except ValidationError as e:
-        typer.secho(f"Validation Error: {e}", fg=typer.colors.RED)
-        raise typer.Exit(1)
 
 
 if __name__ == "__main__":
