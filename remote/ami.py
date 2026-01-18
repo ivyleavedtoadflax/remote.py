@@ -7,7 +7,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from remote.config import config_manager
-from remote.exceptions import ResourceNotFoundError, ValidationError
+from remote.exceptions import AWSServiceError, ResourceNotFoundError, ValidationError
 from remote.utils import (
     console,
     get_account_id,
@@ -138,7 +138,7 @@ def list_launch_templates(
                     security_groups = data.get("SecurityGroupIds", [])
                     if security_groups:
                         console.print(f"  Security Groups: {', '.join(security_groups)}")
-            except (ResourceNotFoundError, Exception):
+            except (ResourceNotFoundError, AWSServiceError):
                 pass
     else:
         # Standard table view

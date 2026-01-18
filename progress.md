@@ -1,5 +1,32 @@
 # Progress Log
 
+## 2026-01-18: Replace overly broad exception handling in `list_launch_templates()`
+
+**File:** `remote/ami.py`
+
+**Issue:** The `list_launch_templates()` function had overly broad exception handling at line 141:
+```python
+except (ResourceNotFoundError, Exception):
+    pass
+```
+
+This is problematic because:
+1. `Exception` is too broad and catches all exceptions, hiding unexpected errors
+2. `ResourceNotFoundError` is a subclass of `Exception`, making it redundant in the tuple
+3. Silently passing on all exceptions can mask bugs
+
+The function `get_launch_template_versions()` (called within the try block) documents that it raises only:
+- `ResourceNotFoundError`: If template not found
+- `AWSServiceError`: If AWS API call fails
+
+**Changes:**
+- Added `AWSServiceError` to imports from `remote.exceptions`
+- Changed exception handling from `(ResourceNotFoundError, Exception)` to `(ResourceNotFoundError, AWSServiceError)`
+
+This makes the error handling explicit and specific to the documented exceptions.
+
+---
+
 ## 2026-01-18: Fix incorrect config key `ssh_key` → `ssh_key_path`
 
 **File:** `remote/instance.py`
