@@ -211,7 +211,7 @@ def test_launch_with_template_name(mocker):
     mocker.patch("remote.ami.get_launch_template_id", return_value="lt-0123456789abcdef0")
 
     mock_ec2_client.return_value.run_instances.return_value = {
-        "Instances": [{"InstanceId": "i-0123456789abcdef0"}]
+        "Instances": [{"InstanceId": "i-0123456789abcdef0", "InstanceType": "t3.micro"}]
     }
 
     result = runner.invoke(
@@ -239,7 +239,10 @@ def test_launch_with_template_name(mocker):
             }
         ],
     )
-    assert "Instance i-0123456789abcdef0 with name 'test-instance' launched" in result.stdout
+    # Rich panel displays launch summary
+    assert "Instance Launched" in result.stdout
+    assert "i-0123456789abcdef0" in result.stdout
+    assert "test-instance" in result.stdout
 
 
 def test_launch_with_default_version(mocker):

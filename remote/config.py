@@ -3,6 +3,7 @@ import os
 
 import typer
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 
 from remote.settings import Settings
@@ -360,17 +361,37 @@ def validate(
     if ssh_key and not os.path.exists(os.path.expanduser(ssh_key)):
         errors.append(f"SSH key not found: {ssh_key}")
 
-    # Report results
+    # Build validation output content
+    output_lines = []
+    for error in errors:
+        output_lines.append(f"[red]✗ ERROR:[/red] {error}")
+    for warning in warnings:
+        output_lines.append(f"[yellow]⚠ WARNING:[/yellow] {warning}")
+
+    # Determine status
     if errors:
-        for error in errors:
-            typer.secho(f"ERROR: {error}", fg=typer.colors.RED)
-        raise typer.Exit(1)
+        status = "[red]Status: Invalid - errors must be fixed[/red]"
+        border_style = "red"
     elif warnings:
-        for warning in warnings:
-            typer.secho(f"WARNING: {warning}", fg=typer.colors.YELLOW)
-        typer.secho("Config has warnings but is usable", fg=typer.colors.YELLOW)
+        status = "[yellow]Status: Has warnings but usable[/yellow]"
+        border_style = "yellow"
     else:
-        typer.secho("Config is valid", fg=typer.colors.GREEN)
+        output_lines.append("[green]✓ All checks passed[/green]")
+        status = "[green]Status: Valid[/green]"
+        border_style = "green"
+
+    # Add status line
+    if output_lines:
+        output_lines.append("")
+    output_lines.append(status)
+
+    # Display as Rich panel
+    panel_content = "\n".join(output_lines)
+    panel = Panel(panel_content, title="Config Validation", border_style=border_style)
+    console.print(panel)
+
+    if errors:
+        raise typer.Exit(1)
 
 
 @app.command()

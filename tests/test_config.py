@@ -611,7 +611,9 @@ class TestConfigValidateCommand:
         result = runner.invoke(config.app, ["validate", "-c", config_path])
 
         assert result.exit_code == 0
-        assert "Config is valid" in result.stdout
+        # Rich panel displays validation result
+        assert "Config Validation" in result.stdout
+        assert "Status: Valid" in result.stdout
 
     def test_validate_missing_config(self, tmpdir):
         """Should report missing config file."""

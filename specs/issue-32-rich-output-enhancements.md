@@ -1,6 +1,6 @@
 # Issue 32: Enhance Output with Rich Formatting
 
-**Status:** Not started
+**Status:** COMPLETED
 **Priority:** Medium
 **Target Version:** v1.0.0
 **Files:** `remotepy/ecs.py`, `remotepy/config.py`, `remotepy/instance.py`

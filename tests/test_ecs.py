@@ -93,8 +93,10 @@ def test_prompt_for_cluster_name_multiple_clusters(mocker, capsys):
     mock_prompt.assert_called_once_with("Enter the number of the cluster")
     captured = capsys.readouterr()
     assert "Please select a cluster from the following list:" in captured.out
-    assert "1. test-cluster-1" in captured.out
-    assert "2. test-cluster-2" in captured.out
+    # Rich table displays cluster names in table format
+    assert "ECS Clusters" in captured.out
+    assert "test-cluster-1" in captured.out
+    assert "test-cluster-2" in captured.out
 
 
 def test_prompt_for_cluster_name_no_clusters(mocker):
@@ -124,8 +126,10 @@ def test_prompt_for_services_name_multiple_services_found(capsys):
             assert result == ["test-service-1", "test-service-2"]
             captured = capsys.readouterr()
             assert "Please select one or more services" in captured.out
-            assert "1. test-service-1" in captured.out
-            assert "2. test-service-2" in captured.out
+            # Rich table displays service names in table format
+            assert "ECS Services" in captured.out
+            assert "test-service-1" in captured.out
+            assert "test-service-2" in captured.out
 
 
 def test_prompt_for_services_name_no_services(mocker):
