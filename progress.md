@@ -452,3 +452,27 @@ Both calls retrieved the same value for the same `instance_id`. The second call 
 - Reused the existing `current_type` variable instead of creating `current_instance_type`
 - This eliminates one AWS API call when displaying current instance type
 
+---
+
+## 2026-01-18: Remove misleading return type from `list_launch_templates()` Typer command
+
+**File:** `remote/ami.py`
+
+**Issue:** The `list_launch_templates()` function had a misleading API contract:
+1. Return type annotation was `-> list[dict[str, Any]]`
+2. Line 117 returned an empty list `[]`
+3. Line 161 returned `templates` list
+4. However, as a Typer CLI command (decorated with `@app.command("list-templates")`), the return value is never consumed by callers
+
+This is problematic because:
+- Typer command functions should return `None` or have no return type annotation
+- The returned value was never used by the CLI framework
+- The return type annotation created a misleading API contract implying the value could be used programmatically
+- The `Any` type import was only needed for this return type
+
+**Changes:**
+- Changed return type from `-> list[dict[str, Any]]` to `-> None`
+- Changed `return []` on line 117 to `return` (early exit with no value)
+- Removed `return templates` statement on line 161 (implicit None return)
+- Removed the now-unused `from typing import Any` import
+
