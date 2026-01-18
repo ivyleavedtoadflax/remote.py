@@ -1,0 +1,19 @@
+# Remote.py Specs
+
+## Instructions
+
+Fix ONE issue per iteration.
+Document what you changed in progress.txt.
+
+0. Checkout main
+1. Checkout a feature branch
+2. Scan for code smells: unused exports, dead code, inconsistent patterns.
+3. Fix ONE issue per iteration
+4. Document what you changed in progress.md
+5. Run tests: `uv run pytest`
+6. Run type check: `uv run mypy remote/`
+7. Run linter: `uv run ruff check . && uv run ruff format .`
+8. Atomic commit with descriptive messages
+9. Push to branch
+10. Create a PR
+11. Merge to main
