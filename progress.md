@@ -330,3 +330,24 @@ This duplication meant any changes to SSH options (e.g., adding new options, cha
 - Updated `_schedule_shutdown()` to use the new helper
 - Updated `_cancel_scheduled_shutdown()` to use the new helper
 - Reduced code duplication by ~14 lines
+
+---
+
+## 2026-01-18: Consolidate datetime imports to module level in `instance.py`
+
+**File:** `remote/instance.py`
+
+**Issue:** The `datetime` module was imported inconsistently in three different locations inside functions rather than at the module level:
+- Line 68: `from datetime import timezone` (inside `_get_raw_launch_times`)
+- Line 159: `from datetime import datetime, timezone` (inside `list_instances`)
+- Line 498: `from datetime import datetime, timedelta, timezone` (inside `_schedule_shutdown`)
+
+This pattern is inconsistent with other modules like `utils.py` which imports datetime at the module level (line 2). Inline imports inside functions:
+1. Reduce code readability
+2. Make it harder to see all module dependencies at a glance
+3. Create slight performance overhead from repeated imports (though Python caches them)
+
+**Changes:**
+- Added `from datetime import datetime, timedelta, timezone` at the module level (after line 4)
+- Removed the three inline imports from `_get_raw_launch_times`, `list_instances`, and `_schedule_shutdown` functions
+
