@@ -70,3 +70,4 @@ Features and improvements for future releases.
 | Order | ID | Issue | Rationale | Spec | Status |
 |-------|-----|-------|-----------|------|--------|
 | 18 | 35 | Built-in watch mode | Fix garbled output when using `watch` command with Rich | [issue-35](./issue-35-watch-mode.md) | COMPLETED |
+| 19 | 36 | Config validate panel too wide | Panel stretches beyond console width; also redundant "All checks passed" and "Status: Valid" | [issue-36](./issue-36-config-validate-output.md) | TODO |
