@@ -4,10 +4,10 @@ from typing import TYPE_CHECKING
 import boto3
 import typer
 from botocore.exceptions import ClientError, NoCredentialsError
-from rich.console import Console
 from rich.table import Table
 
 from remote.exceptions import AWSServiceError, ValidationError
+from remote.utils import console
 from remote.validation import safe_get_array_item, validate_array_index, validate_positive_integer
 
 if TYPE_CHECKING:
@@ -27,7 +27,6 @@ def get_ecs_client() -> "ECSClient":
 
 
 app = typer.Typer()
-console = Console(force_terminal=True, width=200)
 
 
 def _extract_name_from_arn(arn: str) -> str:

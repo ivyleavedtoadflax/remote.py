@@ -3,14 +3,14 @@
 ## Instructions
 
 0. Checkout main
-1. Read plan.md and pick an issue to work on that is not complete
-2. Read the linked spec file for details
+1. Read plan.md and pick an issues to work on that is not complete
+2. Read the issue from github
 3. Checkout a branch
 4. Implement the fix
 5. Run tests: `uv run pytest`
 6. Run type check: `uv run mypy remote/`
 7. Run linter: `uv run ruff check . && uv run ruff format .`
-8. Update plan.md and spec file status to COMPLETED
+8. Update plan.md spec file status to COMPLETED and update gh issue
 9. Atomic commit with descriptive messages
 10. Push to branch
 11. Fix any high priority security issues arising from pre-commit hooks
