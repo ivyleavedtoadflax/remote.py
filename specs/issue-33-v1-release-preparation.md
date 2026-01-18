@@ -1,6 +1,6 @@
 # Issue 33: v1.0.0 Release Preparation
 
-**Status:** Not started
+**Status:** COMPLETED
 **Priority:** High
 **Target Version:** v1.0.0
 
