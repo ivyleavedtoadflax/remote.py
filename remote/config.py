@@ -15,7 +15,7 @@ from remote.settings import Settings
 from remote.utils import get_instance_ids, get_instance_info, get_instances
 
 app = typer.Typer()
-console = Console(force_terminal=True)
+console = Console(force_terminal=True, width=200)
 
 # Valid configuration keys with descriptions
 VALID_KEYS: dict[str, str] = {
