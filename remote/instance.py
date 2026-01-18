@@ -1,4 +1,3 @@
-import builtins
 import random
 import string
 import subprocess
@@ -739,7 +738,7 @@ def terminate(instance_name: str | None = typer.Argument(None, help="Instance na
     # Check if instance is managed by Terraform
     instance_info = get_ec2_client().describe_instances(InstanceIds=[instance_id])
     # Safely access instance information
-    tags: builtins.list[dict[str, str]] = []
+    tags: list[dict[str, str]] = []
     try:
         reservations = instance_info.get("Reservations", [])
         if not reservations:
