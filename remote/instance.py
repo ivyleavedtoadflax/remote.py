@@ -326,7 +326,7 @@ def connect(
     ),
     user: str = typer.Option("ubuntu", "--user", "-u", help="User to be used for ssh connection."),
     key: str | None = typer.Option(
-        None, "--key", "-k", help="Path to SSH private key file. Falls back to config ssh_key."
+        None, "--key", "-k", help="Path to SSH private key file. Falls back to config ssh_key_path."
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose mode"),
     no_strict_host_key: bool = typer.Option(
@@ -412,7 +412,7 @@ def connect(
 
     # Check for default key from config if not provided
     if not key:
-        key = config_manager.get_value("ssh_key")
+        key = config_manager.get_value("ssh_key_path")
 
     # If SSH key is specified (from option or config), add the -i option
     if key:
