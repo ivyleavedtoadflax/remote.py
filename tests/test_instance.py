@@ -1,4 +1,3 @@
-import pytest
 from typer.testing import CliRunner
 
 from remote.instance import app
@@ -37,7 +36,7 @@ class TestInstanceListCommand:
         mock_paginator.paginate.return_value = [{"Reservations": []}]
         mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
-        result = runner.invoke(app, ["list", "--no-pricing"])
+        result = runner.invoke(app, ["list"])
 
         assert result.exit_code == 0
         assert "Name" in result.stdout
@@ -53,12 +52,6 @@ class TestInstanceListCommand:
         mock_paginator = mocker.MagicMock()
         mock_paginator.paginate.return_value = [mock_ec2_instances]
         mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
-
-        # Mock pricing to avoid actual API calls - returns tuple (price, fallback_used)
-        mocker.patch(
-            "remote.instance.get_instance_price_with_fallback", return_value=(0.0104, False)
-        )
-        mocker.patch("remote.instance.get_monthly_estimate", return_value=7.59)
 
         result = runner.invoke(app, ["list"])
 
@@ -79,8 +72,8 @@ class TestInstanceListCommand:
         assert "t2.micro" in result.stdout
         assert "2023-07-15 00:00:00 UTC" in result.stdout
 
-    def test_should_show_pricing_columns_by_default(self, mocker):
-        """Should display pricing columns when --no-pricing is not specified."""
+    def test_should_hide_cost_columns_by_default(self, mocker):
+        """Should not display cost columns by default (without --cost flag)."""
         mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
         mock_paginator = mocker.MagicMock()
         mock_paginator.paginate.return_value = [{"Reservations": []}]
@@ -89,61 +82,13 @@ class TestInstanceListCommand:
         result = runner.invoke(app, ["list"])
 
         assert result.exit_code == 0
-        assert "$/hr" in result.stdout
-        assert "$/month" in result.stdout
-
-    def test_should_hide_pricing_columns_with_no_pricing_flag(self, mocker):
-        """Should not display pricing columns when --no-pricing is specified."""
-        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-        mock_paginator = mocker.MagicMock()
-        mock_paginator.paginate.return_value = [{"Reservations": []}]
-        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
-
-        result = runner.invoke(app, ["list", "--no-pricing"])
-
-        assert result.exit_code == 0
+        # Cost columns should be hidden by default
         assert "$/hr" not in result.stdout
-        assert "$/month" not in result.stdout
+        assert "Est. Cost" not in result.stdout
+        assert "Uptime" not in result.stdout
 
-    def test_should_display_pricing_data_for_instances(self, mocker, mock_ec2_instances):
-        """Should show pricing information for each instance type."""
-        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-        mock_paginator = mocker.MagicMock()
-        mock_paginator.paginate.return_value = [mock_ec2_instances]
-        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
-
-        # Mock pricing functions - returns tuple (price, fallback_used)
-        mocker.patch(
-            "remote.instance.get_instance_price_with_fallback", return_value=(0.0104, False)
-        )
-        mocker.patch("remote.instance.get_monthly_estimate", return_value=7.59)
-
-        result = runner.invoke(app, ["list"])
-
-        assert result.exit_code == 0
-        # format_price formats 0.0104 as "$0.01" since it's >= 0.01 (uses 2 decimal places)
-        assert "$0.01" in result.stdout
-        assert "$7.59" in result.stdout
-
-    def test_should_handle_unavailable_pricing_gracefully(self, mocker, mock_ec2_instances):
-        """Should display dash when pricing is unavailable."""
-        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-        mock_paginator = mocker.MagicMock()
-        mock_paginator.paginate.return_value = [mock_ec2_instances]
-        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
-
-        # Mock pricing to return None (unavailable) - returns tuple (price, fallback_used)
-        mocker.patch("remote.instance.get_instance_price_with_fallback", return_value=(None, False))
-        mocker.patch("remote.instance.get_monthly_estimate", return_value=None)
-
-        result = runner.invoke(app, ["list"])
-
-        assert result.exit_code == 0
-        # format_price returns "-" for None values
-        assert "-" in result.stdout
-
-    def test_should_not_call_pricing_api_with_no_pricing_flag(self, mocker, mock_ec2_instances):
-        """Should skip pricing API calls when --no-pricing flag is used."""
+    def test_should_not_call_pricing_api_by_default(self, mocker, mock_ec2_instances):
+        """Should skip pricing API calls by default (without --cost flag)."""
         mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
         mock_paginator = mocker.MagicMock()
         mock_paginator.paginate.return_value = [mock_ec2_instances]
@@ -151,7 +96,7 @@ class TestInstanceListCommand:
 
         mock_get_price = mocker.patch("remote.instance.get_instance_price_with_fallback")
 
-        result = runner.invoke(app, ["list", "--no-pricing"])
+        result = runner.invoke(app, ["list"])
 
         assert result.exit_code == 0
         mock_get_price.assert_not_called()
@@ -1316,218 +1261,237 @@ class TestScheduledShutdownSSHErrors:
 
 
 # ============================================================================
-# Issue 38: Instance Cost Command Tests
+# Issue 41: Instance List Cost Flag Tests
 # ============================================================================
 
 
-class TestInstanceCostCommand:
-    """Tests for the instance cost command."""
+class TestInstanceListCostFlag:
+    """Tests for the --cost flag on instance ls command."""
 
-    def test_cost_shows_instance_cost_info(self, mocker):
-        """Test that cost command displays instance cost information for running instance."""
+    def test_list_shows_cost_columns_with_cost_flag(self, mocker):
+        """Test that --cost flag adds uptime, hourly rate, and estimated cost columns."""
         import datetime
 
-        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
-        mock_ec2_instance = mocker.patch("remote.instance.get_ec2_client")
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
-        # Set up launch time 2 hours ago
         launch_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=2)
 
-        instance_response = {
-            "Reservations": [
-                {
-                    "Instances": [
-                        {
-                            "InstanceId": "i-0123456789abcdef0",
-                            "InstanceType": "t3.micro",
-                            "State": {"Name": "running", "Code": 16},
-                            "LaunchTime": launch_time,
-                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
-                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
-                        }
-                    ]
-                }
-            ]
-        }
-
-        mock_ec2.return_value.describe_instances.return_value = instance_response
-        mock_ec2_instance.return_value.describe_instances.return_value = instance_response
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [
+            {
+                "Reservations": [
+                    {
+                        "Instances": [
+                            {
+                                "InstanceId": "i-0123456789abcdef0",
+                                "InstanceType": "t3.micro",
+                                "State": {"Name": "running", "Code": 16},
+                                "LaunchTime": launch_time,
+                                "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                                "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
         # Mock pricing
         mocker.patch(
             "remote.instance.get_instance_price_with_fallback", return_value=(0.0104, False)
         )
 
-        result = runner.invoke(app, ["cost", "test-instance"])
+        result = runner.invoke(app, ["list", "--cost"])
 
         assert result.exit_code == 0
-        assert "Instance Cost" in result.stdout
+        # Verify cost-related columns are present
+        assert "Uptime" in result.stdout
+        assert "$/hr" in result.stdout
+        assert "Est. Cost" in result.stdout
+        # Verify instance data is present
+        assert "test-instance" in result.stdout
         assert "i-0123456789abcdef0" in result.stdout
-        assert "t3.micro" in result.stdout
-        assert "running" in result.stdout
-        assert "Hourly Rate" in result.stdout
-        assert "Estimated Cost" in result.stdout
 
-    def test_cost_handles_stopped_instance(self, mocker):
-        """Test that cost command shows warning for stopped instance."""
-        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
-        mock_ec2_instance = mocker.patch("remote.instance.get_ec2_client")
-
-        instance_response = {
-            "Reservations": [
-                {
-                    "Instances": [
-                        {
-                            "InstanceId": "i-0123456789abcdef0",
-                            "InstanceType": "t3.micro",
-                            "State": {"Name": "stopped", "Code": 80},
-                            "PublicDnsName": "",
-                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
-                        }
-                    ]
-                }
-            ]
-        }
-
-        mock_ec2.return_value.describe_instances.return_value = instance_response
-        mock_ec2_instance.return_value.describe_instances.return_value = instance_response
-
-        result = runner.invoke(app, ["cost", "test-instance"])
-
-        assert result.exit_code == 0
-        assert "is not running" in result.stdout
-        assert "stopped" in result.stdout
-        assert "Cost calculation requires a running instance" in result.stdout
-
-    def test_cost_handles_missing_pricing(self, mocker):
-        """Test that cost command handles unavailable pricing gracefully."""
+    def test_list_shows_cost_columns_with_short_flag(self, mocker):
+        """Test that -c short flag adds cost columns."""
         import datetime
 
-        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
-        mock_ec2_instance = mocker.patch("remote.instance.get_ec2_client")
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
 
         launch_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)
 
-        instance_response = {
-            "Reservations": [
-                {
-                    "Instances": [
-                        {
-                            "InstanceId": "i-0123456789abcdef0",
-                            "InstanceType": "t3.micro",
-                            "State": {"Name": "running", "Code": 16},
-                            "LaunchTime": launch_time,
-                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
-                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
-                        }
-                    ]
-                }
-            ]
-        }
-
-        mock_ec2.return_value.describe_instances.return_value = instance_response
-        mock_ec2_instance.return_value.describe_instances.return_value = instance_response
-
-        # Mock pricing to return None
-        mocker.patch("remote.instance.get_instance_price_with_fallback", return_value=(None, False))
-
-        result = runner.invoke(app, ["cost", "test-instance"])
-
-        assert result.exit_code == 0
-        # Should show "-" for unavailable pricing
-        assert "Hourly Rate" in result.stdout
-
-    def test_cost_shows_fallback_indicator(self, mocker):
-        """Test that cost command shows indicator when using fallback pricing."""
-        import datetime
-
-        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
-        mock_ec2_instance = mocker.patch("remote.instance.get_ec2_client")
-
-        launch_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)
-
-        instance_response = {
-            "Reservations": [
-                {
-                    "Instances": [
-                        {
-                            "InstanceId": "i-0123456789abcdef0",
-                            "InstanceType": "t3.micro",
-                            "State": {"Name": "running", "Code": 16},
-                            "LaunchTime": launch_time,
-                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
-                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
-                        }
-                    ]
-                }
-            ]
-        }
-
-        mock_ec2.return_value.describe_instances.return_value = instance_response
-        mock_ec2_instance.return_value.describe_instances.return_value = instance_response
-
-        # Mock pricing with fallback
-        mocker.patch(
-            "remote.instance.get_instance_price_with_fallback", return_value=(0.0104, True)
-        )
-
-        result = runner.invoke(app, ["cost", "test-instance"])
-
-        assert result.exit_code == 0
-        assert "us-east-1 pricing" in result.stdout
-
-    def test_cost_uses_default_instance(self, mocker):
-        """Test that cost command uses default instance from config."""
-        import datetime
-
-        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
-        mock_ec2_instance = mocker.patch("remote.instance.get_ec2_client")
-        mock_get_instance_name = mocker.patch(
-            "remote.instance.get_instance_name", return_value="default-instance"
-        )
-
-        launch_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)
-
-        instance_response = {
-            "Reservations": [
-                {
-                    "Instances": [
-                        {
-                            "InstanceId": "i-0123456789abcdef0",
-                            "InstanceType": "t3.micro",
-                            "State": {"Name": "running", "Code": 16},
-                            "LaunchTime": launch_time,
-                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
-                            "Tags": [{"Key": "Name", "Value": "default-instance"}],
-                        }
-                    ]
-                }
-            ]
-        }
-
-        mock_ec2.return_value.describe_instances.return_value = instance_response
-        mock_ec2_instance.return_value.describe_instances.return_value = instance_response
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [
+            {
+                "Reservations": [
+                    {
+                        "Instances": [
+                            {
+                                "InstanceId": "i-0123456789abcdef0",
+                                "InstanceType": "t3.micro",
+                                "State": {"Name": "running", "Code": 16},
+                                "LaunchTime": launch_time,
+                                "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                                "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
         mocker.patch(
             "remote.instance.get_instance_price_with_fallback", return_value=(0.0104, False)
         )
 
-        result = runner.invoke(app, ["cost"])
+        result = runner.invoke(app, ["list", "-c"])
 
         assert result.exit_code == 0
-        mock_get_instance_name.assert_called_once()
-        assert "default-instance" in result.stdout
+        assert "Uptime" in result.stdout
+        assert "$/hr" in result.stdout
+        assert "Est. Cost" in result.stdout
 
-    def test_cost_handles_instance_not_found(self, mocker):
-        """Test that cost command handles instance not found error."""
-        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+    def test_list_hides_cost_columns_by_default(self, mocker):
+        """Test that cost columns are not shown by default (without --cost flag)."""
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [{"Reservations": []}]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
-        mock_ec2.return_value.describe_instances.return_value = {"Reservations": []}
+        result = runner.invoke(app, ["list"])
 
-        result = runner.invoke(app, ["cost", "nonexistent-instance"])
+        assert result.exit_code == 0
+        assert "Uptime" not in result.stdout
+        assert "$/hr" not in result.stdout
+        assert "Est. Cost" not in result.stdout
 
-        assert result.exit_code == 1
-        assert "not found" in result.stdout
+    def test_list_cost_shows_uptime_and_estimated_cost(self, mocker):
+        """Test that cost flag shows actual uptime and calculated estimated cost."""
+        import datetime
+
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+
+        # Instance running for 2 hours
+        launch_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=2)
+
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [
+            {
+                "Reservations": [
+                    {
+                        "Instances": [
+                            {
+                                "InstanceId": "i-0123456789abcdef0",
+                                "InstanceType": "t3.micro",
+                                "State": {"Name": "running", "Code": 16},
+                                "LaunchTime": launch_time,
+                                "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                                "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        # Mock $0.01/hr pricing
+        mocker.patch("remote.instance.get_instance_price_with_fallback", return_value=(0.01, False))
+
+        result = runner.invoke(app, ["list", "--cost"])
+
+        assert result.exit_code == 0
+        # Check uptime is shown (approximately 2h)
+        assert "2h" in result.stdout
+        # Check hourly rate is shown
+        assert "$0.01" in result.stdout
+        # Check estimated cost (2 hours * $0.01 = $0.02)
+        assert "$0.02" in result.stdout
+
+    def test_list_cost_handles_stopped_instance(self, mocker):
+        """Test that cost flag shows dash for stopped instances."""
+
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [
+            {
+                "Reservations": [
+                    {
+                        "Instances": [
+                            {
+                                "InstanceId": "i-0123456789abcdef0",
+                                "InstanceType": "t3.micro",
+                                "State": {"Name": "stopped", "Code": 80},
+                                "PublicDnsName": "",
+                                "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        result = runner.invoke(app, ["list", "--cost"])
+
+        assert result.exit_code == 0
+        # Stopped instances should show dash for uptime and cost
+        assert "stopped" in result.stdout
+
+    def test_list_cost_handles_unavailable_pricing(self, mocker):
+        """Test that cost flag handles unavailable pricing gracefully."""
+        import datetime
+
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+
+        launch_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)
+
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [
+            {
+                "Reservations": [
+                    {
+                        "Instances": [
+                            {
+                                "InstanceId": "i-0123456789abcdef0",
+                                "InstanceType": "t3.micro",
+                                "State": {"Name": "running", "Code": 16},
+                                "LaunchTime": launch_time,
+                                "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                                "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        # Mock pricing to return None
+        mocker.patch("remote.instance.get_instance_price_with_fallback", return_value=(None, False))
+
+        result = runner.invoke(app, ["list", "--cost"])
+
+        assert result.exit_code == 0
+        # Should show "-" for unavailable pricing
+        assert "-" in result.stdout
+
+    def test_list_cost_does_not_call_pricing_without_flag(self, mocker):
+        """Test that pricing API is not called without --cost flag."""
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+        mock_paginator = mocker.MagicMock()
+        mock_paginator.paginate.return_value = [{"Reservations": []}]
+        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+        mock_get_price = mocker.patch("remote.instance.get_instance_price_with_fallback")
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 0
+        mock_get_price.assert_not_called()
 
 
 class TestFormatUptime:
@@ -1567,70 +1531,77 @@ class TestFormatUptime:
         assert _format_uptime(-100) == "-"
 
 
-class TestGetInstanceDetails:
-    """Tests for the _get_instance_details helper function."""
+class TestGetRawLaunchTimes:
+    """Tests for the _get_raw_launch_times helper function."""
 
-    def test_get_instance_details_returns_correct_data(self, mocker):
-        """Test that _get_instance_details returns correct instance information."""
+    def test_get_raw_launch_times_for_running_instance(self):
+        """Test that running instances return their launch time."""
         import datetime
 
-        from remote.instance import _get_instance_details
-
-        mock_ec2 = mocker.patch("remote.instance.get_ec2_client")
+        from remote.instance import _get_raw_launch_times
 
         launch_time = datetime.datetime(2024, 1, 15, 10, 30, 0, tzinfo=datetime.timezone.utc)
 
-        mock_ec2.return_value.describe_instances.return_value = {
-            "Reservations": [
-                {
-                    "Instances": [
-                        {
-                            "InstanceId": "i-0123456789abcdef0",
-                            "InstanceType": "t3.large",
-                            "State": {"Name": "running", "Code": 16},
-                            "LaunchTime": launch_time,
-                            "Tags": [{"Key": "Name", "Value": "my-instance"}],
-                        }
-                    ]
-                }
-            ]
-        }
+        instances = [
+            {
+                "Instances": [
+                    {
+                        "InstanceId": "i-0123456789abcdef0",
+                        "State": {"Name": "running", "Code": 16},
+                        "LaunchTime": launch_time,
+                        "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                    }
+                ]
+            }
+        ]
 
-        result = _get_instance_details("i-0123456789abcdef0")
+        result = _get_raw_launch_times(instances)
 
-        assert result["instance_id"] == "i-0123456789abcdef0"
-        assert result["instance_type"] == "t3.large"
-        assert result["state"] == "running"
-        assert result["name"] == "my-instance"
-        assert result["launch_time"] == launch_time
-        assert result["uptime_seconds"] is not None
-        assert result["uptime_seconds"] > 0
+        assert len(result) == 1
+        assert result[0] == launch_time
 
-    def test_get_instance_details_handles_no_reservations(self, mocker):
-        """Test that _get_instance_details raises error for no reservations."""
-        from remote.exceptions import InstanceNotFoundError
-        from remote.instance import _get_instance_details
+    def test_get_raw_launch_times_for_stopped_instance(self):
+        """Test that stopped instances return None for launch time."""
+        from remote.instance import _get_raw_launch_times
 
-        mock_ec2 = mocker.patch("remote.instance.get_ec2_client")
+        instances = [
+            {
+                "Instances": [
+                    {
+                        "InstanceId": "i-0123456789abcdef0",
+                        "State": {"Name": "stopped", "Code": 80},
+                        "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                    }
+                ]
+            }
+        ]
 
-        mock_ec2.return_value.describe_instances.return_value = {"Reservations": []}
+        result = _get_raw_launch_times(instances)
 
-        with pytest.raises(InstanceNotFoundError):
-            _get_instance_details("i-nonexistent")
+        assert len(result) == 1
+        assert result[0] is None
 
-    def test_get_instance_details_handles_aws_error(self, mocker):
-        """Test that _get_instance_details handles AWS client errors."""
-        from botocore.exceptions import ClientError
+    def test_get_raw_launch_times_skips_nameless_instances(self):
+        """Test that instances without Name tag are skipped."""
+        import datetime
 
-        from remote.exceptions import InstanceNotFoundError
-        from remote.instance import _get_instance_details
+        from remote.instance import _get_raw_launch_times
 
-        mock_ec2 = mocker.patch("remote.instance.get_ec2_client")
+        launch_time = datetime.datetime(2024, 1, 15, 10, 30, 0, tzinfo=datetime.timezone.utc)
 
-        error_response = {"Error": {"Code": "InvalidInstanceID.NotFound", "Message": "Not found"}}
-        mock_ec2.return_value.describe_instances.side_effect = ClientError(
-            error_response, "describe_instances"
-        )
+        instances = [
+            {
+                "Instances": [
+                    {
+                        "InstanceId": "i-0123456789abcdef0",
+                        "State": {"Name": "running", "Code": 16},
+                        "LaunchTime": launch_time,
+                        "Tags": [],  # No Name tag
+                    }
+                ]
+            }
+        ]
 
-        with pytest.raises(InstanceNotFoundError):
-            _get_instance_details("i-invalid")
+        result = _get_raw_launch_times(instances)
+
+        assert len(result) == 0
