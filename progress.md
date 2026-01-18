@@ -862,3 +862,31 @@ The function calculated monthly cost estimates from hourly prices, but the actua
 
 ---
 
+## 2026-01-18: Extract duplicate exception handling in `ConfigManager` to helper method
+
+**File:** `remote/config.py`
+
+**Issue:** The `ConfigManager` class had duplicate exception handling blocks in two methods:
+- `get_instance_name()` (lines 255-264)
+- `get_value()` (lines 285-290)
+
+Both methods contained identical exception handling code:
+```python
+except (configparser.Error, OSError, PermissionError) as e:
+    typer.secho(f"Warning: Could not read config file: {e}", fg=typer.colors.YELLOW)
+except (KeyError, TypeError, AttributeError):
+    typer.secho("Warning: Config file structure is invalid", fg=typer.colors.YELLOW)
+except ValueError as e:
+    typer.secho(f"Warning: Config validation error: {e}", fg=typer.colors.YELLOW)
+```
+
+This duplication meant any changes to error handling would need to be made in multiple places.
+
+**Changes:**
+- Added new helper method `_handle_config_error(self, error: Exception)` that centralizes the error handling logic
+- Updated `get_instance_name()` to catch all config-related exceptions in a single except clause and delegate to the helper
+- Updated `get_value()` to use the same pattern
+- Reduced code duplication by ~12 lines
+
+---
+
