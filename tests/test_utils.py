@@ -262,6 +262,32 @@ def test_get_instance_ids(mock_ec2_instances):
     assert result == ["i-0123456789abcdef0", "i-0123456789abcdef1"]
 
 
+def test_get_instance_ids_filters_instances_without_name_tag():
+    """Instances without a Name tag should be excluded (matches get_instance_info behavior)."""
+    instances = [
+        {
+            "Instances": [
+                {
+                    "InstanceId": "i-with-name",
+                    "Tags": [{"Key": "Name", "Value": "named-instance"}],
+                },
+                {
+                    "InstanceId": "i-no-name-tag",
+                    "Tags": [{"Key": "Environment", "Value": "test"}],
+                },
+                {
+                    "InstanceId": "i-no-tags",
+                    # No Tags key at all
+                },
+            ]
+        }
+    ]
+
+    result = get_instance_ids(instances)
+
+    assert result == ["i-with-name"]
+
+
 def test_is_instance_running_true(mocker):
     mock_get_instance_status = mocker.patch("remote.utils.get_instance_status")
     mock_get_instance_status.return_value = {
