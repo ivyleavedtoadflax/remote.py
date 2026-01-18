@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-01-18
+
+### Added
+- Built-in watch mode for status command (`--watch` / `-w` flag)
+- Scheduled instance shutdown (`remote instance stop --in 3h`)
+- Auto-stop on start (`remote instance start --stop-in 2h`)
+- Cost information in instance list (`--cost` / `-c` flag)
+- AWS API contract validation tests for response format verification
+
+### Fixed
+- Fixed pricing lookup for EU regions (incorrect location names)
+- Fixed Rich Panel expanding to full terminal width
+
+### Changed
+- Standardized console output styles across all commands
+- Clarified distinction between `instance ls` and `instance status`
+
 ## [1.0.0] - 2026-01-18
 
 ### Breaking Changes
