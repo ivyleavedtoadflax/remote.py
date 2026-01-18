@@ -13,9 +13,10 @@
 8. Update spec file status to COMPLETED
 9. Atomic commit with descriptive messages
 10. Push to branch
-11. Create a PR
-12. Merge to main
-13. Quit
+11. Fix any high priority security issues
+12. Create a PR
+13. Merge to main
+14. Quit
 
 ## Recommended Order
 
