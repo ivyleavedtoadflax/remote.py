@@ -101,34 +101,6 @@ def validate_volume_id(volume_id: str) -> str:
     return volume_id
 
 
-def validate_snapshot_id(snapshot_id: str) -> str:
-    """Validate EBS snapshot ID format.
-
-    Args:
-        snapshot_id: The snapshot ID to validate
-
-    Returns:
-        The validated snapshot ID
-
-    Raises:
-        InvalidInputError: If snapshot ID format is invalid
-    """
-    if not snapshot_id:
-        raise InvalidInputError("snapshot_id", "", "snap-xxxxxxxxx")
-
-    # Snapshot IDs should match pattern: snap-[0-9a-f]{8,17}
-    pattern = r"^snap-[0-9a-f]{8,17}$"
-    if not re.match(pattern, snapshot_id, re.IGNORECASE):
-        raise InvalidInputError(
-            "snapshot_id",
-            snapshot_id,
-            "snap-xxxxxxxxx (where x is alphanumeric)",
-            "Snapshot IDs start with 'snap-' followed by 8-17 alphanumeric characters",
-        )
-
-    return snapshot_id
-
-
 def validate_positive_integer(value: Any, parameter_name: str, max_value: int | None = None) -> int:
     """Validate that a value is a positive integer.
 

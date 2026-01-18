@@ -12,7 +12,6 @@ from remote.validation import (
     validate_aws_response_structure,
     validate_instance_id,
     validate_instance_name,
-    validate_snapshot_id,
     validate_volume_id,
 )
 
@@ -185,37 +184,6 @@ class TestValidateVolumeId:
             validate_volume_id("invalid-volume-id")
 
         assert exc_info.value.parameter_name == "volume_id"
-
-
-class TestValidateSnapshotId:
-    """Test snapshot ID validation function."""
-
-    def test_valid_snapshot_ids(self):
-        """Should accept valid snapshot ID formats."""
-        valid_ids = [
-            "snap-12345678",
-            "snap-1234567890abcdef0",
-            "snap-abcdef1234567890",
-        ]
-
-        for snapshot_id in valid_ids:
-            result = validate_snapshot_id(snapshot_id)
-            assert result == snapshot_id
-
-    def test_empty_snapshot_id(self):
-        """Should raise InvalidInputError for empty snapshot ID."""
-        with pytest.raises(InvalidInputError) as exc_info:
-            validate_snapshot_id("")
-
-        assert exc_info.value.parameter_name == "snapshot_id"
-        assert exc_info.value.expected_format == "snap-xxxxxxxxx"
-
-    def test_invalid_snapshot_id_format(self):
-        """Should raise InvalidInputError for invalid snapshot ID format."""
-        with pytest.raises(InvalidInputError) as exc_info:
-            validate_snapshot_id("invalid-snapshot-id")
-
-        assert exc_info.value.parameter_name == "snapshot_id"
 
 
 class TestValidateArrayIndex:
