@@ -80,4 +80,4 @@ Features and improvements for future releases.
 | 26 | 43 | Fix Rich Panel width globally | Panels expand to full terminal width; audit all Panel usage and set expand=False | [issue-43](./issue-43-panel-width-fix.md) | COMPLETED |
 | 27 | 44 | Validate tests against real API formats | Mocked tests can pass while real API fails; add validation against actual AWS response formats | [issue-44](./issue-44-test-api-validation.md) | COMPLETED |
 | 28 | 45 | v1.1.0 release preparation | Update changelog, version bump, final testing | [issue-45](./issue-45-v1.1-release-preparation.md) | COMPLETED |
-| 29 | 46 | Improve connect behavior for stopped instances | Add flags to control auto-start behavior; handle non-TTY gracefully | [GitHub #73](https://github.com/ivyleavedtoadflax/remote.py-sandbox/issues/73) | TODO |
+| 29 | 46 | Improve connect behavior for stopped instances | Add flags to control auto-start behavior; handle non-TTY gracefully | [GitHub #73](https://github.com/ivyleavedtoadflax/remote.py-sandbox/issues/73) | COMPLETED |
