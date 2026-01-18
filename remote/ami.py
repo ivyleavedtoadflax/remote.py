@@ -1,23 +1,17 @@
-import random
-import string
-
 import typer
-from rich.panel import Panel
 from rich.table import Table
 
-from remote.config import config_manager
-from remote.exceptions import AWSServiceError, ResourceNotFoundError, ValidationError
+from remote.exceptions import AWSServiceError, ResourceNotFoundError
 from remote.utils import (
     console,
     get_account_id,
     get_ec2_client,
     get_instance_id,
     get_instance_name,
-    get_launch_template_id,
     get_launch_template_versions,
     get_launch_templates,
+    launch_instance_from_template,
 )
-from remote.validation import safe_get_array_item, validate_array_index
 
 app = typer.Typer()
 
@@ -176,123 +170,7 @@ def launch(
         remote ami launch --launch-template my-template      # Use specific template
         remote ami launch --name my-server --launch-template my-template
     """
-
-    # Variables to track launch template details
-    launch_template_name: str = ""
-    launch_template_id: str = ""
-
-    # Check for default template from config if not specified
-    if not launch_template:
-        default_template = config_manager.get_value("default_launch_template")
-        if default_template:
-            typer.secho(f"Using default template: {default_template}", fg=typer.colors.YELLOW)
-            launch_template = default_template
-
-    # if no launch template is specified, list all the launch templates
-    if not launch_template:
-        typer.secho("Please specify a launch template", fg=typer.colors.RED)
-        typer.secho("Available launch templates:", fg=typer.colors.YELLOW)
-        templates = get_launch_templates()
-
-        if not templates:
-            typer.secho("No launch templates found", fg=typer.colors.RED)
-            raise typer.Exit(1)
-
-        # Display templates
-        table = Table(title="Launch Templates")
-        table.add_column("Number", justify="right")
-        table.add_column("LaunchTemplateId", style="green")
-        table.add_column("LaunchTemplateName", style="cyan")
-        table.add_column("Version", justify="right")
-
-        for i, template in enumerate(templates, 1):
-            table.add_row(
-                str(i),
-                template["LaunchTemplateId"],
-                template["LaunchTemplateName"],
-                str(template["LatestVersionNumber"]),
-            )
-
-        console.print(table)
-
-        typer.secho("Select a launch template by number", fg=typer.colors.YELLOW)
-        launch_template_number = typer.prompt("Launch template", type=str)
-        # Validate user input and safely access array
-        try:
-            template_index = validate_array_index(
-                launch_template_number, len(templates), "launch templates"
-            )
-            selected_template = templates[template_index]
-        except ValidationError as e:
-            typer.secho(f"Error: {e}", fg=typer.colors.RED)
-            raise typer.Exit(1)
-        launch_template_name = str(selected_template["LaunchTemplateName"])
-        launch_template_id = str(selected_template["LaunchTemplateId"])
-
-        typer.secho(f"Launch template {launch_template_name} selected", fg=typer.colors.YELLOW)
-        typer.secho(
-            f"Defaulting to latest version: {selected_template['LatestVersionNumber']}",
-            fg=typer.colors.YELLOW,
-        )
-        typer.secho(f"Launching instance based on launch template {launch_template_name}")
-    else:
-        # launch template name was provided, get the ID and set variables
-        launch_template_name = launch_template
-        launch_template_id = get_launch_template_id(launch_template)
-
-    # if no name is specified, ask the user for the name
-    if not name:
-        random_string = "".join(random.choices(string.ascii_letters + string.digits, k=6))
-        name_suggestion = launch_template_name + "-" + random_string
-        name = typer.prompt(
-            "Please enter a name for the instance", type=str, default=name_suggestion
-        )
-
-    # Launch the instance with the specified launch template, version, and name
-    instance = get_ec2_client().run_instances(
-        LaunchTemplate={"LaunchTemplateId": launch_template_id, "Version": version},
-        MaxCount=1,
-        MinCount=1,
-        TagSpecifications=[
-            {
-                "ResourceType": "instance",
-                "Tags": [
-                    {"Key": "Name", "Value": name},
-                ],
-            },
-        ],
-    )
-
-    # Safely access the launched instance ID
-    try:
-        instances = instance.get("Instances", [])
-        if not instances:
-            typer.secho(
-                "Warning: No instance information returned from launch", fg=typer.colors.YELLOW
-            )
-            return
-
-        launched_instance = safe_get_array_item(instances, 0, "launched instances")
-        instance_id = launched_instance.get("InstanceId", "unknown")
-        instance_type = launched_instance.get("InstanceType", "unknown")
-
-        # Display launch summary as Rich panel
-        summary_lines = [
-            f"[cyan]Instance ID:[/cyan] {instance_id}",
-            f"[cyan]Name:[/cyan]        {name}",
-            f"[cyan]Template:[/cyan]    {launch_template_name}",
-            f"[cyan]Type:[/cyan]        {instance_type}",
-        ]
-        panel = Panel(
-            "\n".join(summary_lines),
-            title="[green]Instance Launched[/green]",
-            border_style="green",
-            expand=False,
-        )
-        console.print(panel)
-    except ValidationError as e:
-        typer.secho(f"Error accessing launch result: {e}", fg=typer.colors.RED)
-        raise typer.Exit(1)
+    launch_instance_from_template(name=name, launch_template=launch_template, version=version)
 
 
 @app.command("template-versions")

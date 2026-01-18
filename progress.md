@@ -523,3 +523,40 @@ This is problematic because:
 
 This makes the error handling explicit and specific to the documented exceptions, consistent with the refactor in PR #48 which addressed similar issues in `ami.py`.
 
+---
+
+## 2026-01-18: Extract duplicated `launch()` logic into shared utility function
+
+**Files:** `remote/utils.py`, `remote/ami.py`, `remote/instance.py`, `tests/test_ami.py`
+
+**Issue:** The `launch()` function was duplicated nearly identically (~130 lines) in both `remote/ami.py` (lines 162-296) and `remote/instance.py` (lines 916-1050). This was identified as the highest priority code smell during codebase analysis.
+
+Both modules had identical logic for:
+1. Checking default template from config
+2. Interactive template selection with table display
+3. User input validation for template number
+4. Name suggestion with random string generation
+5. Instance launch via `run_instances()` API
+6. Result display with Rich panel
+
+The only differences were:
+- Docstring examples (different command names)
+- Minor whitespace/comment differences
+
+This duplication violated DRY (Don't Repeat Yourself) and meant any bug fix or feature change needed to be made in two places.
+
+**Changes:**
+- Added new shared function `launch_instance_from_template()` in `remote/utils.py` containing all the common launch logic
+- Added necessary imports to `remote/utils.py`: `random`, `string`, `Panel`, `Table`, `validate_array_index`
+- Simplified `launch()` in `remote/ami.py` to a thin wrapper (from ~135 lines to ~15 lines) calling the shared function
+- Simplified `launch()` in `remote/instance.py` to a thin wrapper (from ~135 lines to ~15 lines) calling the shared function
+- Removed unused imports from `ami.py`: `random`, `string`, `Panel`, `config_manager`, `get_launch_template_id`, `ValidationError`, `safe_get_array_item`, `validate_array_index`
+- Removed unused imports from `instance.py`: `random`, `string`, `get_launch_template_id`, `get_launch_templates`, `validate_array_index`
+- Updated test mocks in `tests/test_ami.py` to patch `remote.utils` and `remote.config` instead of `remote.ami`
+
+**Impact:**
+- ~130 lines of duplicated code removed
+- Single source of truth for launch logic
+- Easier maintenance - changes only needed in one place
+- All 405 tests pass
+
