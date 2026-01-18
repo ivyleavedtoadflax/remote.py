@@ -24,6 +24,7 @@ from remote.pricing import (
     get_instance_price_with_fallback,
 )
 from remote.utils import (
+    console,
     format_duration,
     get_ec2_client,
     get_instance_dns,
@@ -42,7 +43,6 @@ from remote.utils import (
 from remote.validation import safe_get_array_item, safe_get_nested_value, validate_array_index
 
 app = typer.Typer()
-console = Console(force_terminal=True, width=200)
 
 
 def _get_status_style(status: str) -> str:

@@ -3,13 +3,13 @@ import string
 from typing import Any
 
 import typer
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
 from remote.config import config_manager
 from remote.exceptions import ResourceNotFoundError, ValidationError
 from remote.utils import (
+    console,
     get_account_id,
     get_ec2_client,
     get_instance_id,
@@ -21,7 +21,6 @@ from remote.utils import (
 from remote.validation import safe_get_array_item, validate_array_index
 
 app = typer.Typer()
-console = Console(force_terminal=True, width=200)
 
 
 @app.command()
