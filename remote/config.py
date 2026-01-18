@@ -134,10 +134,7 @@ class RemoteConfig(BaseSettings):
         Returns:
             RemoteConfig instance with validated configuration
         """
-        if config_path is None:
-            config_path = Settings.get_config_path()
-        else:
-            config_path = Path(config_path)
+        config_path = Settings.get_config_path() if config_path is None else Path(config_path)
 
         # Load INI file if it exists
         ini_values: dict[str, Any] = {}
@@ -176,10 +173,7 @@ class ConfigValidationResult(BaseModel):
         Returns:
             ConfigValidationResult with validation status and messages
         """
-        if config_path is None:
-            config_path = Settings.get_config_path()
-        else:
-            config_path = Path(config_path)
+        config_path = Settings.get_config_path() if config_path is None else Path(config_path)
 
         errors: list[str] = []
         warnings: list[str] = []
