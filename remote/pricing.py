@@ -202,32 +202,6 @@ def format_price(price: float | None, prefix: str = "$") -> str:
     return f"{prefix}{price:.2f}"
 
 
-def get_instance_pricing_info(instance_type: str, region: str | None = None) -> dict[str, Any]:
-    """Get comprehensive pricing information for an instance type.
-
-    Uses region fallback to us-east-1 if the specified region is not
-    in the region-to-location mapping.
-
-    Args:
-        instance_type: The EC2 instance type
-        region: AWS region code. If None, uses the current session region.
-
-    Returns:
-        Dictionary with 'hourly', 'monthly', formatted strings, and
-        'fallback_used' indicating if us-east-1 pricing was used as fallback.
-    """
-    hourly, fallback_used = get_instance_price_with_fallback(instance_type, region)
-    monthly = get_monthly_estimate(hourly)
-
-    return {
-        "hourly": hourly,
-        "monthly": monthly,
-        "hourly_formatted": format_price(hourly),
-        "monthly_formatted": format_price(monthly),
-        "fallback_used": fallback_used,
-    }
-
-
 def clear_price_cache() -> None:
     """Clear the pricing cache.
 

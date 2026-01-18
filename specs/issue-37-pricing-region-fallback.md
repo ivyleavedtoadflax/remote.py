@@ -23,8 +23,6 @@ Add fallback logic to the pricing module so that when pricing for a specific reg
    - If the region is not in `REGION_TO_LOCATION`, falls back to us-east-1
    - Returns a tuple of (price, used_fallback) to indicate if fallback was used
 
-2. Update `get_instance_pricing_info()` to use the new function and include fallback indicator
-
 ### Example Implementation
 
 ```python
@@ -57,7 +55,6 @@ def get_instance_price_with_fallback(
 ## Acceptance Criteria
 
 - [x] Add `get_instance_price_with_fallback()` function
-- [x] Update `get_instance_pricing_info()` to include `fallback_used` field
 - [x] Add tests for regions not in mapping falling back to us-east-1
 - [x] Add tests verifying fallback indicator is correctly set
 - [x] Update instance list command to use fallback pricing
