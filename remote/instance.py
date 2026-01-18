@@ -18,7 +18,11 @@ from remote.exceptions import (
     ResourceNotFoundError,
     ValidationError,
 )
-from remote.pricing import format_price, get_instance_price, get_monthly_estimate
+from remote.pricing import (
+    format_price,
+    get_instance_price_with_fallback,
+    get_monthly_estimate,
+)
 from remote.utils import (
     get_ec2_client,
     get_instance_dns,
@@ -101,7 +105,7 @@ def list_instances(
         ]
 
         if not no_pricing:
-            hourly_price = get_instance_price(it) if it else None
+            hourly_price, _ = get_instance_price_with_fallback(it) if it else (None, False)
             monthly_price = get_monthly_estimate(hourly_price)
             row_data.append(format_price(hourly_price))
             row_data.append(format_price(monthly_price))
