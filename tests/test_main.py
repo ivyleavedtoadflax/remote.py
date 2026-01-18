@@ -20,7 +20,7 @@ def test_main_app_imports():
     # Test that the main app structure exists
     from remote.__main__ import app as main_app
 
-    # The main app is its own Typer instance with instance commands copied to root
+    # The main app has only service subcommands registered (no root-level instance commands)
     assert main_app is not None
 
     # Test that the app has commands and groups registered
@@ -91,14 +91,19 @@ def test_ecs_subcommand_exists():
     assert "ecs" in result.stdout.lower()
 
 
-def test_default_instance_commands_work():
-    """Test that instance commands work as default commands."""
-    # Test that we can call instance commands directly without 'instance' prefix
+def test_root_level_does_not_have_instance_commands():
+    """Test that instance commands are NOT available at root level (breaking change v1.0.0)."""
     result = runner.invoke(app, ["--help"])
 
     assert result.exit_code == 0
-    # Should see instance commands in the main help
-    assert "list" in result.stdout or "List" in result.stdout
+    # Root help should only show service subcommands, not individual instance commands
+    # Should see subcommand names
+    assert "instance" in result.stdout.lower()
+    assert "ami" in result.stdout.lower()
+    # Should NOT see individual instance commands at root
+    assert "start" not in result.stdout.lower() or "start" in "not started"
+    assert "stop" not in result.stdout.lower()
+    assert "connect" not in result.stdout.lower()
 
 
 def test_instance_subcommand_exists():
@@ -114,16 +119,13 @@ def test_instance_subcommand_exists():
     assert "connect" in result.stdout.lower()
 
 
-def test_both_command_paths_show_same_commands():
-    """Test that root and instance subcommand show same instance commands."""
-    root_help = runner.invoke(app, ["--help"])
+def test_instance_commands_require_prefix():
+    """Test that instance commands require the 'instance' prefix."""
     instance_help = runner.invoke(app, ["instance", "--help"])
 
-    assert root_help.exit_code == 0
     assert instance_help.exit_code == 0
 
-    # Both should show instance commands
+    # Instance subcommand should show all instance commands
     instance_commands = ["list", "start", "stop", "connect", "status", "launch", "terminate"]
     for cmd in instance_commands:
-        assert cmd in root_help.stdout.lower(), f"'{cmd}' not found in root help"
         assert cmd in instance_help.stdout.lower(), f"'{cmd}' not found in instance help"
