@@ -421,45 +421,6 @@ def is_instance_running(instance_id: str) -> bool | None:
         return None
 
 
-def is_instance_stopped(instance_id: str) -> bool | None:
-    """Returns True if the instance is stopped, False if not, None if unknown.
-
-    Args:
-        instance_id: The instance ID to check
-
-    Returns:
-        True if stopped, False if not stopped, None if status unknown
-
-    Raises:
-        AWSServiceError: If AWS API call fails
-    """
-    # Validate input
-    instance_id = validate_instance_id(instance_id)
-
-    try:
-        status = get_instance_status(instance_id)
-
-        # Handle case where InstanceStatuses is empty
-        instance_statuses = status.get("InstanceStatuses", [])
-        if not instance_statuses:
-            return None  # Status unknown
-
-        # Safely access the state information
-        first_status = safe_get_array_item(instance_statuses, 0, "instance statuses")
-        instance_state = first_status.get("InstanceState", {})
-        state_name = instance_state.get("Name", "unknown")
-
-        return bool(state_name == "stopped")
-
-    except (AWSServiceError, ResourceNotFoundError, ValidationError):
-        # Re-raise specific errors
-        raise
-    except (KeyError, TypeError, AttributeError) as e:
-        # For data structure errors, log and return None
-        console.print(f"[yellow]Warning: Unexpected instance status structure: {e}[/yellow]")
-        return None
-
-
 def get_instance_type(instance_id: str) -> str:
     """Returns the instance type of the instance.
 

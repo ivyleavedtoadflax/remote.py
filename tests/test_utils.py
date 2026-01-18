@@ -27,7 +27,6 @@ from remote.utils import (
     get_volume_ids,
     get_volume_name,
     is_instance_running,
-    is_instance_stopped,
     parse_duration_to_minutes,
 )
 
@@ -292,28 +291,6 @@ def test_is_instance_running_no_status(mocker):
     mock_get_instance_status.return_value = {"InstanceStatuses": []}
 
     result = is_instance_running("i-0123456789abcdef0")
-
-    assert result is False
-
-
-def test_is_instance_stopped_true(mocker):
-    mock_get_instance_status = mocker.patch("remote.utils.get_instance_status")
-    mock_get_instance_status.return_value = {
-        "InstanceStatuses": [{"InstanceState": {"Name": "stopped"}}]
-    }
-
-    result = is_instance_stopped("i-0123456789abcdef0")
-
-    assert result is True
-
-
-def test_is_instance_stopped_false(mocker):
-    mock_get_instance_status = mocker.patch("remote.utils.get_instance_status")
-    mock_get_instance_status.return_value = {
-        "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
-    }
-
-    result = is_instance_stopped("i-0123456789abcdef0")
 
     assert result is False
 
