@@ -219,7 +219,135 @@ class TestLaunchTemplateUtilities:
         assert "specific-instance is not in running state" in result.stdout
 
 
-# Removed duplicate - moved to TestInstanceStatusCommand class above
+class TestStatusWatchMode:
+    """Test the watch mode functionality for the status command."""
+
+    def test_should_reject_interval_less_than_one(self, mocker):
+        """Should exit with error when interval is less than 1."""
+        mocker.patch("remote.instance.get_instance_name", return_value="test-instance")
+        mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+
+        result = runner.invoke(app, ["status", "--watch", "--interval", "0"])
+
+        assert result.exit_code == 1
+        assert "Interval must be at least 1 second" in result.stdout
+
+    def test_should_accept_watch_flag(self, mocker):
+        """Should accept the --watch flag and enter watch mode."""
+        mocker.patch("remote.instance.get_instance_name", return_value="test-instance")
+        mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+
+        # Mock _watch_status to avoid actually entering the infinite loop
+        mock_watch = mocker.patch("remote.instance._watch_status")
+
+        result = runner.invoke(app, ["status", "--watch"])
+
+        assert result.exit_code == 0
+        mock_watch.assert_called_once_with("test-instance", "i-0123456789abcdef0", 2)
+
+    def test_should_accept_short_watch_flag(self, mocker):
+        """Should accept the -w short flag for watch mode."""
+        mocker.patch("remote.instance.get_instance_name", return_value="test-instance")
+        mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+
+        mock_watch = mocker.patch("remote.instance._watch_status")
+
+        result = runner.invoke(app, ["status", "-w"])
+
+        assert result.exit_code == 0
+        mock_watch.assert_called_once()
+
+    def test_should_accept_custom_interval(self, mocker):
+        """Should accept custom interval via --interval flag."""
+        mocker.patch("remote.instance.get_instance_name", return_value="test-instance")
+        mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+
+        mock_watch = mocker.patch("remote.instance._watch_status")
+
+        result = runner.invoke(app, ["status", "--watch", "--interval", "5"])
+
+        assert result.exit_code == 0
+        mock_watch.assert_called_once_with("test-instance", "i-0123456789abcdef0", 5)
+
+    def test_should_accept_short_interval_flag(self, mocker):
+        """Should accept -i short flag for interval."""
+        mocker.patch("remote.instance.get_instance_name", return_value="test-instance")
+        mocker.patch("remote.instance.get_instance_id", return_value="i-0123456789abcdef0")
+
+        mock_watch = mocker.patch("remote.instance._watch_status")
+
+        result = runner.invoke(app, ["status", "-w", "-i", "10"])
+
+        assert result.exit_code == 0
+        mock_watch.assert_called_once_with("test-instance", "i-0123456789abcdef0", 10)
+
+
+class TestBuildStatusTable:
+    """Test the _build_status_table helper function."""
+
+    def test_should_return_table_for_running_instance(self, mocker):
+        """Should return a Rich Table for a running instance."""
+        from rich.table import Table
+
+        from remote.instance import _build_status_table
+
+        mocker.patch(
+            "remote.instance.get_instance_status",
+            return_value={
+                "InstanceStatuses": [
+                    {
+                        "InstanceId": "i-0123456789abcdef0",
+                        "InstanceState": {"Name": "running"},
+                        "SystemStatus": {"Status": "ok"},
+                        "InstanceStatus": {"Status": "ok", "Details": [{"Status": "passed"}]},
+                    }
+                ]
+            },
+        )
+
+        result = _build_status_table("test-instance", "i-0123456789abcdef0")
+
+        assert isinstance(result, Table)
+
+    def test_should_return_error_string_for_non_running_instance(self, mocker):
+        """Should return an error string when instance is not running."""
+        from remote.instance import _build_status_table
+
+        mocker.patch(
+            "remote.instance.get_instance_status",
+            return_value={"InstanceStatuses": []},
+        )
+
+        result = _build_status_table("test-instance", "i-0123456789abcdef0")
+
+        assert isinstance(result, str)
+        assert "not in running state" in result
+
+
+class TestWatchStatusFunction:
+    """Test the _watch_status function."""
+
+    def test_should_handle_keyboard_interrupt(self, mocker):
+        """Should handle Ctrl+C gracefully."""
+        from remote.instance import _watch_status
+
+        # Mock time.sleep to raise KeyboardInterrupt
+        mocker.patch("remote.instance.time.sleep", side_effect=KeyboardInterrupt)
+
+        # Mock _build_status_table to return a simple string
+        mocker.patch("remote.instance._build_status_table", return_value="test")
+
+        # Mock Console and Live
+        mocker.patch("remote.instance.Console")
+        mock_live = mocker.patch("remote.instance.Live")
+        mock_live.return_value.__enter__ = mocker.Mock(return_value=mock_live.return_value)
+        mock_live.return_value.__exit__ = mocker.Mock(return_value=False)
+
+        # Should not raise, should exit gracefully
+        _watch_status("test-instance", "i-0123456789abcdef0", 2)
+
+        # Verify the function tried to update at least once
+        mock_live.return_value.update.assert_called()
 
 
 def test_start_instance_already_running(mocker):
