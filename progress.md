@@ -90,3 +90,23 @@ The loop index `_i` was never used in the function body. The underscore prefix c
 **Changes:**
 - Changed from `for _i, reservation in enumerate(instances):` to `for reservation in instances:`
 - Removes dead code and improves clarity by eliminating unused variable
+
+---
+
+## 2026-01-18: Remove unused `drop_nameless` parameter from `get_instance_info()`
+
+**File:** `remote/utils.py`
+
+**Issue:** The `get_instance_info()` function had an unused parameter `drop_nameless: bool = False`:
+1. The parameter was defined in the function signature and documented in the docstring
+2. However, the function body always skips instances without a Name tag (lines 336-338), regardless of the parameter value
+3. No callers in the codebase ever passed this parameter
+
+The parameter was misleading because:
+- Default value `False` implied nameless instances would be included by default
+- But the actual behavior always excluded them (as if `drop_nameless=True`)
+
+**Changes:**
+- Removed the `drop_nameless` parameter from the function signature
+- Removed the parameter documentation from the docstring
+- Added a "Note" section to the docstring clarifying that instances without a Name tag are automatically excluded
