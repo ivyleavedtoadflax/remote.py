@@ -1,0 +1,41 @@
+"""Test fixtures for remote.py tests."""
+
+from tests.fixtures.aws_api_contracts import (
+    EC2_INSTANCE_STATE_CODES,
+    REGION_TO_LOCATION_EXPECTED,
+    VALID_AMI_STATES,
+    VALID_AWS_PRICING_LOCATIONS,
+    VALID_CAPACITY_STATUS,
+    VALID_EBS_SNAPSHOT_STATES,
+    VALID_EBS_VOLUME_STATES,
+    VALID_EC2_INSTANCE_STATES,
+    VALID_EC2_PRICING_FILTER_FIELDS,
+    VALID_ECS_SERVICE_STATUSES,
+    VALID_INSTANCE_TYPE_PREFIXES,
+    VALID_OPERATING_SYSTEMS,
+    VALID_PRE_INSTALLED_SW,
+    VALID_TENANCIES,
+    validate_ec2_instance_state,
+    validate_pricing_location,
+    validate_region_to_location_mapping,
+)
+
+__all__ = [
+    "EC2_INSTANCE_STATE_CODES",
+    "REGION_TO_LOCATION_EXPECTED",
+    "VALID_AMI_STATES",
+    "VALID_AWS_PRICING_LOCATIONS",
+    "VALID_CAPACITY_STATUS",
+    "VALID_EBS_SNAPSHOT_STATES",
+    "VALID_EBS_VOLUME_STATES",
+    "VALID_EC2_INSTANCE_STATES",
+    "VALID_EC2_PRICING_FILTER_FIELDS",
+    "VALID_ECS_SERVICE_STATUSES",
+    "VALID_INSTANCE_TYPE_PREFIXES",
+    "VALID_OPERATING_SYSTEMS",
+    "VALID_PRE_INSTALLED_SW",
+    "VALID_TENANCIES",
+    "validate_ec2_instance_state",
+    "validate_pricing_location",
+    "validate_region_to_location_mapping",
+]

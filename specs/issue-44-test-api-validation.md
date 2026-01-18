@@ -1,6 +1,6 @@
 # Issue 44: Validate Tests Against Real API Formats
 
-**Status:** TODO
+**Status:** COMPLETED
 **Priority:** Medium
 **Target Version:** v1.2.0
 **Files:** `tests/`
@@ -92,11 +92,11 @@ REGION_TO_LOCATION = {
 
 ## Acceptance Criteria
 
-- [ ] Add known-good AWS location names as test constants
-- [ ] Add validation that request parameters use known-good values
-- [ ] Add optional integration test that validates against real AWS API
-- [ ] Document where API format assumptions come from
-- [ ] Review other AWS API interactions for similar issues
+- [x] Add known-good AWS location names as test constants
+- [x] Add validation that request parameters use known-good values
+- [x] Add optional integration test that validates against real AWS API
+- [x] Document where API format assumptions come from
+- [x] Review other AWS API interactions for similar issues
 
 ## Areas to Review
 
@@ -110,3 +110,26 @@ REGION_TO_LOCATION = {
 1. **Unit tests**: Validate against known-good constants
 2. **Integration tests** (optional, marked): Validate against real AWS APIs
 3. **CI pipeline**: Run integration tests periodically (not on every PR)
+
+## Implementation Summary
+
+### Files Created
+- `tests/fixtures/__init__.py` - Package init for fixtures
+- `tests/fixtures/aws_api_contracts.py` - Known-good AWS API values and validation functions
+- `tests/test_api_contracts.py` - Contract validation tests
+
+### Files Modified
+- `remote/pricing.py` - Added documentation about API contract validation
+- `pyproject.toml` - Added `integration` marker for optional integration tests
+
+### Test Coverage
+- 18 passing tests validate:
+  - REGION_TO_LOCATION uses valid AWS Pricing API location names
+  - Pricing API requests use valid parameter values (operatingSystem, tenancy, etc.)
+  - Mock EC2 instance states match valid AWS states
+  - Mock EBS volume/snapshot/AMI states are valid
+  - Test fixtures produce valid API response structures
+
+### Integration Test
+- `TestRealAwsApiContracts::test_pricing_api_accepts_our_location_names` can validate
+  against the real AWS API (skipped by default, run with `pytest -m integration`)

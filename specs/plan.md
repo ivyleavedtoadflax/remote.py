@@ -78,5 +78,5 @@ Features and improvements for future releases.
 | 24 | 41 | Fix instance cost integration | Cost not displaying, panel too wide, integrate into `instance ls` instead of separate command | [issue-41](./issue-41-instance-cost-fixes.md) | COMPLETED |
 | 25 | 42 | Clarify instance ls vs status | Evaluate overlap between commands; ensure distinct purposes or consolidate | [issue-42](./issue-42-ls-vs-status.md) | COMPLETED |
 | 26 | 43 | Fix Rich Panel width globally | Panels expand to full terminal width; audit all Panel usage and set expand=False | [issue-43](./issue-43-panel-width-fix.md) | COMPLETED |
-| 27 | 44 | Validate tests against real API formats | Mocked tests can pass while real API fails; add validation against actual AWS response formats | [issue-44](./issue-44-test-api-validation.md) | TODO |
+| 27 | 44 | Validate tests against real API formats | Mocked tests can pass while real API fails; add validation against actual AWS response formats | [issue-44](./issue-44-test-api-validation.md) | COMPLETED |
 | 28 | 45 | v1.1.0 release preparation | Update changelog, version bump, final testing | [issue-45](./issue-45-v1.1-release-preparation.md) | TODO |

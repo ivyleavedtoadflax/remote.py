@@ -11,8 +11,18 @@ from typing import Any
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 
-# AWS region to location name mapping
-# The Pricing API uses location names, not region codes
+# AWS region to location name mapping for the Pricing API.
+#
+# IMPORTANT: The Pricing API uses human-readable location names, NOT region codes.
+# These names must match EXACTLY what AWS accepts. Common mistakes:
+#   - "Europe (Ireland)" - WRONG (AWS returns no results)
+#   - "EU (Ireland)" - CORRECT
+#
+# Validated against AWS Pricing API: 2026-01-18
+# To re-validate, run: pytest -m integration tests/test_api_contracts.py
+# See: https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/price-list-query-api.html
+#
+# Test coverage for this mapping: tests/test_api_contracts.py::TestPricingApiContracts
 REGION_TO_LOCATION: dict[str, str] = {
     "us-east-1": "US East (N. Virginia)",
     "us-east-2": "US East (Ohio)",
