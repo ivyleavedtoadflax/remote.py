@@ -101,13 +101,16 @@ def list_instances(
     ),
 ) -> None:
     """
-    List all EC2 instances.
+    List all EC2 instances with summary info.
 
-    Displays a table with instance name, ID, public DNS, status, type, and launch time.
-    Use --cost to include pricing and cost information (may be slower due to pricing API).
+    Shows a summary table of all instances. Use 'instance status' for detailed
+    health information about a specific instance.
+
+    Columns: Name, ID, DNS, Status, Type, Launch Time
+    With --cost: adds Uptime, Hourly Rate, Estimated Cost
 
     Examples:
-        remote instance ls              # List instances
+        remote instance ls              # List all instances
         remote instance ls --cost       # Include cost information
     """
     instances = get_instances()
@@ -178,57 +181,119 @@ def list_instances(
     console.print(table)
 
 
-def _build_status_table(instance_name: str, instance_id: str) -> Table | str:
-    """Build a Rich Table with instance status information.
+def _build_status_table(instance_name: str, instance_id: str) -> Panel | str:
+    """Build a Rich Panel with detailed instance status information.
 
-    Returns a Table on success, or an error message string if the instance
-    is not in a running state or if there's an error.
+    Returns a Panel on success, or an error message string if there's an error.
+    Shows both health status and instance details.
     """
     try:
+        # Get instance health status
         status = get_instance_status(instance_id)
-
         instance_statuses = status.get("InstanceStatuses", [])
-        if not instance_statuses:
-            return f"{instance_name} is not in running state"
 
-        # Safely access the first status
-        first_status = safe_get_array_item(instance_statuses, 0, "instance statuses")
+        # Get detailed instance info
+        ec2 = get_ec2_client()
+        instance_info = ec2.describe_instances(InstanceIds=[instance_id])
+        reservations = instance_info.get("Reservations", [])
 
-        # Safely extract nested values with defaults
-        instance_id_value = first_status.get("InstanceId", "unknown")
-        state_name = safe_get_nested_value(first_status, ["InstanceState", "Name"], "unknown")
-        system_status = safe_get_nested_value(first_status, ["SystemStatus", "Status"], "unknown")
-        instance_status = safe_get_nested_value(
-            first_status, ["InstanceStatus", "Status"], "unknown"
-        )
+        if not reservations:
+            return f"Instance {instance_name} not found"
 
-        # Safely access details array
-        details = safe_get_nested_value(first_status, ["InstanceStatus", "Details"], [])
-        reachability = "unknown"
-        if details:
-            first_detail = safe_get_array_item(details, 0, "status details", {"Status": "unknown"})
-            reachability = first_detail.get("Status", "unknown")
+        reservation = safe_get_array_item(reservations, 0, "instance reservations")
+        instances = reservation.get("Instances", [])
+        if not instances:
+            return f"Instance {instance_name} not found"
 
-        # Build table using rich
-        table = Table(title="Instance Status")
-        table.add_column("Name", style="cyan")
-        table.add_column("InstanceId", style="green")
-        table.add_column("InstanceState")
-        table.add_column("SystemStatus")
-        table.add_column("InstanceStatus")
-        table.add_column("Reachability")
+        instance = safe_get_array_item(instances, 0, "instances")
 
+        # Extract instance details
+        state_info = instance.get("State", {})
+        state_name = state_info.get("Name", "unknown")
+        instance_type = instance.get("InstanceType", "unknown")
+        public_ip = instance.get("PublicIpAddress", "-")
+        private_ip = instance.get("PrivateIpAddress", "-")
+        public_dns = instance.get("PublicDnsName", "-") or "-"
+        key_name = instance.get("KeyName", "-")
+        launch_time = instance.get("LaunchTime")
+        az = instance.get("Placement", {}).get("AvailabilityZone", "-")
+
+        # Get security groups
+        security_groups = instance.get("SecurityGroups", [])
+        sg_names = [sg.get("GroupName", "") for sg in security_groups]
+        sg_display = ", ".join(sg_names) if sg_names else "-"
+
+        # Get tags (excluding Name)
+        tags = instance.get("Tags", [])
+        tag_dict = {t["Key"]: t["Value"] for t in tags}
+        other_tags = {k: v for k, v in tag_dict.items() if k != "Name"}
+
+        # Format launch time
+        launch_time_str = "-"
+        if launch_time:
+            launch_time_str = launch_time.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+        # Get health status if running
+        system_status = "-"
+        instance_status_str = "-"
+        reachability = "-"
+
+        if instance_statuses:
+            first_status = safe_get_array_item(instance_statuses, 0, "instance statuses")
+            system_status = safe_get_nested_value(first_status, ["SystemStatus", "Status"], "-")
+            instance_status_str = safe_get_nested_value(
+                first_status, ["InstanceStatus", "Status"], "-"
+            )
+            details = safe_get_nested_value(first_status, ["InstanceStatus", "Details"], [])
+            if details:
+                first_detail = safe_get_array_item(details, 0, "status details", {"Status": "-"})
+                reachability = first_detail.get("Status", "-")
+
+        # Build output lines
         state_style = _get_status_style(state_name)
-        table.add_row(
-            instance_name or "",
-            instance_id_value,
-            f"[{state_style}]{state_name}[/{state_style}]",
-            system_status,
-            instance_status,
-            reachability,
-        )
+        lines = [
+            f"[cyan]Instance ID:[/cyan]    {instance_id}",
+            f"[cyan]Name:[/cyan]           {instance_name}",
+            f"[cyan]State:[/cyan]          [{state_style}]{state_name}[/{state_style}]",
+            f"[cyan]Type:[/cyan]           {instance_type}",
+            f"[cyan]AZ:[/cyan]             {az}",
+            "",
+            "[bold]Network[/bold]",
+            f"[cyan]Public IP:[/cyan]      {public_ip}",
+            f"[cyan]Private IP:[/cyan]     {private_ip}",
+            f"[cyan]Public DNS:[/cyan]     {public_dns}",
+            "",
+            "[bold]Configuration[/bold]",
+            f"[cyan]Key Pair:[/cyan]       {key_name}",
+            f"[cyan]Security Groups:[/cyan] {sg_display}",
+            f"[cyan]Launch Time:[/cyan]    {launch_time_str}",
+        ]
 
-        return table
+        # Add health section if instance is running
+        if state_name == "running":
+            lines.extend(
+                [
+                    "",
+                    "[bold]Health Status[/bold]",
+                    f"[cyan]System Status:[/cyan]   {system_status}",
+                    f"[cyan]Instance Status:[/cyan] {instance_status_str}",
+                    f"[cyan]Reachability:[/cyan]   {reachability}",
+                ]
+            )
+
+        # Add tags if present
+        if other_tags:
+            lines.extend(["", "[bold]Tags[/bold]"])
+            for key, value in other_tags.items():
+                lines.append(f"[cyan]{key}:[/cyan] {value}")
+
+        panel = Panel(
+            "\n".join(lines),
+            title="[bold]Instance Details[/bold]",
+            border_style="blue",
+        )
+        return panel
+
     except (InstanceNotFoundError, ResourceNotFoundError) as e:
         return f"Error: {e}"
     except AWSServiceError as e:
@@ -262,14 +327,15 @@ def status(
     ] = 2,
 ) -> None:
     """
-    Get detailed status of an instance.
+    Show detailed information about a specific instance.
 
-    Shows instance state, system status, and reachability information.
-    Uses the default instance from config if no name is provided.
+    Displays comprehensive instance details including network configuration,
+    security groups, key pair, tags, and health status. Use 'instance ls'
+    for a summary of all instances.
 
     Examples:
-        remote instance status                  # Show default instance status
-        remote instance status my-server        # Show specific instance status
+        remote instance status                  # Show default instance details
+        remote instance status my-server        # Show specific instance details
         remote instance status --watch          # Watch status continuously
         remote instance status -w -i 5          # Watch with 5 second interval
     """
@@ -286,11 +352,8 @@ def status(
         if watch:
             _watch_status(instance_name, instance_id, interval)
         else:
-            typer.secho(
-                f"Getting status of {instance_name} ({instance_id})", fg=typer.colors.YELLOW
-            )
             result = _build_status_table(instance_name, instance_id)
-            if isinstance(result, Table):
+            if isinstance(result, Panel):
                 console.print(result)
             else:
                 typer.secho(result, fg=typer.colors.RED)
