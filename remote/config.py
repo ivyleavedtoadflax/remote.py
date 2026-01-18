@@ -15,7 +15,7 @@ from remote.settings import Settings
 from remote.utils import get_instance_ids, get_instance_info, get_instances
 
 app = typer.Typer()
-console = Console(force_terminal=True, width=200)
+console = Console(force_terminal=True)
 
 # Valid configuration keys with descriptions
 VALID_KEYS: dict[str, str] = {
@@ -586,22 +586,16 @@ def validate(
     for warning in result.warnings:
         output_lines.append(f"[yellow]⚠ WARNING:[/yellow] {warning}")
 
-    # Determine status
+    # Determine status and border style
     if not result.is_valid:
-        status = "[red]Status: Invalid - errors must be fixed[/red]"
+        output_lines.append("[red]✗ Configuration is invalid[/red]")
         border_style = "red"
     elif result.warnings:
-        status = "[yellow]Status: Has warnings but usable[/yellow]"
+        output_lines.append("[yellow]⚠ Configuration has warnings[/yellow]")
         border_style = "yellow"
     else:
-        output_lines.append("[green]✓ All checks passed[/green]")
-        status = "[green]Status: Valid[/green]"
+        output_lines.append("[green]✓ Configuration is valid[/green]")
         border_style = "green"
-
-    # Add status line
-    if output_lines:
-        output_lines.append("")
-    output_lines.append(status)
 
     # Display as Rich panel
     panel_content = "\n".join(output_lines)
