@@ -668,3 +668,24 @@ This makes the code consistent with other exit calls in the codebase and explici
 
 ---
 
+## 2026-01-18: Standardize ConfigParser variable naming in `config.py`
+
+**File:** `remote/config.py`
+
+**Issue:** Inconsistent variable naming for `configparser.ConfigParser` objects throughout the file:
+- Some functions used `cfg`: `read_config()`, `write_config()`, `show()`, `get_value()`, `unset_value()`
+- Other functions used `config`: `ConfigManager.set_value()`, `ConfigManager.get_value()`, `init()`
+
+This inconsistency made the code harder to follow and violated the principle of uniform naming conventions.
+
+**Changes:**
+- Renamed `cfg` to `config` in `read_config()` function (lines 346-349)
+- Changed `write_config()` parameter from `cfg` to `config` (line 360)
+- Renamed `cfg` to `config` in `show()` command (line 378)
+- Renamed `cfg` to `config` in `get_value()` command (line 493)
+- Renamed `cfg` to `config` in `unset_value()` command (lines 513, 515, 519, 520)
+
+This standardizes on `config` as the variable name throughout the file, which is more descriptive and consistent with the ConfigManager class methods.
+
+---
+

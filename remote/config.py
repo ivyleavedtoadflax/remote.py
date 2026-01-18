@@ -343,10 +343,10 @@ CONFIG_PATH = str(Settings.get_config_path())
 
 
 def read_config(config_path: str) -> configparser.ConfigParser:
-    cfg = configparser.ConfigParser()
-    cfg.read(config_path)
+    config = configparser.ConfigParser()
+    config.read(config_path)
 
-    return cfg
+    return config
 
 
 def create_config_dir(config_path: str) -> None:
@@ -357,13 +357,13 @@ def create_config_dir(config_path: str) -> None:
         typer.secho(f"Created config directory: {os.path.dirname(config_path)}", fg="green")
 
 
-def write_config(cfg: configparser.ConfigParser, config_path: str) -> configparser.ConfigParser:
+def write_config(config: configparser.ConfigParser, config_path: str) -> configparser.ConfigParser:
     create_config_dir(config_path)
 
     with open(config_path, "w") as configfile:
-        cfg.write(configfile)
+        config.write(configfile)
 
-    return cfg
+    return config
 
 
 @app.command()
@@ -375,8 +375,8 @@ def show(config_path: str = typer.Option(CONFIG_PATH, "--config", "-c")) -> None
     """
 
     # Print out the config file
-    cfg = read_config(config_path=config_path)
-    default_section = cfg["DEFAULT"]
+    config = read_config(config_path=config_path)
+    default_section = config["DEFAULT"]
 
     # Format table using rich
     table = Table(title="Configuration")
@@ -490,8 +490,8 @@ def get_value(
         INSTANCE=$(remote config get instance_name)
     """
     # Reload config with specified path
-    cfg = read_config(config_path)
-    value = cfg.get("DEFAULT", key, fallback=None)
+    config = read_config(config_path)
+    value = config.get("DEFAULT", key, fallback=None)
 
     if value is None:
         raise typer.Exit(1)
@@ -510,14 +510,14 @@ def unset_value(
     Examples:
         remote config unset ssh_key_path
     """
-    cfg = read_config(config_path)
+    config = read_config(config_path)
 
-    if "DEFAULT" not in cfg or key not in cfg["DEFAULT"]:
+    if "DEFAULT" not in config or key not in config["DEFAULT"]:
         typer.secho(f"Key '{key}' not found in config", fg=typer.colors.YELLOW)
         raise typer.Exit(1)
 
-    cfg.remove_option("DEFAULT", key)
-    write_config(cfg, config_path)
+    config.remove_option("DEFAULT", key)
+    write_config(config, config_path)
     typer.secho(f"Removed {key}", fg=typer.colors.GREEN)
 
 
