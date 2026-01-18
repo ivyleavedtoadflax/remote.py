@@ -225,3 +225,20 @@ This inconsistency could cause different output formatting in `config.py` comman
 
 **Changes:**
 - Changed line 18 from `Console(force_terminal=True)` to `Console(force_terminal=True, width=200)`
+
+---
+
+## 2026-01-18: Remove unused `is_instance_stopped()` function
+
+**File:** `remote/utils.py`
+
+**Issue:** The `is_instance_stopped()` function (lines 424-460) was defined but never called anywhere in the production codebase:
+1. The function checked if an EC2 instance was in "stopped" state
+2. It was only referenced in test files (`tests/test_utils.py`)
+3. No production code in the `remote/` directory ever called this function
+4. The similar function `is_instance_running()` is actively used, but `is_instance_stopped()` was dead code
+
+**Changes:**
+- Removed the `is_instance_stopped()` function from `remote/utils.py`
+- Removed the import of `is_instance_stopped` from `tests/test_utils.py`
+- Removed the two associated test functions `test_is_instance_stopped_true()` and `test_is_instance_stopped_false()` from `tests/test_utils.py`
