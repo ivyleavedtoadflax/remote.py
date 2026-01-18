@@ -1,6 +1,6 @@
 # Issue 42: Clarify instance ls vs status Commands
 
-**Status:** TODO
+**Status:** COMPLETED
 **Priority:** Low
 **Target Version:** v1.2.0
 **Files:** `remotepy/instance.py`
@@ -35,9 +35,29 @@ There is potential overlap between `instance ls` and `instance status` commands.
 
 ## Acceptance Criteria
 
-- [ ] Audit current output of both commands
-- [ ] Document the distinct purpose of each command
-- [ ] Ensure minimal overlap in default output
-- [ ] Update help text to clarify when to use each
-- [ ] Consider if `status` should show more detail than `ls` (or vice versa)
-- [ ] Consolidate if redundant, or differentiate if both are useful
+- [x] Audit current output of both commands
+- [x] Document the distinct purpose of each command
+- [x] Ensure minimal overlap in default output
+- [x] Update help text to clarify when to use each
+- [x] Consider if `status` should show more detail than `ls` (or vice versa)
+- [x] Consolidate if redundant, or differentiate if both are useful
+
+## Implementation Summary
+
+The commands were already serving distinct purposes, but the distinction has been enhanced:
+
+**`instance ls`** - Summary/list view:
+- Lists ALL instances in a table format
+- Shows: Name, ID, DNS, Status, Type, Launch Time
+- Optional `--cost` flag adds: Uptime, $/hr, Estimated Cost
+- Use case: "What instances do I have?"
+
+**`instance status`** - Detail view of ONE instance:
+- Shows comprehensive details about a specific instance
+- Network: Public/Private IP, DNS
+- Configuration: Key Pair, Security Groups, Launch Time, AZ
+- Health Status (for running instances): System Status, Instance Status, Reachability
+- Tags: All tags (except Name)
+- Use case: "Tell me everything about this instance"
+
+Help text updated to clearly indicate when to use each command and cross-reference the other command.

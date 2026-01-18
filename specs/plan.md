@@ -75,5 +75,5 @@ Features and improvements for future releases.
 | 21 | 38 | Instance cost command | Add command to show estimated cost of instance based on uptime | [issue-38](./issue-38-instance-cost-command.md) | COMPLETED |
 | 22 | 39 | Scheduled instance shutdown | Schedule instance to stop after specified duration (e.g., "3 hours") | [issue-39](./issue-39-scheduled-shutdown.md) | COMPLETED |
 | 23 | 40 | Standardize console output styles | Align all command output to match `config show` style for consistency | [issue-40](./issue-40-console-output-consistency.md) | COMPLETED |
-| 24 | 41 | Fix instance cost integration | Cost not displaying, panel too wide, integrate into `instance ls` instead of separate command | [issue-41](./issue-41-instance-cost-fixes.md) | TODO |
-| 25 | 42 | Clarify instance ls vs status | Evaluate overlap between commands; ensure distinct purposes or consolidate | [issue-42](./issue-42-ls-vs-status.md) | TODO |
+| 24 | 41 | Fix instance cost integration | Cost not displaying, panel too wide, integrate into `instance ls` instead of separate command | [issue-41](./issue-41-instance-cost-fixes.md) | COMPLETED |
+| 25 | 42 | Clarify instance ls vs status | Evaluate overlap between commands; ensure distinct purposes or consolidate | [issue-42](./issue-42-ls-vs-status.md) | COMPLETED |

@@ -140,6 +140,28 @@ class TestLaunchTemplateUtilities:
                 ]
             },
         )
+        # Mock EC2 client for describe_instances call
+        mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+        mock_ec2_client.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running"},
+                            "InstanceType": "t2.micro",
+                            "PublicIpAddress": "1.2.3.4",
+                            "PrivateIpAddress": "10.0.0.1",
+                            "PublicDnsName": "ec2-1-2-3-4.compute-1.amazonaws.com",
+                            "KeyName": "my-key",
+                            "Placement": {"AvailabilityZone": "us-east-1a"},
+                            "SecurityGroups": [{"GroupName": "default"}],
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
 
         result = runner.invoke(app, ["status"])
 
@@ -154,19 +176,45 @@ class TestLaunchTemplateUtilities:
         # Verify status information is displayed
         assert "test-instance" in result.stdout
         assert "running" in result.stdout
+        # Verify detailed info is shown
+        assert "t2.micro" in result.stdout
+        assert "1.2.3.4" in result.stdout
 
-    def test_should_report_non_running_instance_status(self, mocker):
-        """Should report when instance exists but is not in running state."""
+    def test_should_show_stopped_instance_details(self, mocker):
+        """Should display details for stopped instances (without health status)."""
         mock_get_instance_id = mocker.patch(
             "remote.instance.get_instance_id", return_value="i-0123456789abcdef0"
         )
         mocker.patch("remote.instance.get_instance_status", return_value={"InstanceStatuses": []})
+        # Mock EC2 client for describe_instances call
+        mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+        mock_ec2_client.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "stopped"},
+                            "InstanceType": "t2.micro",
+                            "PrivateIpAddress": "10.0.0.1",
+                            "KeyName": "my-key",
+                            "Placement": {"AvailabilityZone": "us-east-1a"},
+                            "SecurityGroups": [{"GroupName": "default"}],
+                            "Tags": [{"Key": "Name", "Value": "specific-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
 
         result = runner.invoke(app, ["status", "specific-instance"])
 
         assert result.exit_code == 0
         mock_get_instance_id.assert_called_once_with("specific-instance")
-        assert "specific-instance is not in running state" in result.stdout
+        # Verify basic info is displayed
+        assert "specific-instance" in result.stdout
+        assert "stopped" in result.stdout
+        assert "t2.micro" in result.stdout
 
 
 class TestStatusWatchMode:
@@ -235,9 +283,9 @@ class TestStatusWatchMode:
 class TestBuildStatusTable:
     """Test the _build_status_table helper function."""
 
-    def test_should_return_table_for_running_instance(self, mocker):
-        """Should return a Rich Table for a running instance."""
-        from rich.table import Table
+    def test_should_return_panel_for_running_instance(self, mocker):
+        """Should return a Rich Panel for a running instance."""
+        from rich.panel import Panel
 
         from remote.instance import _build_status_table
 
@@ -254,24 +302,85 @@ class TestBuildStatusTable:
                 ]
             },
         )
+        # Mock EC2 client for describe_instances call
+        mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+        mock_ec2_client.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running"},
+                            "InstanceType": "t2.micro",
+                            "PublicIpAddress": "1.2.3.4",
+                            "PrivateIpAddress": "10.0.0.1",
+                            "PublicDnsName": "ec2-1-2-3-4.compute-1.amazonaws.com",
+                            "KeyName": "my-key",
+                            "Placement": {"AvailabilityZone": "us-east-1a"},
+                            "SecurityGroups": [{"GroupName": "default"}],
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
 
         result = _build_status_table("test-instance", "i-0123456789abcdef0")
 
-        assert isinstance(result, Table)
+        assert isinstance(result, Panel)
 
-    def test_should_return_error_string_for_non_running_instance(self, mocker):
-        """Should return an error string when instance is not running."""
+    def test_should_return_panel_for_stopped_instance(self, mocker):
+        """Should return a Panel for stopped instances (without health section)."""
+        from rich.panel import Panel
+
         from remote.instance import _build_status_table
 
         mocker.patch(
             "remote.instance.get_instance_status",
             return_value={"InstanceStatuses": []},
         )
+        # Mock EC2 client for describe_instances call
+        mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+        mock_ec2_client.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "stopped"},
+                            "InstanceType": "t2.micro",
+                            "PrivateIpAddress": "10.0.0.1",
+                            "KeyName": "my-key",
+                            "Placement": {"AvailabilityZone": "us-east-1a"},
+                            "SecurityGroups": [{"GroupName": "default"}],
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+
+        result = _build_status_table("test-instance", "i-0123456789abcdef0")
+
+        # Should still return a Panel with basic info (just no health section)
+        assert isinstance(result, Panel)
+
+    def test_should_return_error_string_for_not_found_instance(self, mocker):
+        """Should return an error string when instance is not found."""
+        from remote.instance import _build_status_table
+
+        mocker.patch(
+            "remote.instance.get_instance_status",
+            return_value={"InstanceStatuses": []},
+        )
+        # Mock EC2 client returning empty reservations
+        mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+        mock_ec2_client.return_value.describe_instances.return_value = {"Reservations": []}
 
         result = _build_status_table("test-instance", "i-0123456789abcdef0")
 
         assert isinstance(result, str)
-        assert "not in running state" in result
+        assert "not found" in result
 
 
 class TestWatchStatusFunction:
