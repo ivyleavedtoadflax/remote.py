@@ -1,6 +1,6 @@
 # Issue 30: Remove Root-Level Instance Commands (Breaking Change)
 
-**Status:** Not started
+**Status:** COMPLETED
 **Priority:** Low
 **Target Version:** v1.0.0
 **Files:** `remotepy/__main__.py`

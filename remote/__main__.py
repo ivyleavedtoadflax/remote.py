@@ -24,12 +24,6 @@ def version() -> None:
     typer.echo(importlib.metadata.version("remotepy"))
 
 
-# Copy instance commands to root level for backwards compatibility
-# This allows `remote start`, `remote stop`, etc. to work
-for command in instance_app.registered_commands:
-    if command.callback is not None:
-        app.command(command.name, help=command.callback.__doc__)(command.callback)
-
 # Register service subcommands
 app.add_typer(instance_app, name="instance", help="Manage EC2 instances")
 app.add_typer(ami_app, name="ami", help="Manage Amazon Machine Images")
