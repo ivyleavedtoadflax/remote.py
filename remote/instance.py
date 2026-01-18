@@ -51,6 +51,10 @@ CONNECTION_RETRY_SLEEP_SECONDS = 20
 MAX_CONNECTION_ATTEMPTS = 5
 SSH_READINESS_WAIT_SECONDS = 10
 
+# Instance type change polling constants
+TYPE_CHANGE_MAX_POLL_ATTEMPTS = 5
+TYPE_CHANGE_POLL_INTERVAL_SECONDS = 5
+
 app = typer.Typer()
 
 
@@ -876,11 +880,11 @@ def instance_type(
                     fg=typer.colors.YELLOW,
                 )
 
-                wait = 5
+                wait = TYPE_CHANGE_MAX_POLL_ATTEMPTS
 
                 with console.status("Confirming type change..."):
                     while wait > 0:
-                        time.sleep(5)
+                        time.sleep(TYPE_CHANGE_POLL_INTERVAL_SECONDS)
                         wait -= 1
 
                         if get_instance_type(instance_id) == new_type:
