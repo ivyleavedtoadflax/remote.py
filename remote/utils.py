@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, cast
@@ -746,3 +747,63 @@ def get_launch_template_id(launch_template_name: str) -> str:
         error_code = e.response["Error"]["Code"]
         error_message = e.response["Error"]["Message"]
         raise AWSServiceError("EC2", "describe_launch_templates", error_code, error_message)
+
+
+def parse_duration_to_minutes(duration_str: str) -> int:
+    """Parse duration string like '3h', '30m', '1h30m' into minutes.
+
+    Args:
+        duration_str: A duration string in format like '3h', '30m', '1h30m', '2h15m'
+
+    Returns:
+        Total duration in minutes
+
+    Raises:
+        ValidationError: If the duration format is invalid or results in 0 minutes
+    """
+    if not duration_str or not duration_str.strip():
+        raise ValidationError("Duration cannot be empty")
+
+    duration_str = duration_str.strip().lower()
+
+    # Pattern matches: optional hours (Nh) followed by optional minutes (Nm)
+    pattern = r"^(?:(\d+)h)?(?:(\d+)m)?$"
+    match = re.fullmatch(pattern, duration_str)
+
+    if not match or not any(match.groups()):
+        raise ValidationError(
+            f"Invalid duration format: '{duration_str}'. Use formats like '3h', '30m', or '1h30m'"
+        )
+
+    hours = int(match.group(1) or 0)
+    minutes = int(match.group(2) or 0)
+
+    total_minutes = hours * 60 + minutes
+
+    if total_minutes <= 0:
+        raise ValidationError("Duration must be greater than 0 minutes")
+
+    return total_minutes
+
+
+def format_duration(minutes: int) -> str:
+    """Format minutes into a human-readable duration string.
+
+    Args:
+        minutes: Total duration in minutes
+
+    Returns:
+        Human-readable string like '2h 30m' or '45m'
+    """
+    if minutes <= 0:
+        return "0m"
+
+    hours = minutes // 60
+    remaining_minutes = minutes % 60
+
+    if hours > 0 and remaining_minutes > 0:
+        return f"{hours}h {remaining_minutes}m"
+    elif hours > 0:
+        return f"{hours}h"
+    else:
+        return f"{remaining_minutes}m"
