@@ -364,24 +364,25 @@ def get_instance_info(
 def get_instance_ids(instances: list[dict[str, Any]]) -> list[str]:
     """Returns a list of instance ids extracted from the output of get_instances().
 
+    Only includes instances that have a Name tag, to match the filtering behavior
+    of get_instance_info().
+
     Args:
         instances: List of reservation dictionaries from describe_instances()
 
     Returns:
-        List of instance IDs
-
-    Raises:
-        ValidationError: If any reservation has no instances
+        List of instance IDs (only for instances with Name tags)
     """
     instance_ids = []
 
     for reservation in instances:
         instances_list = reservation.get("Instances", [])
-        if not instances_list:
-            # Skip reservations with no instances instead of crashing
-            continue
 
-        instance_ids.append(instances_list[0]["InstanceId"])
+        for instance in instances_list:
+            # Only include instances with a Name tag (matches get_instance_info filtering)
+            tags = {k["Key"]: k["Value"] for k in instance.get("Tags", [])}
+            if tags and "Name" in tags:
+                instance_ids.append(instance["InstanceId"])
 
     return instance_ids
 

@@ -431,7 +431,7 @@ def add(
         table.add_column("Type")
 
         for i, (name, instance_id, it) in enumerate(
-            zip(names, ids, instance_types, strict=False), 1
+            zip(names, ids, instance_types, strict=True), 1
         ):
             table.add_row(str(i), name or "", instance_id, it or "")
 
