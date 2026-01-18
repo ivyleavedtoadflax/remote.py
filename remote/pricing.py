@@ -44,9 +44,6 @@ REGION_TO_LOCATION: dict[str, str] = {
     "ca-central-1": "Canada (Central)",
 }
 
-# Hours per month (for calculating monthly estimates)
-HOURS_PER_MONTH = 730
-
 
 @lru_cache(maxsize=1)
 def get_pricing_client() -> Any:
@@ -169,20 +166,6 @@ def get_instance_price_with_fallback(
 
     price = get_instance_price(instance_type, region)
     return (price, False)
-
-
-def get_monthly_estimate(hourly_price: float | None) -> float | None:
-    """Calculate monthly cost estimate from hourly price.
-
-    Args:
-        hourly_price: The hourly price in USD
-
-    Returns:
-        The estimated monthly cost in USD, or None if hourly_price is None
-    """
-    if hourly_price is None:
-        return None
-    return hourly_price * HOURS_PER_MONTH
 
 
 def format_price(price: float | None, prefix: str = "$") -> str:
