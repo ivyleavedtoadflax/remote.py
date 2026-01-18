@@ -381,3 +381,27 @@ This duplication meant any changes to console configuration would need to be mad
 
 **Note:** `remote/instance.py` still imports `Console` from `rich.console` because the `_watch_status` function creates a separate Console instance for its Live display functionality.
 
+---
+
+## 2026-01-18: Remove redundant Console creation in `_watch_status()`
+
+**File:** `remote/instance.py`
+
+**Issue:** The `_watch_status()` function created a new `Console()` instance on line 305:
+```python
+watch_console = Console()
+```
+
+This was redundant because:
+1. The module already imports `console` from `remote.utils` (centralized console instance)
+2. The local `watch_console` duplicated functionality already available
+3. This was noted as an exception in the previous refactor, but there's no reason not to reuse the shared console
+
+**Changes:**
+- Removed the `watch_console = Console()` line from `_watch_status()`
+- Changed `Live(console=watch_console, ...)` to `Live(console=console, ...)`
+- Changed `watch_console.print(...)` to `console.print(...)`
+- Removed the now-unused `from rich.console import Console` import
+
+This completes the console centralization refactor - all modules now use the shared `console` instance from `remote/utils.py`.
+

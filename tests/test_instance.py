@@ -442,8 +442,8 @@ class TestWatchStatusFunction:
         # Mock _build_status_table to return a simple string
         mocker.patch("remote.instance._build_status_table", return_value="test")
 
-        # Mock Console and Live
-        mocker.patch("remote.instance.Console")
+        # Mock console (imported from utils) and Live
+        mocker.patch("remote.instance.console")
         mock_live = mocker.patch("remote.instance.Live")
         mock_live.return_value.__enter__ = mocker.Mock(return_value=mock_live.return_value)
         mock_live.return_value.__exit__ = mocker.Mock(return_value=False)
