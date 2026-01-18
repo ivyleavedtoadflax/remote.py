@@ -202,3 +202,26 @@ Both parameters serve the same purpose: specifying a duration after which the in
 - Renamed parameter from `type` to `new_type` to avoid shadowing the built-in
 - Updated all references within the function body to use `new_type`
 - Changed the else branch's reassignment from `type = get_instance_type(...)` to `current_instance_type = get_instance_type(...)` to avoid confusion
+
+---
+
+## 2026-01-18: Add missing `width=200` to Console initialization in `config.py`
+
+**File:** `remote/config.py`
+
+**Issue:** The module-level `console` initialization on line 18 was inconsistent with all other modules:
+- `config.py` used: `Console(force_terminal=True)` (missing width)
+- All other modules used: `Console(force_terminal=True, width=200)`
+
+Affected modules with consistent pattern:
+- `utils.py:32`: `Console(force_terminal=True, width=200)`
+- `snapshot.py:13`: `Console(force_terminal=True, width=200)`
+- `ecs.py:30`: `Console(force_terminal=True, width=200)`
+- `volume.py:13`: `Console(force_terminal=True, width=200)`
+- `instance.py:44`: `Console(force_terminal=True, width=200)`
+- `ami.py:24`: `Console(force_terminal=True, width=200)`
+
+This inconsistency could cause different output formatting in `config.py` commands compared to other modules.
+
+**Changes:**
+- Changed line 18 from `Console(force_terminal=True)` to `Console(force_terminal=True, width=200)`
