@@ -1,4 +1,5 @@
 import subprocess
+import sys
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -374,37 +375,14 @@ def status(
         raise typer.Exit(1)
 
 
-@app.command()
-def start(
-    instance_name: str | None = typer.Argument(None, help="Instance name"),
-    stop_in: str | None = typer.Option(
-        None,
-        "--stop-in",
-        help="Automatically stop instance after duration (e.g., 2h, 30m). Schedules shutdown via SSH.",
-    ),
-) -> None:
-    """
-    Start an EC2 instance.
+def _start_instance(instance_name: str, stop_in_minutes: int | None = None) -> None:
+    """Internal function to start an instance.
 
-    Uses the default instance from config if no name is provided.
-
-    Examples:
-        remote instance start                   # Start instance
-        remote instance start --stop-in 2h      # Start and auto-stop in 2 hours
-        remote instance start --stop-in 30m     # Start and auto-stop in 30 minutes
+    Args:
+        instance_name: Name of the instance to start
+        stop_in_minutes: Optional number of minutes after which to schedule shutdown
     """
-    if not instance_name:
-        instance_name = get_instance_name()
     instance_id = get_instance_id(instance_name)
-
-    # Parse stop_in duration early to fail fast on invalid input
-    stop_in_minutes: int | None = None
-    if stop_in:
-        try:
-            stop_in_minutes = parse_duration_to_minutes(stop_in)
-        except ValidationError as e:
-            typer.secho(f"Error: {e}", fg=typer.colors.RED)
-            raise typer.Exit(1)
 
     if is_instance_running(instance_id):
         typer.secho(f"Instance {instance_name} is already running", fg=typer.colors.YELLOW)
@@ -461,6 +439,40 @@ def start(
     except NoCredentialsError:
         typer.secho("Error: AWS credentials not found or invalid", fg=typer.colors.RED)
         raise typer.Exit(1)
+
+
+@app.command()
+def start(
+    instance_name: str | None = typer.Argument(None, help="Instance name"),
+    stop_in: str | None = typer.Option(
+        None,
+        "--stop-in",
+        help="Automatically stop instance after duration (e.g., 2h, 30m). Schedules shutdown via SSH.",
+    ),
+) -> None:
+    """
+    Start an EC2 instance.
+
+    Uses the default instance from config if no name is provided.
+
+    Examples:
+        remote instance start                   # Start instance
+        remote instance start --stop-in 2h      # Start and auto-stop in 2 hours
+        remote instance start --stop-in 30m     # Start and auto-stop in 30 minutes
+    """
+    if not instance_name:
+        instance_name = get_instance_name()
+
+    # Parse stop_in duration early to fail fast on invalid input
+    stop_in_minutes: int | None = None
+    if stop_in:
+        try:
+            stop_in_minutes = parse_duration_to_minutes(stop_in)
+        except ValidationError as e:
+            typer.secho(f"Error: {e}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+    _start_instance(instance_name, stop_in_minutes)
 
 
 def _build_ssh_command(dns: str, key: str | None = None, user: str = "ubuntu") -> list[str]:
@@ -706,6 +718,16 @@ def connect(
         "--no-strict-host-key",
         help="Disable strict host key checking (less secure, use StrictHostKeyChecking=no)",
     ),
+    auto_start: bool = typer.Option(
+        False,
+        "--start",
+        help="Automatically start the instance if stopped (no prompt)",
+    ),
+    no_start: bool = typer.Option(
+        False,
+        "--no-start",
+        help="Fail immediately if instance is not running (no prompt)",
+    ),
 ) -> None:
     """
     Connect to an EC2 instance via SSH.
@@ -713,13 +735,22 @@ def connect(
     If the instance is not running, prompts to start it first.
     Uses the default instance from config if no name is provided.
 
+    Use --start to automatically start a stopped instance without prompting.
+    Use --no-start to fail immediately if the instance is not running.
+
     Examples:
         remote connect                           # Connect to default instance
         remote connect my-server                 # Connect to specific instance
         remote connect -u ec2-user               # Connect as ec2-user
         remote connect -p 8080:80                # With port forwarding
         remote connect -k ~/.ssh/my-key.pem     # With specific SSH key
+        remote connect --start                   # Auto-start if stopped
+        remote connect --no-start                # Fail if not running
     """
+    # Validate mutually exclusive options
+    if auto_start and no_start:
+        typer.secho("Error: --start and --no-start are mutually exclusive", fg=typer.colors.RED)
+        raise typer.Exit(1)
 
     if not instance_name:
         instance_name = get_instance_name()
@@ -727,26 +758,52 @@ def connect(
     sleep_duration = CONNECTION_RETRY_SLEEP_SECONDS
     instance_id = get_instance_id(instance_name)
 
-    # Check whether the instance is up, and if not prompt the user on whether
-    # to start it.
-
+    # Check whether the instance is up, and if not handle based on flags
     if not is_instance_running(instance_id):
         typer.secho(f"Instance {instance_name} is not running", fg=typer.colors.RED)
-        start_instance = typer.confirm(
-            "Do you want to start it?",
-            default=True,
-            abort=True,
-        )
 
-        if start_instance:
+        # Determine whether to start the instance
+        should_start = False
+
+        if no_start:
+            # --no-start: fail immediately
+            typer.secho(
+                "Use --start to automatically start the instance, or start it manually.",
+                fg=typer.colors.YELLOW,
+            )
+            raise typer.Exit(1)
+        elif auto_start:
+            # --start: auto-start without prompting
+            should_start = True
+        elif sys.stdin.isatty():
+            # Interactive: prompt user
+            try:
+                should_start = typer.confirm(
+                    "Do you want to start it?",
+                    default=True,
+                )
+                if not should_start:
+                    raise typer.Exit(0)
+            except (EOFError, KeyboardInterrupt):
+                # Handle Ctrl+C or EOF gracefully
+                typer.secho("\nAborted.", fg=typer.colors.YELLOW)
+                raise typer.Exit(1)
+        else:
+            # Non-interactive (not a TTY): fail with helpful message
+            typer.secho(
+                "Non-interactive mode: use --start to automatically start the instance.",
+                fg=typer.colors.YELLOW,
+            )
+            raise typer.Exit(1)
+
+        if should_start:
             # Try to start the instance, and exit if it fails
-
             while not is_instance_running(instance_id) and max_attempts > 0:
                 typer.secho(
-                    f"Instance {instance_name} is not running, trying to starting it...",
+                    f"Instance {instance_name} is not running, trying to start it...",
                     fg=typer.colors.YELLOW,
                 )
-                start(instance_name)
+                _start_instance(instance_name)
                 max_attempts -= 1
 
                 if max_attempts == 0:
@@ -758,14 +815,13 @@ def connect(
 
                 time.sleep(SSH_READINESS_WAIT_SECONDS)
 
-        # Wait a few seconds to give the instance time to initialize
+            # Wait a few seconds to give the instance time to initialize
+            typer.secho(
+                f"Waiting {sleep_duration} seconds to allow instance to initialize",
+                fg="yellow",
+            )
 
-        typer.secho(
-            f"Waiting {sleep_duration} seconds to allow instance to initialize",
-            fg="yellow",
-        )
-
-        time.sleep(sleep_duration)
+            time.sleep(sleep_duration)
 
     # Now connect to the instance
 
