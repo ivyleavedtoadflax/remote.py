@@ -944,3 +944,41 @@ This inconsistency meant:
 
 ---
 
+## 2026-01-18: Extract hardcoded time constants in `instance.py`
+
+**File:** `remote/instance.py`
+
+**Issue:** Multiple hardcoded magic numbers for time-related values were scattered throughout the file, making the code harder to understand and maintain:
+
+| Line | Magic Number | Purpose |
+|------|--------------|---------|
+| 165 | `3600` | Seconds per hour for uptime calculation |
+| 411 | `60` | Max wait time for instance startup |
+| 412 | `5` | Poll interval during startup wait |
+| 710 | `20` | Sleep duration between connection retries |
+| 709 | `5` | Max connection attempts |
+| 1018-1022 | `60`, `24 * 60` | Seconds/minutes conversion for uptime formatting |
+
+These magic numbers:
+1. Made the code harder to read without context
+2. Required hunting through the codebase to understand what values were being used
+3. Risked inconsistency if similar values were used elsewhere
+
+**Changes:**
+- Added module-level constants at the top of the file:
+  - `SECONDS_PER_MINUTE = 60`
+  - `SECONDS_PER_HOUR = 3600`
+  - `MINUTES_PER_DAY = 24 * 60`
+  - `MAX_STARTUP_WAIT_SECONDS = 60`
+  - `STARTUP_POLL_INTERVAL_SECONDS = 5`
+  - `CONNECTION_RETRY_SLEEP_SECONDS = 20`
+  - `MAX_CONNECTION_ATTEMPTS = 5`
+- Updated all usages to reference the named constants instead of magic numbers
+
+**Impact:**
+- Improved code readability and self-documentation
+- Centralized configuration of timing-related behavior
+- Made it easier to adjust values if needed in the future
+
+---
+
