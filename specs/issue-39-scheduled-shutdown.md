@@ -25,9 +25,14 @@ The feature should:
 
 ## Proposed Implementation
 
-### Approach: Background Process with `at` or Python Scheduler
+### Approach: Remote `shutdown` Command via SSH
 
-Use a lightweight background approach:
+Send the Linux `shutdown` command directly to the instance. This is the simplest and most reliable approach:
+
+- Runs on the instance itself, so it survives if the local machine disconnects
+- Uses standard Linux functionality (`shutdown -h +N`)
+- Instance handles its own shutdown timing
+- Works even if the user closes their terminal
 
 ```python
 @instance_app.command()
@@ -46,10 +51,9 @@ def stop(
 
 ```python
 import re
-from datetime import timedelta
 
-def parse_duration(duration_str: str) -> timedelta:
-    """Parse duration string like '3h', '30m', '1h30m' into timedelta."""
+def parse_duration_to_minutes(duration_str: str) -> int:
+    """Parse duration string like '3h', '30m', '1h30m' into minutes."""
     pattern = r'(?:(\d+)h)?(?:(\d+)m)?'
     match = re.fullmatch(pattern, duration_str.strip().lower())
 
@@ -59,43 +63,44 @@ def parse_duration(duration_str: str) -> timedelta:
     hours = int(match.group(1) or 0)
     minutes = int(match.group(2) or 0)
 
-    return timedelta(hours=hours, minutes=minutes)
+    return hours * 60 + minutes
 ```
 
-### Scheduling Options
+### Scheduling via SSH
 
-**Option A: Subprocess with sleep (simple)**
 ```python
 def _schedule_stop(name: str | None, duration: str) -> None:
-    """Schedule instance stop after duration."""
-    delta = parse_duration(duration)
-    seconds = int(delta.total_seconds())
-    instance_id = get_instance_id(name)
+    """Schedule instance shutdown via SSH."""
+    minutes = parse_duration_to_minutes(duration)
+    instance = get_instance(name)
 
-    # Spawn detached background process
-    subprocess.Popen(
-        ["sh", "-c", f"sleep {seconds} && remote instance stop {instance_id}"],
-        start_new_session=True,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    # SSH to instance and schedule shutdown
+    # shutdown -h +N schedules halt in N minutes
+    ssh_command = f"sudo shutdown -h +{minutes}"
+
+    run_ssh_command(instance, ssh_command)
+
+    console.print(f"Instance '{name}' will shut down in {duration}")
 ```
 
-**Option B: AWS EventBridge (more robust)**
+### Cancelling Scheduled Shutdown
+
 ```python
-def _schedule_stop_eventbridge(instance_id: str, duration: str) -> None:
-    """Use EventBridge to schedule stop."""
-    # Create one-time scheduled rule that triggers Lambda/SSM to stop instance
+def _cancel_scheduled_stop(name: str | None) -> None:
+    """Cancel a scheduled shutdown via SSH."""
+    instance = get_instance(name)
+
+    run_ssh_command(instance, "sudo shutdown -c")
+
+    console.print(f"Cancelled scheduled shutdown for '{name}'")
 ```
 
 ## Alternative Approaches Considered
 
-1. **AWS EventBridge Scheduler** - More robust, survives machine shutdown, but adds AWS dependency complexity
-2. **System `at` command** - Unix-specific, requires atd daemon
-3. **Detached subprocess with sleep** - Simple, portable, but lost if machine restarts
-4. **Separate daemon process** - Overkill for simple use case
-
-Recommend starting with Option A (subprocess) for simplicity, with potential future enhancement to EventBridge.
+1. **Detached local subprocess with sleep** - Lost if local machine disconnects or restarts
+2. **AWS EventBridge Scheduler** - More complex, requires additional AWS permissions and Lambda/SSM setup
+3. **System `at` command on instance** - Works, but `shutdown` is simpler and purpose-built
+4. **Remote `shutdown` command** - **Chosen**: Simple, reliable, runs on instance itself
 
 ## CLI Examples
 
@@ -123,21 +128,21 @@ $ remote status
 - [ ] Add `--in` option to `remote instance stop` command
 - [ ] Add `--stop-in` option to `remote instance start` command
 - [ ] Implement duration string parsing (h, m, hm formats)
-- [ ] Implement background scheduling mechanism
+- [ ] Implement SSH command to run `shutdown -h +N` on instance
 - [ ] Show confirmation message with calculated stop time
-- [ ] Add `--cancel` flag to cancel scheduled stop
+- [ ] Add `--cancel` flag to cancel scheduled stop (runs `shutdown -c`)
 - [ ] Add tests for duration parsing
-- [ ] Add tests for scheduling logic
+- [ ] Add tests for SSH command generation
 - [ ] Update CLI help documentation
 
 ## Testing Notes
 
 - Duration parsing should be thoroughly tested with property-based testing
-- Background process spawning can be tested with mocking
-- Integration tests should verify the scheduled stop works end-to-end
+- SSH command execution can be tested with mocking
+- Ensure proper handling when instance is not reachable via SSH
 
-## Future Enhancements
+## Notes
 
-- Show scheduled stop time in `remote status` output
-- Persist scheduled stops to survive CLI restarts (file-based or EventBridge)
-- Add `remote instance scheduled` command to list all scheduled operations
+- Requires SSH access to the instance
+- Instance must be configured to stop (not terminate) on OS shutdown
+- The `shutdown` command is standard on Linux; may need adjustment for Windows instances
