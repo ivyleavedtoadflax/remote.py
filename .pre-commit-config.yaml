@@ -51,7 +51,7 @@ repos:
       # Run tests with coverage (quiet mode)
       - id: pytest
         name: pytest
-        entry: uv run pytest -q --tb=line --cov=remotepy --cov-report=term-missing:skip-covered
+        entry: uv run pytest -q --tb=line --cov=remote --cov-report=term-missing:skip-covered
         language: system
         pass_filenames: false
         types: [python]

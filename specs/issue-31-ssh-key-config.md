@@ -1,6 +1,6 @@
 # Issue 31: SSH Key Config Not Used by Connect Command
 
-**Status:** Not started
+**Status:** COMPLETED
 **Priority:** Medium
 **File:** `remotepy/instance.py`
 

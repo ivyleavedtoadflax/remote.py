@@ -593,6 +593,122 @@ def test_connect_with_no_strict_host_key_flag(mocker):
     assert "StrictHostKeyChecking=no" in ssh_command
 
 
+def test_connect_uses_ssh_key_from_config(mocker):
+    """Test that connect uses ssh_key from config when --key is not provided."""
+    mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+    mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+    mock_config = mocker.patch("remote.instance.config_manager")
+
+    mock_ec2.return_value.describe_instances.return_value = {
+        "Reservations": [
+            {
+                "Instances": [
+                    {
+                        "InstanceId": "i-0123456789abcdef0",
+                        "State": {"Name": "running", "Code": 16},
+                        "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                        "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                    }
+                ]
+            }
+        ]
+    }
+    mock_ec2.return_value.describe_instance_status.return_value = {
+        "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+    }
+
+    # Configure mock to return ssh_key from config
+    mock_config.get_value.return_value = "/home/user/.ssh/config-key.pem"
+
+    runner.invoke(app, ["connect", "test-instance"])
+
+    mock_subprocess.assert_called_once()
+    ssh_command = mock_subprocess.call_args[0][0]
+
+    # Verify the key from config is included
+    assert "-i" in ssh_command
+    assert "/home/user/.ssh/config-key.pem" in ssh_command
+
+
+def test_connect_key_option_overrides_config(mocker):
+    """Test that --key option takes precedence over config ssh_key."""
+    mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+    mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+    mock_config = mocker.patch("remote.instance.config_manager")
+
+    mock_ec2.return_value.describe_instances.return_value = {
+        "Reservations": [
+            {
+                "Instances": [
+                    {
+                        "InstanceId": "i-0123456789abcdef0",
+                        "State": {"Name": "running", "Code": 16},
+                        "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                        "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                    }
+                ]
+            }
+        ]
+    }
+    mock_ec2.return_value.describe_instance_status.return_value = {
+        "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+    }
+
+    # Configure mock to return ssh_key from config
+    mock_config.get_value.return_value = "/home/user/.ssh/config-key.pem"
+
+    # Pass --key option explicitly
+    runner.invoke(app, ["connect", "test-instance", "--key", "/path/to/explicit-key.pem"])
+
+    mock_subprocess.assert_called_once()
+    ssh_command = mock_subprocess.call_args[0][0]
+
+    # Verify the explicit key is used, not the config key
+    assert "-i" in ssh_command
+    assert "/path/to/explicit-key.pem" in ssh_command
+    assert "/home/user/.ssh/config-key.pem" not in ssh_command
+
+    # Verify get_value was NOT called for ssh_key since --key was provided
+    # (The config is checked only when key is not provided)
+    mock_config.get_value.assert_not_called()
+
+
+def test_connect_no_key_when_not_in_config(mocker):
+    """Test that connect works without -i flag when no key is provided or configured."""
+    mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+    mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+    mock_config = mocker.patch("remote.instance.config_manager")
+
+    mock_ec2.return_value.describe_instances.return_value = {
+        "Reservations": [
+            {
+                "Instances": [
+                    {
+                        "InstanceId": "i-0123456789abcdef0",
+                        "State": {"Name": "running", "Code": 16},
+                        "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                        "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                    }
+                ]
+            }
+        ]
+    }
+    mock_ec2.return_value.describe_instance_status.return_value = {
+        "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+    }
+
+    # Configure mock to return None (no ssh_key in config)
+    mock_config.get_value.return_value = None
+
+    runner.invoke(app, ["connect", "test-instance"])
+
+    mock_subprocess.assert_called_once()
+    ssh_command = mock_subprocess.call_args[0][0]
+
+    # Verify no -i flag is included
+    assert "-i" not in ssh_command
+
+
 # ============================================================================
 # SSH Error Handling Tests (Issue 14)
 # ============================================================================
