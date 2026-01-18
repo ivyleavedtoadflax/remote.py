@@ -8,7 +8,7 @@
 3. Checkout a branch a branch
 4. Implement the fix
 5. Run tests: `uv run pytest`
-6. Run type check: `uv run mypy remotepy/`
+6. Run type check: `uv run mypy remote/`
 7. Run linter: `uv run ruff check . && uv run ruff format .`
 8. Update spec file status to COMPLETED
 9. Atomic commit with descriptive messages
@@ -118,7 +118,7 @@ Final polish and release preparation.
 | 19 | Function shadows builtin | [issue-19-list-function-name.md](./issue-19-list-function-name.md) | COMPLETED |
 | 20 | Test coverage edge cases | [issue-20-test-coverage.md](./issue-20-test-coverage.md) | COMPLETED |
 | 22 | Add instance pricing | [issue-22-instance-pricing.md](./issue-22-instance-pricing.md) | COMPLETED |
-| 23 | Rename package to `remote` | [issue-23-rename-package.md](./issue-23-rename-package.md) | Not started |
-| 24 | Pydantic config validation | [issue-24-pydantic-config.md](./issue-24-pydantic-config.md) | Not started |
+| 23 | Rename package to `remote` | [issue-23-rename-package.md](./issue-23-rename-package.md) | COMPLETED |
+| 24 | Pydantic config validation | [issue-24-pydantic-config.md](./issue-24-pydantic-config.md) | COMPLETED |
 | 25 | Contributing guide | [issue-25-contributing-guide.md](./issue-25-contributing-guide.md) | COMPLETED |
 | 30 | Remove root-level instance commands | [issue-30-remove-root-instance-commands.md](./issue-30-remove-root-instance-commands.md) | COMPLETED |

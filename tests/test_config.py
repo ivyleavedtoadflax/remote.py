@@ -655,3 +655,361 @@ class TestConfigKeysCommand:
         assert "ssh_key_path" in result.stdout
         assert "aws_region" in result.stdout
         assert "default_launch_template" in result.stdout
+
+
+class TestRemoteConfigPydanticModel:
+    """Test the RemoteConfig Pydantic model."""
+
+    def test_default_values(self):
+        """Should have correct default values."""
+        from remote.config import RemoteConfig
+
+        cfg = RemoteConfig()
+        assert cfg.instance_name is None
+        assert cfg.ssh_user == "ubuntu"
+        assert cfg.ssh_key_path is None
+        assert cfg.aws_region is None
+        assert cfg.default_launch_template is None
+
+    def test_valid_instance_name(self):
+        """Should accept valid instance names."""
+        from remote.config import RemoteConfig
+
+        # Alphanumeric with hyphens, underscores, dots
+        cfg = RemoteConfig(instance_name="my-test_server.1")
+        assert cfg.instance_name == "my-test_server.1"
+
+    def test_invalid_instance_name(self):
+        """Should reject instance names with invalid characters."""
+        from pydantic import ValidationError
+
+        from remote.config import RemoteConfig
+
+        with pytest.raises(ValidationError) as exc_info:
+            RemoteConfig(instance_name="my server!")
+        assert "Invalid instance name" in str(exc_info.value)
+
+    def test_valid_ssh_user(self):
+        """Should accept valid SSH usernames."""
+        from remote.config import RemoteConfig
+
+        cfg = RemoteConfig(ssh_user="ec2-user")
+        assert cfg.ssh_user == "ec2-user"
+
+    def test_invalid_ssh_user(self):
+        """Should reject SSH usernames with invalid characters."""
+        from pydantic import ValidationError
+
+        from remote.config import RemoteConfig
+
+        with pytest.raises(ValidationError) as exc_info:
+            RemoteConfig(ssh_user="user name")
+        assert "Invalid SSH user" in str(exc_info.value)
+
+    def test_ssh_key_path_expansion(self):
+        """Should expand ~ in SSH key path."""
+        import os
+
+        from remote.config import RemoteConfig
+
+        cfg = RemoteConfig(ssh_key_path="~/.ssh/my-key.pem")
+        expected = os.path.expanduser("~/.ssh/my-key.pem")
+        assert cfg.ssh_key_path == expected
+
+    def test_valid_aws_region(self):
+        """Should accept valid AWS regions."""
+        from remote.config import RemoteConfig
+
+        cfg = RemoteConfig(aws_region="us-east-1")
+        assert cfg.aws_region == "us-east-1"
+
+        cfg = RemoteConfig(aws_region="eu-west-2")
+        assert cfg.aws_region == "eu-west-2"
+
+        cfg = RemoteConfig(aws_region="ap-southeast-1")
+        assert cfg.aws_region == "ap-southeast-1"
+
+    def test_invalid_aws_region(self):
+        """Should reject invalid AWS region formats."""
+        from pydantic import ValidationError
+
+        from remote.config import RemoteConfig
+
+        with pytest.raises(ValidationError) as exc_info:
+            RemoteConfig(aws_region="invalid-region")
+        assert "Invalid AWS region" in str(exc_info.value)
+
+    def test_empty_values_treated_as_none(self):
+        """Should treat empty strings as None for optional fields."""
+        from remote.config import RemoteConfig
+
+        cfg = RemoteConfig(instance_name="", aws_region="")
+        assert cfg.instance_name is None
+        assert cfg.aws_region is None
+
+    def test_empty_ssh_user_uses_default(self):
+        """Should use default 'ubuntu' for empty SSH user."""
+        from remote.config import RemoteConfig
+
+        cfg = RemoteConfig(ssh_user="")
+        assert cfg.ssh_user == "ubuntu"
+
+    def test_check_ssh_key_exists_no_path(self):
+        """Should return True when no SSH key path is set."""
+        from remote.config import RemoteConfig
+
+        cfg = RemoteConfig()
+        exists, error = cfg.check_ssh_key_exists()
+        assert exists is True
+        assert error is None
+
+    def test_check_ssh_key_exists_missing_file(self, tmpdir):
+        """Should return False when SSH key file doesn't exist."""
+        from remote.config import RemoteConfig
+
+        cfg = RemoteConfig(ssh_key_path="/nonexistent/key.pem")
+        exists, error = cfg.check_ssh_key_exists()
+        assert exists is False
+        assert "SSH key not found" in error
+
+    def test_check_ssh_key_exists_valid_file(self, tmpdir):
+        """Should return True when SSH key file exists."""
+        from remote.config import RemoteConfig
+
+        # Create a temporary key file
+        key_path = str(tmpdir / "test-key.pem")
+        with open(key_path, "w") as f:
+            f.write("test")
+
+        cfg = RemoteConfig(ssh_key_path=key_path)
+        exists, error = cfg.check_ssh_key_exists()
+        assert exists is True
+        assert error is None
+
+
+class TestRemoteConfigFromIniFile:
+    """Test loading RemoteConfig from INI files."""
+
+    def test_from_ini_file_with_values(self, tmpdir):
+        """Should load values from INI file."""
+        from remote.config import RemoteConfig
+
+        config_path = str(tmpdir / "config.ini")
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {
+            "instance_name": "my-server",
+            "ssh_user": "ec2-user",
+            "aws_region": "us-west-2",
+        }
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = RemoteConfig.from_ini_file(config_path)
+        assert result.instance_name == "my-server"
+        assert result.ssh_user == "ec2-user"
+        assert result.aws_region == "us-west-2"
+
+    def test_from_ini_file_missing_file(self, tmpdir):
+        """Should use defaults when INI file doesn't exist."""
+        from remote.config import RemoteConfig
+
+        config_path = str(tmpdir / "nonexistent.ini")
+        result = RemoteConfig.from_ini_file(config_path)
+
+        assert result.instance_name is None
+        assert result.ssh_user == "ubuntu"
+        assert result.aws_region is None
+
+    def test_environment_variable_override(self, tmpdir, monkeypatch):
+        """Should override INI values with environment variables."""
+        from remote.config import RemoteConfig
+
+        # Create INI file with values
+        config_path = str(tmpdir / "config.ini")
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {
+            "instance_name": "ini-server",
+            "ssh_user": "ini-user",
+        }
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        # Set environment variables (should override)
+        monkeypatch.setenv("REMOTE_INSTANCE_NAME", "env-server")
+        monkeypatch.setenv("REMOTE_SSH_USER", "env-user")
+
+        result = RemoteConfig.from_ini_file(config_path)
+
+        # Environment variables should override INI values
+        assert result.instance_name == "env-server"
+        assert result.ssh_user == "env-user"
+
+    def test_partial_environment_override(self, tmpdir, monkeypatch):
+        """Should only override specific fields from environment."""
+        from remote.config import RemoteConfig
+
+        # Create INI file with values
+        config_path = str(tmpdir / "config.ini")
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {
+            "instance_name": "ini-server",
+            "ssh_user": "ini-user",
+            "aws_region": "us-east-1",
+        }
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        # Override only one value
+        monkeypatch.setenv("REMOTE_INSTANCE_NAME", "env-server")
+
+        result = RemoteConfig.from_ini_file(config_path)
+
+        # Only instance_name should be overridden
+        assert result.instance_name == "env-server"
+        assert result.ssh_user == "ini-user"
+        assert result.aws_region == "us-east-1"
+
+
+class TestConfigValidationResult:
+    """Test the ConfigValidationResult class."""
+
+    def test_validate_valid_config(self, tmpdir):
+        """Should return is_valid=True for valid config."""
+        from remote.config import ConfigValidationResult
+
+        config_path = str(tmpdir / "config.ini")
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"ssh_user": "ubuntu", "aws_region": "us-east-1"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = ConfigValidationResult.validate_config(config_path)
+        assert result.is_valid is True
+        assert len(result.errors) == 0
+        assert len(result.warnings) == 0
+
+    def test_validate_missing_file(self, tmpdir):
+        """Should return is_valid=False for missing file."""
+        from remote.config import ConfigValidationResult
+
+        config_path = str(tmpdir / "nonexistent.ini")
+        result = ConfigValidationResult.validate_config(config_path)
+
+        assert result.is_valid is False
+        assert len(result.errors) > 0
+        assert "not found" in result.errors[0]
+
+    def test_validate_missing_ssh_key(self, tmpdir):
+        """Should return is_valid=False for missing SSH key."""
+        from remote.config import ConfigValidationResult
+
+        config_path = str(tmpdir / "config.ini")
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"ssh_key_path": "/nonexistent/key.pem"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = ConfigValidationResult.validate_config(config_path)
+        assert result.is_valid is False
+        assert any("SSH key not found" in e for e in result.errors)
+
+    def test_validate_unknown_keys_warning(self, tmpdir):
+        """Should add warning for unknown config keys."""
+        from remote.config import ConfigValidationResult
+
+        config_path = str(tmpdir / "config.ini")
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {
+            "ssh_user": "ubuntu",
+            "unknown_key": "value",
+        }
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = ConfigValidationResult.validate_config(config_path)
+        assert result.is_valid is True  # Unknown keys are warnings, not errors
+        assert any("Unknown config key" in w for w in result.warnings)
+
+    def test_validate_invalid_aws_region(self, tmpdir):
+        """Should return validation error for invalid AWS region."""
+        from remote.config import ConfigValidationResult
+
+        config_path = str(tmpdir / "config.ini")
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"aws_region": "invalid-region"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = ConfigValidationResult.validate_config(config_path)
+        assert result.is_valid is False
+        assert any("Configuration error" in e for e in result.errors)
+
+
+class TestConfigManagerPydanticIntegration:
+    """Test ConfigManager integration with Pydantic config."""
+
+    def test_get_validated_config(self, tmpdir, mocker):
+        """Should return validated RemoteConfig instance."""
+        from remote.config import ConfigManager, RemoteConfig
+
+        # Mock Settings.get_config_path to return our temp path
+        config_path = Path(tmpdir / "config.ini")
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"instance_name": "test-server", "ssh_user": "ec2-user"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        mocker.patch("remote.config.Settings.get_config_path", return_value=config_path)
+
+        manager = ConfigManager()
+        result = manager.get_validated_config()
+
+        assert isinstance(result, RemoteConfig)
+        assert result.instance_name == "test-server"
+        assert result.ssh_user == "ec2-user"
+
+    def test_reload_clears_pydantic_config(self, tmpdir, mocker):
+        """Should clear cached pydantic config on reload."""
+        from remote.config import ConfigManager
+
+        config_path = Path(tmpdir / "config.ini")
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"instance_name": "original-server"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        mocker.patch("remote.config.Settings.get_config_path", return_value=config_path)
+
+        manager = ConfigManager()
+
+        # Load initial config
+        result1 = manager.get_validated_config()
+        assert result1.instance_name == "original-server"
+
+        # Update file
+        cfg["DEFAULT"]["instance_name"] = "new-server"
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        # Reload and verify new config is loaded
+        manager.reload()
+        result2 = manager.get_validated_config()
+        assert result2.instance_name == "new-server"
+
+    def test_get_value_uses_environment_override(self, tmpdir, mocker, monkeypatch):
+        """Should return environment variable value over file value."""
+        from remote.config import ConfigManager
+
+        config_path = Path(tmpdir / "config.ini")
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"instance_name": "file-server"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        mocker.patch("remote.config.Settings.get_config_path", return_value=config_path)
+        monkeypatch.setenv("REMOTE_INSTANCE_NAME", "env-server")
+
+        manager = ConfigManager()
+        result = manager.get_value("instance_name")
+
+        assert result == "env-server"
