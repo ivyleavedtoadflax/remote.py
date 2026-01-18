@@ -1,7 +1,7 @@
 import subprocess
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Annotated, Any
+from typing import Any
 
 import typer
 from botocore.exceptions import ClientError, NoCredentialsError
@@ -310,13 +310,9 @@ def _watch_status(instance_name: str, instance_id: str, interval: int) -> None:
 
 @app.command()
 def status(
-    instance_name: Annotated[str | None, typer.Argument(help="Instance name")] = None,
-    watch: Annotated[
-        bool, typer.Option("--watch", "-w", help="Watch mode - refresh continuously")
-    ] = False,
-    interval: Annotated[
-        int, typer.Option("--interval", "-i", help="Refresh interval in seconds")
-    ] = 2,
+    instance_name: str | None = typer.Argument(None, help="Instance name"),
+    watch: bool = typer.Option(False, "--watch", "-w", help="Watch mode - refresh continuously"),
+    interval: int = typer.Option(2, "--interval", "-i", help="Refresh interval in seconds"),
 ) -> None:
     """
     Show detailed information about a specific instance.
