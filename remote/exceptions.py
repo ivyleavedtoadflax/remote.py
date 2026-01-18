@@ -129,19 +129,6 @@ class AWSServiceError(RemotePyError):
         return error_mappings.get(error_code, f"AWS Error: {original_message}")
 
 
-class ConfigurationError(RemotePyError):
-    """Raised when there are configuration-related errors."""
-
-    def __init__(self, config_issue: str, details: str | None = None):
-        message = f"Configuration error: {config_issue}"
-        if not details:
-            details = (
-                "Check your configuration file at ~/.config/remote.py/config.ini\n"
-                "Run 'remote config show' to view current configuration"
-            )
-        super().__init__(message, details)
-
-
 class ResourceNotFoundError(RemotePyError):
     """Raised when a requested AWS resource (volume, snapshot, etc.) is not found."""
 
