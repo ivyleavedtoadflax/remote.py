@@ -912,3 +912,35 @@ This duplication meant any changes to error handling would need to be made in mu
 
 ---
 
+## 2026-01-18: Fix `get_value` CLI command to use `ConfigManager` consistently
+
+**File:** `remote/config.py`
+
+**Issue:** The `get_value()` CLI command (lines 482-503) bypassed the `ConfigManager.get_value()` method and directly read from the config file:
+
+```python
+# Before - bypassed ConfigManager
+config = read_config(config_path)
+value = config.get("DEFAULT", key, fallback=None)
+```
+
+This was inconsistent with other CLI commands:
+- `set_value()` correctly used `config_manager.set_value(key, value, config_path)` (line 478)
+- `add()` correctly used `config_manager.set_instance_name(instance_name, config_path)` (line 455)
+- `unset_value()` correctly used `config_manager.remove_value(key, config_path)`
+
+This inconsistency meant:
+1. **Missing validation**: `ConfigManager.get_value()` uses Pydantic validation for config values
+2. **Missing env var overrides**: `ConfigManager.get_value()` supports `REMOTE_*` environment variable overrides
+3. **Missing key validation**: The CLI command didn't validate that `key` was a known config key
+4. **Violated encapsulation**: The proper `ConfigManager.get_value()` method exists but wasn't used
+
+**Changes:**
+- Renamed function from `get_value` to `get_value_cmd` to avoid name collision with the CLI command decorator
+- Added key validation against `VALID_KEYS` (consistent with `set_value` command)
+- For default config path: delegate to `config_manager.get_value(key)` for full Pydantic validation and env var override support
+- For custom config paths: continue reading directly from file (as ConfigManager is bound to default path)
+- Updated docstring to document environment variable override support
+
+---
+
