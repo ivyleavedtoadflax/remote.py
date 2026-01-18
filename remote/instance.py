@@ -131,7 +131,7 @@ def list_instances(
         table.add_column("Est. Cost", justify="right")
 
     for i, (name, instance_id, dns, status, it, lt) in enumerate(
-        zip(names, ids, public_dnss, statuses, instance_types, launch_times, strict=False)
+        zip(names, ids, public_dnss, statuses, instance_types, launch_times, strict=True)
     ):
         status_style = _get_status_style(status)
 

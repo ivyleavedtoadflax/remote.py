@@ -1,5 +1,27 @@
 # Progress Log
 
+## 2026-01-18: Fix inconsistent filtering in `get_instance_ids()`
+
+**Files:** `remote/utils.py`, `remote/instance.py`, `remote/config.py`, `tests/test_utils.py`
+
+**Issue:** The `get_instance_ids()` function had inconsistent filtering behavior compared to `get_instance_info()`:
+
+1. `get_instance_info()` iterates through ALL instances in each reservation but filters out instances without a Name tag
+2. `get_instance_ids()` only took the FIRST instance from each reservation and did NOT filter by Name tag
+
+This inconsistency meant the arrays returned by these functions could have different lengths when used together. The code worked around this with `strict=False` in `zip()` calls, which silently truncated to the shortest array - masking potential data misalignment bugs.
+
+**Changes:**
+- Updated `get_instance_ids()` in `remote/utils.py` to:
+  - Iterate through ALL instances in each reservation (not just the first)
+  - Filter instances to only include those with a Name tag (matching `get_instance_info()`)
+- Changed `strict=False` to `strict=True` in zip calls in:
+  - `remote/instance.py:134` (list_instances command)
+  - `remote/config.py:434` (add command)
+- Added new test `test_get_instance_ids_filters_instances_without_name_tag()` to verify the filtering behavior
+
+---
+
 ## 2026-01-18: Remove unused `validate_snapshot_id()` function
 
 **Files:** `remote/validation.py`, `tests/test_validation.py`
