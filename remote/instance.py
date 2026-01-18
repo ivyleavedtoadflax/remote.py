@@ -2,6 +2,7 @@ import random
 import string
 import subprocess
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
 import typer
@@ -65,8 +66,6 @@ def _get_raw_launch_times(instances: list[dict[str, Any]]) -> list[Any]:
     Returns:
         List of launch time datetime objects (or None for stopped instances)
     """
-    from datetime import timezone
-
     launch_times = []
 
     for reservation in instances:
@@ -156,8 +155,6 @@ def list_instances(
             hourly_price = None
 
             if i < len(raw_launch_times) and raw_launch_times[i] is not None:
-                from datetime import datetime, timezone
-
                 now = datetime.now(timezone.utc)
                 launch_time_dt = raw_launch_times[i]
                 if launch_time_dt.tzinfo is None:
@@ -495,8 +492,6 @@ def _schedule_shutdown(instance_name: str, instance_id: str, minutes: int) -> No
         instance_id: AWS instance ID
         minutes: Number of minutes until shutdown
     """
-    from datetime import datetime, timedelta, timezone
-
     # Get instance DNS for SSH
     dns = get_instance_dns(instance_id)
     if not dns:
