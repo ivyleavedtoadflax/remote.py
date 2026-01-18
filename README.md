@@ -17,6 +17,23 @@ A Python CLI tool for managing AWS resources with a focus on EC2 instances. This
 - **Input Validation**: Safe handling of AWS resource IDs and user input
 - **No AWS Credentials Required for Testing**: Comprehensive test suite with mocked AWS calls
 
+## Migration from v0.x to v1.0.0
+
+**Breaking Change**: v1.0.0 removes root-level instance commands. All instance commands now require the `instance` prefix:
+
+| v0.x Command | v1.0.0 Command |
+|--------------|----------------|
+| `remote start` | `remote instance start` |
+| `remote stop` | `remote instance stop` |
+| `remote connect` | `remote instance connect` |
+| `remote list` | `remote instance list` |
+| `remote ls` | `remote instance ls` |
+| `remote status` | `remote instance status` |
+| `remote launch` | `remote instance launch` |
+| `remote terminate` | `remote instance terminate` |
+
+This change provides a cleaner CLI structure with service-specific subcommands.
+
 ## Getting Started
 
 ### Installation
@@ -60,49 +77,49 @@ remote config show
 Start an instance:
 
 ```bash
-remote start
+remote instance start
 ```
 
 Connect to the instance with SSH:
 
 ```bash
-remote connect
+remote instance connect
 ```
 
 Connect with a specific SSH key:
 
 ```bash
-remote connect --key ~/.ssh/my-key.pem
+remote instance connect --key ~/.ssh/my-key.pem
 ```
 
 Connect with port forwarding and verbose output:
 
 ```bash
-remote connect -p 1234:localhost:1234 -v
+remote instance connect -p 1234:localhost:1234 -v
 ```
 
 Stop the instance:
 
 ```bash
-remote stop
+remote instance stop
 ```
 
 Get instance status:
 
 ```bash
-remote status
+remote instance status
 ```
 
 List all instances:
 
 ```bash
-remote list
+remote instance list
 ```
 
 Terminate an instance (permanent):
 
 ```bash
-remote terminate
+remote instance terminate
 ```
 
 ### Working with Different Instances
@@ -110,8 +127,8 @@ remote terminate
 To run commands on a different instance, pass the name as an argument:
 
 ```bash
-remote status another_ec2_instance
-remote start my-other-instance
+remote instance status another_ec2_instance
+remote instance start my-other-instance
 ```
 
 ### AMI Operations
@@ -218,7 +235,7 @@ uv build
 
 ### Testing
 
-The project includes a comprehensive test suite with 227+ tests achieving high coverage:
+The project includes a comprehensive test suite with 317+ tests achieving high coverage:
 
 #### Running Tests
 ```bash

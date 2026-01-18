@@ -6,6 +6,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-01-18
+
+### Breaking Changes
+
+- **Removed root-level instance commands**: Instance commands now require the `instance` prefix
+  - `remote start` -> `remote instance start`
+  - `remote stop` -> `remote instance stop`
+  - `remote connect` -> `remote instance connect`
+  - `remote list` -> `remote instance list`
+  - `remote ls` -> `remote instance ls`
+  - `remote status` -> `remote instance status`
+  - `remote launch` -> `remote instance launch`
+  - `remote terminate` -> `remote instance terminate`
+
+### Added
+
+- **Rich output enhancements**: Improved UI with Rich tables and panels
+  - ECS cluster/service selection displays in formatted tables
+  - Config validation results shown in colored panels
+  - Instance launch summary displayed in panels
+- **SSH key configuration**: Connect command now reads `ssh_key` from config when `--key` not provided
+- **Security policy**: Added SECURITY.md with security measures and reporting process
+- **Instance pricing**: Display hourly and monthly cost estimates for instances
+- **Template workflow improvements**: New commands for managing launch templates
+- **Config workflow improvements**: Enhanced configuration management commands
+- **Comprehensive test coverage**: 317+ tests with hypothesis-based property testing
+
+### Changed
+
+- Replaced wasabi with Rich for all output formatting
+- Standardized exit patterns across all modules
+- Improved CLI help documentation with better descriptions
+- Compartmentalized subcommands under service prefixes
+- Updated development status to Production/Stable
+
+### Fixed
+
+- Logic bug in `get_instance_by_name()` that could return wrong instance
+- SSH subprocess error handling improvements
+- Unvalidated array index in AMI launch
+- Deprecated datetime API usage
+- Function shadowing builtin `list`
+
+### Security
+
+- Completed comprehensive security review
+- No critical or high severity issues
+- All dependencies audited with pip-audit
+- Static analysis with bandit (only low-severity informational findings)
+
 ## [0.3.0] - 2026-01-17
 
 ### Added

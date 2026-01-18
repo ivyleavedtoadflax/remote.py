@@ -80,7 +80,7 @@ Final polish and release preparation.
 | 14 | 32 | Rich output enhancements | Better UX for tables and panels | [issue-32](./issue-32-rich-output-enhancements.md) | COMPLETED |
 | 15 | 34 | Security review | Required before v1.0.0 | [issue-34](./issue-34-security-review.md) | COMPLETED |
 | 16 | 30 | Remove root-level instance commands | Breaking change for v1.0.0 | [issue-30](./issue-30-remove-root-instance-commands.md) | COMPLETED |
-| 17 | 33 | v1.0.0 release preparation | Final checklist | [issue-33](./issue-33-v1-release-preparation.md) | Not started |
+| 17 | 33 | v1.0.0 release preparation | Final checklist | [issue-33](./issue-33-v1-release-preparation.md) | COMPLETED |
 
 ---
 
@@ -93,7 +93,7 @@ Final polish and release preparation.
 | 13 | Logic bug in get_instance_by_name() | [issue-13-get-instance-by-name-bug.md](./issue-13-get-instance-by-name-bug.md) | COMPLETED |
 | 14 | SSH subprocess error handling | [issue-14-ssh-error-handling.md](./issue-14-ssh-error-handling.md) | COMPLETED |
 | 15 | Unvalidated array index in AMI launch | [issue-15-ami-array-index.md](./issue-15-ami-array-index.md) | COMPLETED |
-| 33 | v1.0.0 release preparation | [issue-33-v1-release-preparation.md](./issue-33-v1-release-preparation.md) | Not started |
+| 33 | v1.0.0 release preparation | [issue-33-v1-release-preparation.md](./issue-33-v1-release-preparation.md) | COMPLETED |
 | 34 | Security review | [issue-34-security-review.md](./issue-34-security-review.md) | COMPLETED |
 
 ### Medium Priority
