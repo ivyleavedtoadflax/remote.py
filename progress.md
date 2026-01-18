@@ -728,3 +728,23 @@ This created a misleading function signature - if a function's return value is n
 
 ---
 
+## 2026-01-18: Remove unused `get_snapshot_status()` function
+
+**File:** `remote/utils.py`
+
+**Issue:** The `get_snapshot_status()` function (lines 549-581) was defined but never called anywhere in the production codebase:
+1. The function returned the status of an EBS snapshot by calling AWS `describe_snapshots` API
+2. It was only referenced in test files (`tests/test_utils.py`)
+3. No production code in the `remote/` directory ever called this function
+4. While `snapshot.py` has commands for creating and listing snapshots, none of them used this status-checking function
+
+**Changes:**
+- Removed the `get_snapshot_status()` function from `remote/utils.py`
+- Removed the import of `get_snapshot_status` from `tests/test_utils.py`
+- Removed the three associated test functions from `tests/test_utils.py`:
+  - `test_get_snapshot_status()` - happy path test
+  - `test_get_snapshot_status_snapshot_not_found_error()` - error handling test
+  - `test_get_snapshot_status_other_client_error()` - error handling test
+
+---
+

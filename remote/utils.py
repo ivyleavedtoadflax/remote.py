@@ -26,7 +26,6 @@ from .validation import (
     validate_aws_response_structure,
     validate_instance_id,
     validate_instance_name,
-    validate_snapshot_id,
     validate_volume_id,
 )
 
@@ -544,41 +543,6 @@ def get_volume_name(volume_id: str) -> str:
 
         error_message = e.response["Error"]["Message"]
         raise AWSServiceError("EC2", "describe_volumes", error_code, error_message)
-
-
-def get_snapshot_status(snapshot_id: str) -> str:
-    """Returns the status of the snapshot.
-
-    Args:
-        snapshot_id: The snapshot ID to get status for
-
-    Returns:
-        The snapshot status (e.g., 'pending', 'completed', 'error')
-
-    Raises:
-        ResourceNotFoundError: If snapshot not found
-        AWSServiceError: If AWS API call fails
-    """
-    # Validate input
-    snapshot_id = validate_snapshot_id(snapshot_id)
-
-    try:
-        response = get_ec2_client().describe_snapshots(SnapshotIds=[snapshot_id])
-
-        # Validate response structure
-        validate_aws_response_structure(response, ["Snapshots"], "describe_snapshots")
-
-        snapshots = ensure_non_empty_array(list(response["Snapshots"]), "snapshots")
-
-        return str(snapshots[0]["State"])
-
-    except ClientError as e:
-        error_code = e.response["Error"]["Code"]
-        if error_code == "InvalidSnapshotID.NotFound":
-            raise ResourceNotFoundError("Snapshot", snapshot_id)
-
-        error_message = e.response["Error"]["Message"]
-        raise AWSServiceError("EC2", "describe_snapshots", error_code, error_message)
 
 
 def get_launch_templates(name_filter: str | None = None) -> list[dict[str, Any]]:
