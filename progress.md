@@ -28,3 +28,18 @@ This caused the SSH key configuration to fail silently - users who set `ssh_key_
 - Removed the unused `cfg` parameter from the function signature
 - Removed the corresponding parameter documentation from the docstring
 - Removed the now-unused `from configparser import ConfigParser` import
+
+---
+
+## 2026-01-18: Remove unnecessary `builtins` import from `instance.py`
+
+**File:** `remote/instance.py`
+
+**Issue:** The file imported `builtins` and used `builtins.list[dict[str, str]]` for a type annotation on line 742. This is unnecessary because:
+1. In Python 3.9+, `list` can be used directly in type annotations without importing from `builtins`
+2. The `builtins` module was only used for this single type annotation
+3. Using `list` directly is more idiomatic and readable
+
+**Changes:**
+- Removed the `import builtins` statement from line 1
+- Changed `builtins.list[dict[str, str]]` to `list[dict[str, str]]` in the `tags` variable annotation
