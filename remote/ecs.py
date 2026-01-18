@@ -145,7 +145,7 @@ def prompt_for_cluster_name() -> str:
 
     if not clusters:
         typer.secho("No clusters found", fg=typer.colors.YELLOW)
-        raise typer.Exit()
+        raise typer.Exit(0)
     elif len(clusters) == 1:
         # Safely access the single cluster
         cluster = safe_get_array_item(clusters, 0, "clusters")
@@ -191,7 +191,7 @@ def prompt_for_services_name(cluster_name: str) -> list[str]:
 
     if not services:
         typer.secho("No services found", fg=typer.colors.YELLOW)
-        raise typer.Exit()
+        raise typer.Exit(0)
     elif len(services) == 1:
         # Safely access the single service
         service = safe_get_array_item(services, 0, "services")

@@ -560,3 +560,27 @@ This duplication violated DRY (Don't Repeat Yourself) and meant any bug fix or f
 - Easier maintenance - changes only needed in one place
 - All 405 tests pass
 
+---
+
+## 2026-01-18: Add explicit exit codes to `typer.Exit()` calls in `ecs.py`
+
+**File:** `remote/ecs.py`
+
+**Issue:** Two `typer.Exit()` calls lacked explicit exit codes:
+1. Line 148 in `prompt_for_cluster_name()`: `raise typer.Exit()` when no clusters found
+2. Line 194 in `prompt_for_services_name()`: `raise typer.Exit()` when no services found
+
+While `typer.Exit()` defaults to exit code 0, this is implicit and inconsistent with other exit calls in the codebase that explicitly specify the exit code. Best practice is to be explicit about exit codes:
+- Exit code 0: Success or informational (no error)
+- Exit code 1: Error condition
+
+Both of these cases are informational ("No clusters found", "No services found") rather than error conditions, so exit code 0 is correct but should be explicit.
+
+**Changes:**
+- Line 148: Changed `raise typer.Exit()` to `raise typer.Exit(0)`
+- Line 194: Changed `raise typer.Exit()` to `raise typer.Exit(0)`
+
+This makes the code consistent with other exit calls in the codebase and explicitly documents the intent that these are successful exits (no error), not implicit defaults.
+
+---
+
