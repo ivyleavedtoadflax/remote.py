@@ -52,3 +52,14 @@ The `instance cost` command has several issues:
 - [ ] Add `--cost` flag to `instance ls` to optionally show cost (may slow down due to pricing API)
 - [ ] Deprecate or remove `instance cost` command
 - [ ] Add tests for cost display in `instance ls`
+
+## Testing Requirements
+
+**Important**: Add comprehensive Typer CLI tests to verify cost functionality end-to-end. Previous testing gaps have allowed cost display issues to slip through.
+
+- [ ] Add Typer `CliRunner` tests for `instance ls --cost` flag
+- [ ] Test that cost values appear in output (not "-")
+- [ ] Test cost formatting (currency symbol, decimal places)
+- [ ] Test behavior when pricing API is unavailable (graceful fallback)
+- [ ] Test cost calculation accuracy (uptime * hourly rate)
+- [ ] Add integration test that mocks boto3 and pricing API together
