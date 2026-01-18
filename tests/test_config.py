@@ -613,7 +613,7 @@ class TestConfigValidateCommand:
         assert result.exit_code == 0
         # Rich panel displays validation result
         assert "Config Validation" in result.stdout
-        assert "Status: Valid" in result.stdout
+        assert "Configuration is valid" in result.stdout
 
     def test_validate_missing_config(self, tmpdir):
         """Should report missing config file."""
