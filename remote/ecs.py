@@ -44,13 +44,12 @@ def _extract_name_from_arn(arn: str) -> str:
 
 
 def get_all_clusters() -> list[str]:
-    """
-    Get all ECS clusters.
+    """Get all ECS clusters.
 
     Uses pagination to handle large numbers of clusters (>100).
 
     Returns:
-        list: A list of all ECS clusters
+        A list of all ECS clusters
 
     Raises:
         AWSServiceError: If AWS API call fails
@@ -75,8 +74,7 @@ def get_all_clusters() -> list[str]:
 
 
 def get_all_services(cluster_name: str) -> list[str]:
-    """
-    Get all ECS services.
+    """Get all ECS services.
 
     Uses pagination to handle large numbers of services (>100).
 
@@ -84,7 +82,7 @@ def get_all_services(cluster_name: str) -> list[str]:
         cluster_name: The name of the cluster
 
     Returns:
-        list: A list of all ECS services
+        A list of all ECS services
 
     Raises:
         AWSServiceError: If AWS API call fails
@@ -109,13 +107,12 @@ def get_all_services(cluster_name: str) -> list[str]:
 
 
 def scale_service(cluster_name: str, service_name: str, desired_count: int) -> None:
-    """
-    Scale an ECS service
+    """Scale an ECS service.
 
     Args:
-    cluster_name (str): The name of the cluster
-    service_name (str): The name of the service
-    desired_count (int): The desired count of tasks
+        cluster_name: The name of the cluster
+        service_name: The name of the service
+        desired_count: The desired count of tasks
 
     Raises:
         AWSServiceError: If AWS API call fails
@@ -135,11 +132,10 @@ def scale_service(cluster_name: str, service_name: str, desired_count: int) -> N
 
 
 def prompt_for_cluster_name() -> str:
-    """
-    Prompt the user to select a cluster
+    """Prompt the user to select a cluster.
 
     Returns:
-    str: The name of the selected cluster
+        The name of the selected cluster
     """
     clusters = get_all_clusters()
 
@@ -178,14 +174,13 @@ def prompt_for_cluster_name() -> str:
 
 
 def prompt_for_services_name(cluster_name: str) -> list[str]:
-    """
-    Prompt the user to select one or more services
+    """Prompt the user to select one or more services.
 
     Args:
-    cluster_name (str): The name of the cluster
+        cluster_name: The name of the cluster
 
     Returns:
-    List[str]: The names of the selected services
+        The names of the selected services
     """
     services = get_all_services(cluster_name)
 
@@ -250,8 +245,7 @@ def prompt_for_services_name(cluster_name: str) -> list[str]:
 
 @app.command(name="list-clusters")
 def list_clusters() -> None:
-    """
-    List all ECS clusters.
+    """List all ECS clusters.
 
     Displays cluster ARNs for all clusters in the current region.
     """
@@ -275,8 +269,7 @@ def list_clusters() -> None:
 
 @app.command(name="list-services")
 def list_services(cluster_name: str = typer.Argument(None, help="Cluster name")) -> None:
-    """
-    List ECS services in a cluster.
+    """List ECS services in a cluster.
 
     If no cluster is specified, prompts for selection.
     """
@@ -308,8 +301,7 @@ def scale(
     service_name: str = typer.Argument(None, help="Service name"),
     desired_count: int = typer.Option(None, "-n", "--count", help="Desired count of tasks"),
 ) -> None:
-    """
-    Scale ECS service task count.
+    """Scale ECS service task count.
 
     If no cluster or service is specified, prompts for selection.
     Prompts for confirmation before scaling.

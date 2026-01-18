@@ -1,5 +1,34 @@
 # Progress Log
 
+## 2026-01-18: Fix inconsistent docstring formatting in `ecs.py`
+
+**File:** `remote/ecs.py`
+
+**Issue:** Multiple functions had inconsistent docstring formatting compared to the rest of the codebase:
+1. Docstrings with opening `"""` on a separate line instead of inline with the description
+2. Missing 4-space indentation in Args and Returns sections
+3. Redundant type annotations in docstrings (types should be in function signatures only)
+
+Affected functions:
+- `get_all_clusters()` (lines 46-57)
+- `get_all_services()` (lines 77-91)
+- `scale_service()` (lines 111-122)
+- `prompt_for_cluster_name()` (lines 137-143)
+- `prompt_for_services_name()` (lines 180-189)
+- `list_clusters()` (lines 249-254)
+- `list_services()` (lines 273-279)
+- `scale()` (lines 302-313)
+
+**Changes:**
+- Moved docstring descriptions to same line as opening `"""`
+- Added proper 4-space indentation to Args and Returns sections
+- Removed redundant type annotations (e.g., `cluster_name (str):` → `cluster_name:`)
+- Removed redundant type prefixes in Returns (e.g., `list: A list of...` → `A list of...`)
+
+This makes the docstrings consistent with the style used in `utils.py` and other modules.
+
+---
+
 ## 2026-01-18: Replace silent exception handler in `list_launch_templates()`
 
 **File:** `remote/ami.py`
