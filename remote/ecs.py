@@ -156,7 +156,7 @@ def prompt_for_cluster_name() -> str:
     clusters = get_all_clusters()
 
     if not clusters:
-        typer.echo("No clusters found.")
+        typer.secho("No clusters found", fg=typer.colors.YELLOW)
         raise typer.Exit()
     elif len(clusters) == 1:
         # Safely access the single cluster
@@ -164,7 +164,7 @@ def prompt_for_cluster_name() -> str:
         typer.secho(f"Using cluster: {cluster}", fg=typer.colors.BLUE)
         return str(cluster)
     else:
-        typer.echo("Please select a cluster from the following list:")
+        typer.secho("Please select a cluster from the following list:", fg=typer.colors.YELLOW)
 
         # Display clusters in a Rich table
         table = Table(title="ECS Clusters")
@@ -202,7 +202,7 @@ def prompt_for_services_name(cluster_name: str) -> list[str]:
     services = get_all_services(cluster_name)
 
     if not services:
-        typer.echo("No services found.")
+        typer.secho("No services found", fg=typer.colors.YELLOW)
         raise typer.Exit()
     elif len(services) == 1:
         # Safely access the single service
@@ -269,8 +269,20 @@ def list_clusters() -> None:
     """
     clusters = get_all_clusters()
 
+    if not clusters:
+        typer.secho("No clusters found", fg=typer.colors.YELLOW)
+        return
+
+    # Format table using rich
+    table = Table(title="ECS Clusters")
+    table.add_column("Cluster", style="cyan")
+    table.add_column("ARN", style="dim")
+
     for cluster in clusters:
-        typer.secho(cluster, fg=typer.colors.BLUE)
+        cluster_name = _extract_name_from_arn(cluster)
+        table.add_row(cluster_name, cluster)
+
+    console.print(table)
 
 
 @app.command(name="list-services")
@@ -286,8 +298,20 @@ def list_services(cluster_name: str = typer.Argument(None, help="Cluster name"))
 
     services = get_all_services(cluster_name)
 
+    if not services:
+        typer.secho("No services found", fg=typer.colors.YELLOW)
+        return
+
+    # Format table using rich
+    table = Table(title="ECS Services")
+    table.add_column("Service", style="cyan")
+    table.add_column("ARN", style="dim")
+
     for service in services:
-        typer.secho(service, fg=typer.colors.BLUE)
+        service_name = _extract_name_from_arn(service)
+        table.add_row(service_name, service)
+
+    console.print(table)
 
 
 @app.command()
