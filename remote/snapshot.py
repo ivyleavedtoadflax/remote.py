@@ -83,7 +83,3 @@ def list_snapshots(instance_name: str | None = typer.Argument(None, help="Instan
             )
 
     console.print(table)
-
-
-if __name__ == "__main__":
-    app()

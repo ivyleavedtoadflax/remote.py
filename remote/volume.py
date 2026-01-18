@@ -56,7 +56,3 @@ def list_volumes(instance_name: str | None = typer.Argument(None, help="Instance
                 )
 
     console.print(table)
-
-
-if __name__ == "__main__":
-    app()

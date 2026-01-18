@@ -616,7 +616,3 @@ def keys() -> None:
         table.add_row(key, description)
 
     console.print(table)
-
-
-if __name__ == "__main__":
-    app()

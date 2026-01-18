@@ -1031,7 +1031,3 @@ def _format_uptime(seconds: float | None) -> str:
         parts.append(f"{minutes}m")
 
     return " ".join(parts)
-
-
-if __name__ == "__main__":
-    app()
