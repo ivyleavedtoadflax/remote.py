@@ -77,3 +77,4 @@ Features and improvements for future releases.
 | 23 | 40 | Standardize console output styles | Align all command output to match `config show` style for consistency | [issue-40](./issue-40-console-output-consistency.md) | COMPLETED |
 | 24 | 41 | Fix instance cost integration | Cost not displaying, panel too wide, integrate into `instance ls` instead of separate command | [issue-41](./issue-41-instance-cost-fixes.md) | COMPLETED |
 | 25 | 42 | Clarify instance ls vs status | Evaluate overlap between commands; ensure distinct purposes or consolidate | [issue-42](./issue-42-ls-vs-status.md) | COMPLETED |
+| 26 | 43 | Fix Rich Panel width globally | Panels expand to full terminal width; audit all Panel usage and set expand=False | [issue-43](./issue-43-panel-width-fix.md) | TODO |
