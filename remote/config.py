@@ -26,9 +26,6 @@ VALID_KEYS: dict[str, str] = {
     "default_launch_template": "Default launch template name",
 }
 
-# Environment variable mapping for config values
-ENV_PREFIX = "REMOTE_"
-
 
 class RemoteConfig(BaseSettings):
     """

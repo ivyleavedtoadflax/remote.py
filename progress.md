@@ -152,3 +152,18 @@ This is similar to the `ec2_client` shim that was removed from `utils.py` in a p
 - Removed the `Any` type from imports (no longer needed)
 - Removed the backwards compatibility comment (lines 29-30)
 - Removed the `__getattr__` function (lines 33-37)
+
+---
+
+## 2026-01-18: Remove unused `ENV_PREFIX` constant from `config.py`
+
+**File:** `remote/config.py`
+
+**Issue:** Line 30 defined `ENV_PREFIX = "REMOTE_"` but this constant was never used anywhere in the codebase:
+1. The actual environment prefix is hardcoded in `RemoteConfig.model_config` as `env_prefix="REMOTE_"` (line 52)
+2. No other code references `ENV_PREFIX`
+3. The constant was misleading since it appeared to be the source of truth but wasn't actually used
+
+**Changes:**
+- Removed the unused `ENV_PREFIX = "REMOTE_"` constant
+- Removed the associated comment "Environment variable mapping for config values"
