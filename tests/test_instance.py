@@ -53,8 +53,10 @@ class TestInstanceListCommand:
         mock_paginator.paginate.return_value = [mock_ec2_instances]
         mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
-        # Mock pricing to avoid actual API calls
-        mocker.patch("remote.instance.get_instance_price", return_value=0.0104)
+        # Mock pricing to avoid actual API calls - returns tuple (price, fallback_used)
+        mocker.patch(
+            "remote.instance.get_instance_price_with_fallback", return_value=(0.0104, False)
+        )
         mocker.patch("remote.instance.get_monthly_estimate", return_value=7.59)
 
         result = runner.invoke(app, ["list"])
@@ -109,8 +111,10 @@ class TestInstanceListCommand:
         mock_paginator.paginate.return_value = [mock_ec2_instances]
         mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
-        # Mock pricing functions
-        mocker.patch("remote.instance.get_instance_price", return_value=0.0104)
+        # Mock pricing functions - returns tuple (price, fallback_used)
+        mocker.patch(
+            "remote.instance.get_instance_price_with_fallback", return_value=(0.0104, False)
+        )
         mocker.patch("remote.instance.get_monthly_estimate", return_value=7.59)
 
         result = runner.invoke(app, ["list"])
@@ -127,8 +131,8 @@ class TestInstanceListCommand:
         mock_paginator.paginate.return_value = [mock_ec2_instances]
         mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
-        # Mock pricing to return None (unavailable)
-        mocker.patch("remote.instance.get_instance_price", return_value=None)
+        # Mock pricing to return None (unavailable) - returns tuple (price, fallback_used)
+        mocker.patch("remote.instance.get_instance_price_with_fallback", return_value=(None, False))
         mocker.patch("remote.instance.get_monthly_estimate", return_value=None)
 
         result = runner.invoke(app, ["list"])
@@ -144,7 +148,7 @@ class TestInstanceListCommand:
         mock_paginator.paginate.return_value = [mock_ec2_instances]
         mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
-        mock_get_price = mocker.patch("remote.instance.get_instance_price")
+        mock_get_price = mocker.patch("remote.instance.get_instance_price_with_fallback")
 
         result = runner.invoke(app, ["list", "--no-pricing"])
 

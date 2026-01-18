@@ -12,6 +12,7 @@ from remote.pricing import (
     format_price,
     get_current_region,
     get_instance_price,
+    get_instance_price_with_fallback,
     get_instance_pricing_info,
     get_monthly_estimate,
     get_pricing_client,
@@ -259,6 +260,88 @@ class TestFormatPrice:
         assert result == "EUR 10.50"
 
 
+class TestGetInstancePriceWithFallback:
+    """Test the get_instance_price_with_fallback function."""
+
+    def setup_method(self):
+        """Clear the price cache before each test."""
+        clear_price_cache()
+
+    def test_should_return_price_without_fallback_for_known_region(self, mocker):
+        """Should return price and False when region is in mapping."""
+        price_data = {
+            "terms": {
+                "OnDemand": {
+                    "term1": {"priceDimensions": {"dim1": {"pricePerUnit": {"USD": "0.0104"}}}}
+                }
+            }
+        }
+        mock_client = MagicMock()
+        mock_client.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
+        mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
+
+        price, fallback_used = get_instance_price_with_fallback("t3.micro", "us-east-1")
+
+        assert price == 0.0104
+        assert fallback_used is False
+
+    def test_should_fallback_to_us_east_1_for_unknown_region(self, mocker):
+        """Should return us-east-1 price and True for unknown regions."""
+        price_data = {
+            "terms": {
+                "OnDemand": {
+                    "term1": {"priceDimensions": {"dim1": {"pricePerUnit": {"USD": "0.0104"}}}}
+                }
+            }
+        }
+        mock_client = MagicMock()
+        mock_client.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
+        mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
+
+        price, fallback_used = get_instance_price_with_fallback("t3.micro", "me-south-1")
+
+        assert price == 0.0104
+        assert fallback_used is True
+        # Verify the location filter was for us-east-1
+        call_args = mock_client.get_products.call_args
+        filters = call_args.kwargs["Filters"]
+        location_filter = next(f for f in filters if f["Field"] == "location")
+        assert location_filter["Value"] == "US East (N. Virginia)"
+
+    def test_should_use_current_region_when_not_specified(self, mocker):
+        """Should use current session region when region is not specified."""
+        mock_session = MagicMock()
+        mock_session.region_name = "eu-west-1"
+        mocker.patch("remote.pricing.boto3.session.Session", return_value=mock_session)
+
+        price_data = {
+            "terms": {
+                "OnDemand": {
+                    "term1": {"priceDimensions": {"dim1": {"pricePerUnit": {"USD": "0.0120"}}}}
+                }
+            }
+        }
+        mock_client = MagicMock()
+        mock_client.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
+        mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
+
+        price, fallback_used = get_instance_price_with_fallback("t3.micro")
+
+        assert price == 0.0120
+        assert fallback_used is False
+
+    def test_should_return_none_with_fallback_when_pricing_unavailable(self, mocker):
+        """Should return None and True when fallback pricing is also unavailable."""
+        mock_client = MagicMock()
+        mock_client.get_products.return_value = {"PriceList": []}
+        mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
+
+        price, fallback_used = get_instance_price_with_fallback("unknown-type", "unknown-region")
+
+        assert price is None
+        assert fallback_used is True
+
+
 class TestGetInstancePricingInfo:
     """Test the get_instance_pricing_info function."""
 
@@ -285,6 +368,7 @@ class TestGetInstancePricingInfo:
         assert result["monthly"] == 0.10 * HOURS_PER_MONTH
         assert result["hourly_formatted"] == "$0.10"
         assert result["monthly_formatted"] == "$73.00"
+        assert result["fallback_used"] is False
 
     def test_should_handle_unavailable_pricing(self, mocker):
         """Should return None values when pricing is unavailable."""
@@ -298,10 +382,33 @@ class TestGetInstancePricingInfo:
         assert result["monthly"] is None
         assert result["hourly_formatted"] == "-"
         assert result["monthly_formatted"] == "-"
+        assert result["fallback_used"] is False
+
+    def test_should_indicate_fallback_used_for_unknown_region(self, mocker):
+        """Should set fallback_used=True for regions not in mapping."""
+        price_data = {
+            "terms": {
+                "OnDemand": {
+                    "term1": {"priceDimensions": {"dim1": {"pricePerUnit": {"USD": "0.10"}}}}
+                }
+            }
+        }
+        mock_client = MagicMock()
+        mock_client.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
+        mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
+
+        result = get_instance_pricing_info("t3.micro", "af-south-1")
+
+        assert result["hourly"] == 0.10
+        assert result["fallback_used"] is True
 
 
 class TestClearPriceCache:
     """Test the clear_price_cache function."""
+
+    def setup_method(self):
+        """Clear the price cache before each test."""
+        clear_price_cache()
 
     def test_should_clear_cache(self, mocker):
         """Should clear the pricing cache."""

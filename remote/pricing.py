@@ -130,6 +130,36 @@ def get_instance_price(instance_type: str, region: str | None = None) -> float |
         return None
 
 
+def get_instance_price_with_fallback(
+    instance_type: str, region: str | None = None
+) -> tuple[float | None, bool]:
+    """Get the hourly on-demand price with region fallback.
+
+    If the requested region is not in our region-to-location mapping,
+    falls back to us-east-1 pricing as an estimate.
+
+    Args:
+        instance_type: The EC2 instance type (e.g., 't3.micro', 'm5.large')
+        region: AWS region code. If None, uses the current session region.
+
+    Returns:
+        Tuple of (price, used_fallback) where:
+        - price: The hourly price in USD, or None if pricing is unavailable
+        - used_fallback: True if us-east-1 pricing was used as a fallback
+    """
+    if region is None:
+        region = get_current_region()
+
+    # Check if region is in our mapping
+    if region not in REGION_TO_LOCATION:
+        # Fall back to us-east-1 pricing
+        price = get_instance_price(instance_type, "us-east-1")
+        return (price, True)
+
+    price = get_instance_price(instance_type, region)
+    return (price, False)
+
+
 def get_monthly_estimate(hourly_price: float | None) -> float | None:
     """Calculate monthly cost estimate from hourly price.
 
@@ -164,14 +194,18 @@ def format_price(price: float | None, prefix: str = "$") -> str:
 def get_instance_pricing_info(instance_type: str, region: str | None = None) -> dict[str, Any]:
     """Get comprehensive pricing information for an instance type.
 
+    Uses region fallback to us-east-1 if the specified region is not
+    in the region-to-location mapping.
+
     Args:
         instance_type: The EC2 instance type
         region: AWS region code. If None, uses the current session region.
 
     Returns:
-        Dictionary with 'hourly', 'monthly', and formatted strings
+        Dictionary with 'hourly', 'monthly', formatted strings, and
+        'fallback_used' indicating if us-east-1 pricing was used as fallback.
     """
-    hourly = get_instance_price(instance_type, region)
+    hourly, fallback_used = get_instance_price_with_fallback(instance_type, region)
     monthly = get_monthly_estimate(hourly)
 
     return {
@@ -179,6 +213,7 @@ def get_instance_pricing_info(instance_type: str, region: str | None = None) -> 
         "monthly": monthly,
         "hourly_formatted": format_price(hourly),
         "monthly_formatted": format_price(monthly),
+        "fallback_used": fallback_used,
     }
 
 
