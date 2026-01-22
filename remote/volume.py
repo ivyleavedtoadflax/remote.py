@@ -83,7 +83,7 @@ ROOT_DEVICE_PATTERNS = (
 )
 
 
-def _find_root_volume(volumes: list[dict[str, Any]]) -> dict[str, Any] | None:
+def _find_root_volume(volumes: list[Any]) -> Any:
     """Find the root volume from a list of volumes.
 
     Identifies the root volume by checking device attachment names against
@@ -104,7 +104,7 @@ def _find_root_volume(volumes: list[dict[str, Any]]) -> dict[str, Any] | None:
     return None
 
 
-def _find_volume_by_id(volumes: list[dict[str, Any]], volume_id: str) -> dict[str, Any] | None:
+def _find_volume_by_id(volumes: list[Any], volume_id: str) -> Any:
     """Find a specific volume by ID from a list of volumes.
 
     Args:
@@ -235,12 +235,12 @@ def resize_volume(
     )
 
     with handle_aws_errors("EC2", "modify_volume"):
-        response = get_ec2_client().modify_volume(
+        modify_response = get_ec2_client().modify_volume(
             VolumeId=target_volume_id,
             Size=size,
         )
 
-    modification = response.get("VolumeModification", {})
+    modification = modify_response.get("VolumeModification", {})
     state = modification.get("ModificationState", "unknown")
 
     typer.secho(
