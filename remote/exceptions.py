@@ -40,8 +40,6 @@ class MultipleInstancesFoundError(RemotePyError):
     """Raised when multiple instances match a single instance query."""
 
     def __init__(self, instance_name: str, count: int, details: str | None = None):
-        self.instance_name = instance_name
-        self.count = count
         message = f"Multiple instances ({count}) found with name '{instance_name}'"
         if not details:
             details = "Use a more specific instance name or manage instances individually"

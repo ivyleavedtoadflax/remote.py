@@ -4,6 +4,35 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+# SSH default constants
+DEFAULT_SSH_USER = "ubuntu"
+SSH_PORT = 22
+
+# Time-related constants
+SECONDS_PER_HOUR = 3600
+
+# Instance startup/connection constants
+MAX_STARTUP_WAIT_SECONDS = 60
+STARTUP_POLL_INTERVAL_SECONDS = 5
+CONNECTION_RETRY_SLEEP_SECONDS = 20
+MAX_CONNECTION_ATTEMPTS = 5
+SSH_READINESS_WAIT_SECONDS = 10
+
+# Instance type change polling constants
+TYPE_CHANGE_MAX_POLL_ATTEMPTS = 5
+TYPE_CHANGE_POLL_INTERVAL_SECONDS = 5
+
+# Exec command constants
+DEFAULT_EXEC_TIMEOUT_SECONDS = 30
+
+# SSH operation timeout (for shutdown/cancel commands)
+SSH_OPERATION_TIMEOUT_SECONDS = 30
+
+# SSH connect timeout (interactive sessions)
+# Longer timeout for interactive sessions since users may be slow to respond
+# to prompts, but still prevents indefinite hangs on network issues
+DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS = 120
+
 
 @dataclass
 class Settings:
@@ -29,3 +58,17 @@ class Settings:
 
 # Global settings instance - can be overridden for testing
 settings = Settings.from_env()
+
+# Table column styling constants
+# These styles are applied consistently across all CLI table output
+# to provide a cohesive user experience.
+TABLE_COLUMN_STYLES: dict[str, str] = {
+    # Primary identifiers - cyan for names, green for IDs
+    "name": "cyan",  # Resource names (instance name, cluster name, etc.)
+    "id": "green",  # AWS resource IDs (instance ID, volume ID, AMI ID, etc.)
+    # Secondary/metadata - dim for ARNs, yellow for numeric values
+    "arn": "dim",  # AWS ARNs (typically long, less important)
+    "numeric": "yellow",  # Numeric values (counts, sizes, row numbers)
+    # Status is handled dynamically by get_status_style() based on state
+    # Other columns (timestamps, descriptions, DNS names) use default (no style)
+}

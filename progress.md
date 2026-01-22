@@ -1033,6 +1033,47 @@ minutes = remaining % MINUTES_PER_HOUR  # remaining is in minutes ✓
 
 ---
 
+## 2026-01-19: Fix test argument order for exec command --key option
+
+**File:** `tests/test_instance.py`
+
+**Issue:** The `test_exec_uses_ssh_key_from_option` test was incorrectly placing the `--key` option after the instance name positional argument:
+```python
+result = runner.invoke(app, ["exec", "test-instance", "--key", "/path/to/key.pem", "ls"])
+```
+
+The exec command uses `allow_interspersed_args=False` in its context settings, which means all options must come before positional arguments. This setting is necessary to capture arbitrary commands (like `ls -la | grep foo`) as extra arguments without them being parsed as options.
+
+**Changes:**
+- Moved `--key` option before the instance name to fix the test:
+```python
+result = runner.invoke(app, ["exec", "--key", "/path/to/key.pem", "test-instance", "ls"])
+```
+
+---
+
+## 2026-01-19: Fix inconsistent color string literals in `typer.secho()` calls
+
+**File:** `remote/instance.py`
+
+**Issue:** Two `typer.secho()` calls in the `connect()` function used string literals `fg="yellow"` instead of the `typer.colors.YELLOW` constant used throughout the rest of the codebase:
+
+- Line 821: `fg="yellow"` (in "Waiting X seconds to allow instance to initialize" message)
+- Line 830: `fg="yellow"` (in "Connecting to instance" message)
+
+All other `typer.secho()` calls in `instance.py` (and the rest of the codebase) consistently use `fg=typer.colors.YELLOW`, `fg=typer.colors.RED`, `fg=typer.colors.GREEN`, etc.
+
+This inconsistency:
+1. Made the code style inconsistent
+2. Could cause issues if Typer's string-based color support ever changed
+3. Reduced code readability by mixing two different patterns
+
+**Changes:**
+- Changed line 821 from `fg="yellow"` to `fg=typer.colors.YELLOW`
+- Changed line 830 from `fg="yellow"` to `fg=typer.colors.YELLOW`
+
+---
+
 ## 2026-01-18: Extract type change polling magic numbers to constants
 
 **File:** `remote/instance.py`

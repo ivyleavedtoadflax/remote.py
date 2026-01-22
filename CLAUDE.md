@@ -66,6 +66,65 @@ The main app (`__main__.py`) orchestrates sub-applications using Typer's nested 
 - **Instance Targeting**: Commands accept optional instance names or use configured defaults
 - **Safe Operations**: Bounds checking and defensive programming throughout
 
+### CLI Parameter Patterns
+
+Commands use the following consistent patterns for parameters:
+
+#### 1. Optional Arguments with Config Fallback
+For instance-targeting commands where a default can be configured:
+```python
+instance_name: str | None = typer.Argument(None, help="Instance name")
+```
+Then resolve with: `resolve_instance_or_exit(instance_name)` which falls back to the configured default instance.
+
+**Used in**: `instance.py` (status, start, stop, connect, exec, type, terminate), `ami.py` (create), `snapshot.py` (list), `volume.py` (list)
+
+#### 2. Required Arguments
+For commands where a value must always be provided:
+```python
+template_name: str = typer.Argument(..., help="Launch template name")
+```
+The `...` makes the argument required with no default.
+
+**Used in**: `ami.py` (template-versions, template-info)
+
+#### 3. Required Options
+For commands needing multiple required values that aren't positional:
+```python
+volume_id: str = typer.Option(..., "--volume-id", "-v", help="Volume ID (required)")
+name: str = typer.Option(..., "--name", "-n", help="Snapshot name (required)")
+```
+
+**Used in**: `snapshot.py` (create)
+
+#### 4. Optional Arguments with Interactive Prompts
+For commands where selection from available resources is needed:
+```python
+cluster_name: str | None = typer.Argument(None, help="Cluster name")
+# ...
+if not cluster_name:
+    cluster_name = prompt_for_cluster_name()  # Shows selection menu
+```
+
+**Used in**: `ecs.py` (list-services, scale)
+
+#### 5. Optional Options with Defaults
+For optional configuration that has sensible defaults:
+```python
+version: str = typer.Option("$Latest", "-V", "--version", help="Template version")
+yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt")
+```
+
+**Used in**: Most commands for flags like `--yes`, `--verbose`, `--timeout`
+
+#### Guidelines for New Commands
+1. Use **Pattern 1** for instance-targeting commands where config fallback makes sense
+2. Use **Pattern 2** for required positional arguments (typically resource names)
+3. Use **Pattern 3** when multiple required values are needed and order isn't intuitive
+4. Use **Pattern 4** when the user needs to select from available AWS resources
+5. Always provide clear help text describing the parameter purpose
+6. Include `--yes`/`-y` option for commands that modify resources
+
 ### Testing Architecture
 - **100% test coverage target** with comprehensive test suite (227+ tests)
 - **Factory pattern** for test data generation with immutable defaults

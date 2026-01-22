@@ -1,6 +1,7 @@
 import datetime
 
 import pytest
+import typer
 from typer.testing import CliRunner
 
 from remote.ami import app
@@ -53,8 +54,9 @@ def mock_launch_template_response():
 
 def test_create_ami_with_instance_name(mocker):
     mock_ec2_client = mocker.patch("remote.ami.get_ec2_client")
-    mock_get_instance_id = mocker.patch(
-        "remote.ami.get_instance_id", return_value="i-0123456789abcdef0"
+    mock_resolve_instance = mocker.patch(
+        "remote.ami.resolve_instance_or_exit",
+        return_value=("test-instance", "i-0123456789abcdef0"),
     )
 
     mock_ec2_client.return_value.create_image.return_value = {"ImageId": "ami-0123456789abcdef0"}
@@ -63,17 +65,17 @@ def test_create_ami_with_instance_name(mocker):
         app,
         [
             "create",
-            "--instance-name",
             "test-instance",
             "--name",
             "test-ami",
             "--description",
             "Test AMI description",
         ],
+        input="y\n",
     )
 
     assert result.exit_code == 0
-    mock_get_instance_id.assert_called_once_with("test-instance")
+    mock_resolve_instance.assert_called_once_with("test-instance")
     mock_ec2_client.return_value.create_image.assert_called_once_with(
         InstanceId="i-0123456789abcdef0",
         Name="test-ami",
@@ -85,30 +87,29 @@ def test_create_ami_with_instance_name(mocker):
 
 def test_create_ami_without_instance_name(mocker):
     mock_ec2_client = mocker.patch("remote.ami.get_ec2_client")
-    mock_get_instance_name = mocker.patch(
-        "remote.ami.get_instance_name", return_value="default-instance"
-    )
-    mock_get_instance_id = mocker.patch(
-        "remote.ami.get_instance_id", return_value="i-0123456789abcdef0"
+    mock_resolve_instance = mocker.patch(
+        "remote.ami.resolve_instance_or_exit",
+        return_value=("default-instance", "i-0123456789abcdef0"),
     )
 
     mock_ec2_client.return_value.create_image.return_value = {"ImageId": "ami-default"}
 
-    result = runner.invoke(app, ["create", "--name", "test-ami"])
+    result = runner.invoke(app, ["create", "--name", "test-ami"], input="y\n")
 
     assert result.exit_code == 0
-    mock_get_instance_name.assert_called_once()
-    mock_get_instance_id.assert_called_once_with("default-instance")
+    mock_resolve_instance.assert_called_once_with(None)
 
 
 def test_create_ami_minimal_params(mocker):
     mock_ec2_client = mocker.patch("remote.ami.get_ec2_client")
-    mocker.patch("remote.ami.get_instance_name", return_value="default-instance")
-    mocker.patch("remote.ami.get_instance_id", return_value="i-0123456789abcdef0")
+    mocker.patch(
+        "remote.ami.resolve_instance_or_exit",
+        return_value=("default-instance", "i-0123456789abcdef0"),
+    )
 
     mock_ec2_client.return_value.create_image.return_value = {"ImageId": "ami-minimal"}
 
-    result = runner.invoke(app, ["create"])
+    result = runner.invoke(app, ["create"], input="y\n")
 
     assert result.exit_code == 0
     # When no name/description provided, defaults are used
@@ -120,17 +121,81 @@ def test_create_ami_minimal_params(mocker):
     )
 
 
-def test_list_amis(mocker, mock_ami_response):
+def test_create_ami_cancelled(mocker):
+    """Test that declining confirmation cancels AMI creation."""
+    mocker.patch("remote.ami.get_ec2_client")
+    mocker.patch(
+        "remote.ami.resolve_instance_or_exit",
+        return_value=("test-instance", "i-0123456789abcdef0"),
+    )
+
+    result = runner.invoke(app, ["create", "test-instance", "--name", "test-ami"], input="n\n")
+
+    assert result.exit_code == 0
+    assert "AMI creation cancelled" in result.stdout
+
+
+def test_create_ami_with_yes_flag(mocker):
+    """Test that --yes flag skips confirmation."""
+    mock_ec2_client = mocker.patch("remote.ami.get_ec2_client")
+    mocker.patch(
+        "remote.ami.resolve_instance_or_exit",
+        return_value=("test-instance", "i-0123456789abcdef0"),
+    )
+
+    mock_ec2_client.return_value.create_image.return_value = {"ImageId": "ami-0123456789abcdef0"}
+
+    result = runner.invoke(
+        app,
+        ["create", "test-instance", "--name", "test-ami", "--yes"],
+    )
+
+    assert result.exit_code == 0
+    mock_ec2_client.return_value.create_image.assert_called_once()
+    assert "AMI ami-0123456789abcdef0 created" in result.stdout
+
+
+def test_create_ami_instance_not_found(mocker):
+    """Test that InstanceNotFoundError exits with code 1."""
+    mocker.patch(
+        "remote.ami.resolve_instance_or_exit",
+        side_effect=typer.Exit(1),
+    )
+
+    result = runner.invoke(app, ["create", "nonexistent", "--yes"])
+
+    assert result.exit_code == 1
+
+
+def test_create_ami_multiple_instances_found(mocker):
+    """Test that MultipleInstancesFoundError exits with code 1."""
+    mocker.patch(
+        "remote.ami.resolve_instance_or_exit",
+        side_effect=typer.Exit(1),
+    )
+
+    result = runner.invoke(app, ["create", "ambiguous", "--yes"])
+
+    assert result.exit_code == 1
+
+
+@pytest.mark.parametrize("command", ["list", "ls"])
+def test_list_amis(mocker, mock_ami_response, command):
+    """Test both list and ls commands work for listing AMIs."""
     mock_ec2_client = mocker.patch("remote.ami.get_ec2_client")
     mock_get_account_id = mocker.patch("remote.ami.get_account_id", return_value="123456789012")
 
-    mock_ec2_client.return_value.describe_images.return_value = mock_ami_response
+    # Mock paginator for describe_images
+    mock_paginator = mocker.MagicMock()
+    mock_paginator.paginate.return_value = [mock_ami_response]
+    mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
-    result = runner.invoke(app, ["list"])
+    result = runner.invoke(app, [command])
 
     assert result.exit_code == 0
     mock_get_account_id.assert_called_once()
-    mock_ec2_client.return_value.describe_images.assert_called_once_with(Owners=["123456789012"])
+    mock_ec2_client.return_value.get_paginator.assert_called_once_with("describe_images")
+    mock_paginator.paginate.assert_called_once_with(Owners=["123456789012"])
 
     assert "ami-0123456789abcdef0" in result.stdout
     assert "ami-0123456789abcdef1" in result.stdout
@@ -140,24 +205,14 @@ def test_list_amis(mocker, mock_ami_response):
     assert "pending" in result.stdout
 
 
-def test_list_amis_alias_ls(mocker, mock_ami_response):
-    mock_ec2_client = mocker.patch("remote.ami.get_ec2_client")
-    mock_get_account_id = mocker.patch("remote.ami.get_account_id", return_value="123456789012")
-
-    mock_ec2_client.return_value.describe_images.return_value = mock_ami_response
-
-    result = runner.invoke(app, ["ls"])
-
-    assert result.exit_code == 0
-    mock_get_account_id.assert_called_once()
-    mock_ec2_client.return_value.describe_images.assert_called_once_with(Owners=["123456789012"])
-
-
 def test_list_amis_empty(mocker):
     mock_ec2_client = mocker.patch("remote.ami.get_ec2_client")
     mocker.patch("remote.ami.get_account_id", return_value="123456789012")
 
-    mock_ec2_client.return_value.describe_images.return_value = {"Images": []}
+    # Mock paginator for describe_images with empty result
+    mock_paginator = mocker.MagicMock()
+    mock_paginator.paginate.return_value = [{"Images": []}]
+    mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
     result = runner.invoke(app, ["list"])
 
@@ -165,6 +220,48 @@ def test_list_amis_empty(mocker):
     # Should show headers but no AMI data
     assert "ImageId" in result.stdout
     assert "Name" in result.stdout
+
+
+def test_list_amis_pagination_multiple_pages(mocker):
+    """Test that list_amis correctly handles multiple pages of results."""
+    mock_ec2_client = mocker.patch("remote.ami.get_ec2_client")
+    mocker.patch("remote.ami.get_account_id", return_value="123456789012")
+
+    # Create multiple pages of AMI results
+    page1 = {
+        "Images": [
+            {
+                "ImageId": "ami-page1-001",
+                "Name": "ami-from-page-1",
+                "State": "available",
+                "CreationDate": "2024-01-01T00:00:00Z",
+            }
+        ]
+    }
+    page2 = {
+        "Images": [
+            {
+                "ImageId": "ami-page2-001",
+                "Name": "ami-from-page-2",
+                "State": "available",
+                "CreationDate": "2024-01-02T00:00:00Z",
+            }
+        ]
+    }
+
+    # Mock paginator to return multiple pages
+    mock_paginator = mocker.MagicMock()
+    mock_paginator.paginate.return_value = [page1, page2]
+    mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
+
+    result = runner.invoke(app, ["list"])
+
+    assert result.exit_code == 0
+    # Verify AMIs from both pages are in output
+    assert "ami-page1-001" in result.stdout
+    assert "ami-from-page-1" in result.stdout
+    assert "ami-page2-001" in result.stdout
+    assert "ami-from-page-2" in result.stdout
 
 
 def test_get_launch_template_id(mocker):
@@ -204,205 +301,6 @@ def test_list_launch_templates_empty(mocker):
 
     assert result.exit_code == 0
     assert "No launch templates found" in result.stdout
-
-
-def test_launch_with_template_name(mocker):
-    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-    mocker.patch("remote.utils.get_launch_template_id", return_value="lt-0123456789abcdef0")
-
-    mock_ec2_client.return_value.run_instances.return_value = {
-        "Instances": [{"InstanceId": "i-0123456789abcdef0", "InstanceType": "t3.micro"}]
-    }
-
-    result = runner.invoke(
-        app,
-        [
-            "launch",
-            "--launch-template",
-            "test-template",
-            "--name",
-            "test-instance",
-            "--version",
-            "2",
-        ],
-    )
-
-    assert result.exit_code == 0
-    mock_ec2_client.return_value.run_instances.assert_called_once_with(
-        LaunchTemplate={"LaunchTemplateId": "lt-0123456789abcdef0", "Version": "2"},
-        MaxCount=1,
-        MinCount=1,
-        TagSpecifications=[
-            {
-                "ResourceType": "instance",
-                "Tags": [{"Key": "Name", "Value": "test-instance"}],
-            }
-        ],
-    )
-    # Rich panel displays launch summary
-    assert "Instance Launched" in result.stdout
-    assert "i-0123456789abcdef0" in result.stdout
-    assert "test-instance" in result.stdout
-
-
-def test_launch_with_default_version(mocker):
-    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-    mocker.patch("remote.utils.get_launch_template_id", return_value="lt-0123456789abcdef0")
-
-    mock_ec2_client.return_value.run_instances.return_value = {
-        "Instances": [{"InstanceId": "i-default"}]
-    }
-
-    result = runner.invoke(
-        app, ["launch", "--launch-template", "test-template", "--name", "test-instance"]
-    )
-
-    assert result.exit_code == 0
-    mock_ec2_client.return_value.run_instances.assert_called_once_with(
-        LaunchTemplate={"LaunchTemplateId": "lt-0123456789abcdef0", "Version": "$Latest"},
-        MaxCount=1,
-        MinCount=1,
-        TagSpecifications=[
-            {
-                "ResourceType": "instance",
-                "Tags": [{"Key": "Name", "Value": "test-instance"}],
-            }
-        ],
-    )
-
-
-def test_launch_without_template_interactive(mocker, mock_launch_template_response):
-    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-    mock_get_templates = mocker.patch(
-        "remote.utils.get_launch_templates",
-        return_value=mock_launch_template_response["LaunchTemplates"],
-    )
-    mocker.patch("remote.config.config_manager.get_value", return_value=None)
-
-    mock_ec2_client.return_value.run_instances.return_value = {
-        "Instances": [{"InstanceId": "i-interactive"}]
-    }
-
-    # Mock user input: select template 1, use suggested name
-    result = runner.invoke(app, ["launch"], input="1\ntest-instance-abc123\n")
-
-    assert result.exit_code == 0
-    mock_get_templates.assert_called_once()
-    mock_ec2_client.return_value.run_instances.assert_called_once()
-
-    assert "Please specify a launch template" in result.stdout
-    assert "Available launch templates:" in result.stdout
-
-
-def test_launch_without_name_uses_suggestion(mocker):
-    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-    mocker.patch("remote.utils.get_launch_template_id", return_value="lt-0123456789abcdef0")
-
-    # Mock random string generation for name suggestion
-    mocker.patch("remote.utils.random.choices", return_value=list("abc123"))
-
-    mock_ec2_client.return_value.run_instances.return_value = {
-        "Instances": [{"InstanceId": "i-suggested"}]
-    }
-
-    # User accepts the suggested name by pressing enter
-    result = runner.invoke(app, ["launch", "--launch-template", "test-template"], input="\n")
-
-    assert result.exit_code == 0
-
-    # Check that the suggested name pattern was used
-    call_args = mock_ec2_client.return_value.run_instances.call_args
-    tag_specs = call_args[1]["TagSpecifications"]
-    instance_name = tag_specs[0]["Tags"][0]["Value"]
-    assert "test-template-abc123" == instance_name
-
-
-def test_launch_no_instances_returned(mocker):
-    """Test launch when AWS returns no instances in the response."""
-    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-    mocker.patch("remote.utils.get_launch_template_id", return_value="lt-0123456789abcdef0")
-
-    # Return empty instances list
-    mock_ec2_client.return_value.run_instances.return_value = {"Instances": []}
-
-    result = runner.invoke(
-        app, ["launch", "--launch-template", "test-template", "--name", "test-instance"]
-    )
-
-    assert result.exit_code == 0
-    assert "Warning: No instance information returned from launch" in result.stdout
-
-
-def test_launch_validation_error_accessing_results(mocker):
-    """Test launch when ValidationError occurs accessing launch results."""
-    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-    mocker.patch("remote.utils.get_launch_template_id", return_value="lt-0123456789abcdef0")
-
-    # Mock safe_get_array_item to raise ValidationError
-    from remote.exceptions import ValidationError
-
-    mock_safe_get = mocker.patch("remote.utils.safe_get_array_item")
-    mock_safe_get.side_effect = ValidationError("Array access failed")
-
-    # Return instances but safe_get_array_item will fail
-    mock_ec2_client.return_value.run_instances.return_value = {
-        "Instances": [{"InstanceId": "i-0123456789abcdef0"}]
-    }
-
-    result = runner.invoke(
-        app, ["launch", "--launch-template", "test-template", "--name", "test-instance"]
-    )
-
-    assert result.exit_code == 1
-    assert "Error accessing launch result: Validation error: Array access failed" in result.stdout
-
-
-def test_launch_invalid_template_number(mocker, mock_launch_template_response):
-    """Test launch with invalid template number selection (out of bounds)."""
-    mocker.patch("remote.utils.get_ec2_client")
-    mocker.patch(
-        "remote.utils.get_launch_templates",
-        return_value=mock_launch_template_response["LaunchTemplates"],
-    )
-    mocker.patch("remote.config.config_manager.get_value", return_value=None)
-
-    # User enters invalid template number (3, but only 2 templates exist)
-    result = runner.invoke(app, ["launch"], input="3\n")
-
-    assert result.exit_code == 1
-    assert "Error:" in result.stdout
-
-
-def test_launch_zero_template_number(mocker, mock_launch_template_response):
-    """Test launch with zero as template number selection."""
-    mocker.patch("remote.utils.get_ec2_client")
-    mocker.patch(
-        "remote.utils.get_launch_templates",
-        return_value=mock_launch_template_response["LaunchTemplates"],
-    )
-    mocker.patch("remote.config.config_manager.get_value", return_value=None)
-
-    # User enters 0 (invalid since templates are 1-indexed)
-    result = runner.invoke(app, ["launch"], input="0\n")
-
-    assert result.exit_code == 1
-    assert "Error:" in result.stdout
-
-
-def test_launch_negative_template_number(mocker, mock_launch_template_response):
-    """Test launch with negative template number selection."""
-    mocker.patch("remote.utils.get_ec2_client")
-    mocker.patch(
-        "remote.utils.get_launch_templates",
-        return_value=mock_launch_template_response["LaunchTemplates"],
-    )
-    mocker.patch("remote.config.config_manager.get_value", return_value=None)
-
-    # User enters negative number
-    result = runner.invoke(app, ["launch"], input="-1\n")
-
-    assert result.exit_code == 1
-    assert "Error:" in result.stdout
 
 
 def test_list_launch_templates_with_details(mocker):
@@ -463,35 +361,6 @@ def test_list_launch_templates_with_details_no_versions(mocker):
 
     assert result.exit_code == 0
     assert "my-template" in result.stdout
-
-
-def test_launch_with_default_template_from_config(mocker):
-    """Test launch using default template from config."""
-    mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-    mocker.patch("remote.utils.get_launch_template_id", return_value="lt-default")
-    mocker.patch("remote.config.config_manager.get_value", return_value="default-template")
-
-    mock_ec2_client.return_value.run_instances.return_value = {
-        "Instances": [{"InstanceId": "i-from-default"}]
-    }
-
-    result = runner.invoke(app, ["launch", "--name", "my-instance"])
-
-    assert result.exit_code == 0
-    assert "Using default template: default-template" in result.stdout
-    assert "i-from-default" in result.stdout
-
-
-def test_launch_no_templates_found(mocker):
-    """Test launch when no templates are available."""
-    mocker.patch("remote.utils.get_ec2_client")
-    mocker.patch("remote.utils.get_launch_templates", return_value=[])
-    mocker.patch("remote.config.config_manager.get_value", return_value=None)
-
-    result = runner.invoke(app, ["launch"])
-
-    assert result.exit_code == 1
-    assert "No launch templates found" in result.stdout
 
 
 def test_template_versions_success(mocker):
@@ -596,7 +465,7 @@ def test_template_info_specific_version(mocker):
     ]
     mocker.patch("remote.ami.get_launch_template_versions", return_value=versions)
 
-    result = runner.invoke(app, ["template-info", "my-template", "-v", "1"])
+    result = runner.invoke(app, ["template-info", "my-template", "-V", "1"])
 
     assert result.exit_code == 0
     assert "t3.micro" in result.stdout
@@ -612,7 +481,7 @@ def test_template_info_version_not_found(mocker):
     ]
     mocker.patch("remote.ami.get_launch_template_versions", return_value=versions)
 
-    result = runner.invoke(app, ["template-info", "my-template", "-v", "99"])
+    result = runner.invoke(app, ["template-info", "my-template", "-V", "99"])
 
     assert result.exit_code == 1
     assert "Version 99 not found" in result.stdout

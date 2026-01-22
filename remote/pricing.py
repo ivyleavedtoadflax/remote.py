@@ -5,25 +5,28 @@ using the AWS Pricing API.
 """
 
 import json
+import logging
 from functools import lru_cache
 from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 
-# AWS region to location name mapping for the Pricing API.
+logger = logging.getLogger(__name__)
+
+# Static fallback mapping of AWS region codes to Pricing API location names.
 #
 # IMPORTANT: The Pricing API uses human-readable location names, NOT region codes.
 # These names must match EXACTLY what AWS accepts. Common mistakes:
 #   - "Europe (Ireland)" - WRONG (AWS returns no results)
 #   - "EU (Ireland)" - CORRECT
 #
-# Validated against AWS Pricing API: 2026-01-18
-# To re-validate, run: pytest -m integration tests/test_api_contracts.py
-# See: https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/price-list-query-api.html
+# This static mapping is used as a fallback when dynamic lookup fails.
+# For new regions, the dynamic lookup via get_region_location() will fetch
+# the location name from AWS SSM Parameter Store.
 #
-# Test coverage for this mapping: tests/test_api_contracts.py::TestPricingApiContracts
-REGION_TO_LOCATION: dict[str, str] = {
+# See: https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/price-list-query-api.html
+_STATIC_REGION_TO_LOCATION: dict[str, str] = {
     "us-east-1": "US East (N. Virginia)",
     "us-east-2": "US East (Ohio)",
     "us-west-1": "US West (N. California)",
@@ -44,6 +47,10 @@ REGION_TO_LOCATION: dict[str, str] = {
     "ca-central-1": "Canada (Central)",
 }
 
+# Public reference to the static mapping for backwards compatibility
+# and for test validation against known-good values
+REGION_TO_LOCATION: dict[str, str] = _STATIC_REGION_TO_LOCATION
+
 
 @lru_cache(maxsize=1)
 def get_pricing_client() -> Any:
@@ -56,6 +63,77 @@ def get_pricing_client() -> Any:
         boto3 Pricing client instance
     """
     return boto3.client("pricing", region_name="us-east-1")
+
+
+@lru_cache(maxsize=1)
+def get_ssm_client() -> Any:
+    """Get or create the SSM client for region lookup.
+
+    Uses us-east-1 as the SSM endpoint for global infrastructure parameters.
+
+    Returns:
+        boto3 SSM client instance
+    """
+    return boto3.client("ssm", region_name="us-east-1")
+
+
+@lru_cache(maxsize=256)
+def get_region_location(region_code: str) -> str | None:
+    """Get the Pricing API location name for an AWS region code.
+
+    This function dynamically fetches the location name from AWS SSM Parameter Store,
+    which provides authoritative region information. Results are cached to minimize
+    API calls.
+
+    If the dynamic lookup fails, falls back to the static mapping.
+
+    Args:
+        region_code: The AWS region code (e.g., 'us-east-1', 'eu-west-1')
+
+    Returns:
+        The location name for the Pricing API (e.g., 'US East (N. Virginia)'),
+        or None if the region is not found.
+
+    Example:
+        >>> get_region_location('us-east-1')
+        'US East (N. Virginia)'
+        >>> get_region_location('eu-west-1')
+        'EU (Ireland)'
+    """
+    # First, try the static mapping for known regions (faster, no API call)
+    if region_code in _STATIC_REGION_TO_LOCATION:
+        return _STATIC_REGION_TO_LOCATION[region_code]
+
+    # For unknown regions, try dynamic lookup from AWS SSM
+    try:
+        ssm_client = get_ssm_client()
+        param_name = f"/aws/service/global-infrastructure/regions/{region_code}/longName"
+        response = ssm_client.get_parameter(Name=param_name)
+        location: str = response["Parameter"]["Value"]
+        logger.debug(f"Dynamically fetched location for {region_code}: {location}")
+        return location
+    except ClientError as e:
+        error_code = e.response.get("Error", {}).get("Code", "")
+        if error_code == "ParameterNotFound":
+            logger.debug(f"Region {region_code} not found in AWS SSM")
+        else:
+            logger.debug(f"SSM lookup failed for {region_code}: {e}")
+        return None
+    except NoCredentialsError:
+        logger.debug(f"No credentials for SSM lookup of {region_code}")
+        return None
+    except (KeyError, TypeError):
+        logger.debug(f"Unexpected SSM response format for {region_code}")
+        return None
+
+
+def clear_region_location_cache() -> None:
+    """Clear the region location cache.
+
+    Useful for testing or when you want to refresh region data.
+    """
+    get_region_location.cache_clear()
+    get_ssm_client.cache_clear()
 
 
 def get_current_region() -> str:
@@ -86,10 +164,10 @@ def get_instance_price(instance_type: str, region: str | None = None) -> float |
     if region is None:
         region = get_current_region()
 
-    # Get location name for region
-    location = REGION_TO_LOCATION.get(region)
+    # Get location name for region (uses dynamic lookup with static fallback)
+    location = get_region_location(region)
     if not location:
-        # Region not in our mapping, return None
+        # Region not found in static mapping or via dynamic lookup
         return None
 
     try:
@@ -128,13 +206,17 @@ def get_instance_price(instance_type: str, region: str | None = None) -> float |
 
         return None
 
-    except ClientError:
+    except ClientError as e:
         # Don't raise an exception for pricing errors - just return None
         # Pricing failures shouldn't block the main functionality
+        error_code = e.response.get("Error", {}).get("Code", "Unknown")
+        logger.debug(f"Pricing API error for {instance_type} in {region}: {error_code}")
         return None
     except NoCredentialsError:
+        logger.debug(f"No credentials for pricing lookup of {instance_type}")
         return None
-    except (json.JSONDecodeError, KeyError, ValueError, TypeError):
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
+        logger.debug(f"Could not parse pricing data for {instance_type}: {e}")
         return None
 
 
@@ -158,8 +240,9 @@ def get_instance_price_with_fallback(
     if region is None:
         region = get_current_region()
 
-    # Check if region is in our mapping
-    if region not in REGION_TO_LOCATION:
+    # Check if region has a valid location mapping (static or dynamic)
+    location = get_region_location(region)
+    if not location:
         # Fall back to us-east-1 pricing
         price = get_instance_price(instance_type, "us-east-1")
         return (price, True)
@@ -189,5 +272,7 @@ def clear_price_cache() -> None:
     """Clear the pricing cache.
 
     Useful for testing or when you want to refresh pricing data.
+    Also clears the region location cache.
     """
     get_instance_price.cache_clear()
+    clear_region_location_cache()

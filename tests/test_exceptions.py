@@ -75,8 +75,6 @@ class TestMultipleInstancesFoundError:
         error = MultipleInstancesFoundError("web-server", 3)
 
         assert "Multiple instances (3) found with name 'web-server'" in str(error)
-        assert error.instance_name == "web-server"
-        assert error.count == 3
         assert "Use a more specific instance name" in error.details
 
     def test_inheritance(self):

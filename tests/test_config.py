@@ -90,38 +90,27 @@ class TestConfigManager:
 
     def test_get_instance_name_success(self, mocker):
         manager = ConfigManager()
-        mock_config = mocker.MagicMock()
-        mock_config.__contains__ = lambda self, key: key == "DEFAULT"
-        mock_config.__getitem__ = lambda self, key: {"instance_name": "test-instance"}
-        manager._file_config = mock_config
+        mock_pydantic_config = mocker.MagicMock()
+        mock_pydantic_config.instance_name = "test-instance"
+        manager._pydantic_config = mock_pydantic_config
 
         result = manager.get_instance_name()
         assert result == "test-instance"
 
-    def test_get_instance_name_no_default_section(self, mocker):
+    def test_get_instance_name_no_instance_name_set(self, mocker):
         manager = ConfigManager()
-        mock_config = mocker.MagicMock()
-        mock_config.__contains__ = lambda self, key: False
-        manager._file_config = mock_config
-
-        result = manager.get_instance_name()
-        assert result is None
-
-    def test_get_instance_name_no_instance_name_key(self, mocker):
-        manager = ConfigManager()
-        mock_config = mocker.MagicMock()
-        mock_config.__contains__ = lambda self, key: key == "DEFAULT"
-        mock_config.__getitem__ = lambda self, key: {}
-        manager._file_config = mock_config
+        mock_pydantic_config = mocker.MagicMock()
+        mock_pydantic_config.instance_name = None
+        manager._pydantic_config = mock_pydantic_config
 
         result = manager.get_instance_name()
         assert result is None
 
     def test_get_instance_name_validation_error(self, mocker):
         manager = ConfigManager()
-        mock_config = mocker.MagicMock()
-        mock_config.__contains__.side_effect = ValueError("Config validation error")
-        manager._file_config = mock_config
+        mocker.patch.object(
+            manager, "get_validated_config", side_effect=ValueError("Config validation error")
+        )
 
         result = manager.get_instance_name()
         assert result is None
@@ -129,7 +118,7 @@ class TestConfigManager:
     def test_set_instance_name_with_default_path(self, mocker):
         mock_settings = mocker.patch("remote.config.Settings")
         mock_settings.get_config_path.return_value = Path("/test/config.ini")
-        mock_write_config = mocker.patch("remote.config.write_config")
+        mock_write_config = mocker.patch.object(ConfigManager, "_write_config")
 
         manager = ConfigManager()
         manager._file_config = configparser.ConfigParser()
@@ -140,7 +129,7 @@ class TestConfigManager:
         assert manager.file_config["DEFAULT"]["instance_name"] == "new-instance"
 
     def test_set_instance_name_with_custom_path(self, mocker):
-        mock_write_config = mocker.patch("remote.config.write_config")
+        mock_write_config = mocker.patch.object(ConfigManager, "_write_config")
 
         manager = ConfigManager()
         manager._file_config = configparser.ConfigParser()
@@ -151,7 +140,7 @@ class TestConfigManager:
         assert manager.file_config["DEFAULT"]["instance_name"] == "new-instance"
 
     def test_set_instance_name_creates_default_section(self, mocker):
-        mocker.patch("remote.config.write_config")
+        mocker.patch.object(ConfigManager, "_write_config")
 
         manager = ConfigManager()
         manager._file_config = configparser.ConfigParser()
@@ -163,45 +152,45 @@ class TestConfigManager:
         assert manager.file_config["DEFAULT"]["instance_name"] == "new-instance"
 
 
-def test_create_config_dir_existing(mocker):
-    mocker.patch("os.path.exists", return_value=True)
-    mock_makedirs = mocker.patch("os.makedirs")
-    config.create_config_dir("dummy_path")
-    mock_makedirs.assert_not_called()
+def test_ensure_config_dir_existing(mocker):
+    mocker.patch("pathlib.Path.exists", return_value=True)
+    mock_mkdir = mocker.patch("pathlib.Path.mkdir")
+    ConfigManager._ensure_config_dir("dummy_path")
+    mock_mkdir.assert_not_called()
 
 
-def test_create_config_dir_not_existing(mocker):
-    mocker.patch("os.path.exists", return_value=False)
-    mock_makedirs = mocker.patch("os.makedirs")
-    config.create_config_dir("dummy_path")
-    mock_makedirs.assert_called_once()
+def test_ensure_config_dir_not_existing(mocker):
+    mocker.patch("pathlib.Path.exists", return_value=False)
+    mock_mkdir = mocker.patch("pathlib.Path.mkdir")
+    ConfigManager._ensure_config_dir("dummy_path")
+    mock_mkdir.assert_called_once_with(parents=True)
 
 
 def test_read_config(mocker):
     mock_config = mocker.patch("configparser.ConfigParser")
     mock_config_instance = mock_config.return_value
 
-    result = config.read_config("/test/path")
+    result = ConfigManager._read_config("/test/path")
 
     assert result == mock_config_instance
     mock_config_instance.read.assert_called_once_with("/test/path")
 
 
 def test_write_config(test_config, mocker):
-    mock_create_config_dir = mocker.patch("remote.config.create_config_dir")
+    mock_ensure_config_dir = mocker.patch.object(ConfigManager, "_ensure_config_dir")
     mock_open_file = mocker.patch("builtins.open", mock_open())
 
     cfg = configparser.ConfigParser()
     cfg["DEFAULT"]["instance_name"] = "test"
 
-    config.write_config(cfg, test_config)
+    ConfigManager._write_config(cfg, test_config)
 
-    mock_create_config_dir.assert_called_once_with(test_config)
+    mock_ensure_config_dir.assert_called_once_with(test_config)
     mock_open_file.assert_called_once_with(test_config, "w")
 
 
 def test_show_command(mocker):
-    mock_read_config = mocker.patch("remote.config.read_config")
+    mock_read_config = mocker.patch.object(ConfigManager, "_read_config")
     mock_config = mocker.MagicMock()
     mock_config.__getitem__.return_value = {"instance_name": "test-instance", "region": "us-east-1"}
     mock_read_config.return_value = mock_config
@@ -214,7 +203,7 @@ def test_show_command(mocker):
 
 
 def test_show_command_with_custom_path(mocker):
-    mock_read_config = mocker.patch("remote.config.read_config")
+    mock_read_config = mocker.patch.object(ConfigManager, "_read_config")
     mock_config = mocker.MagicMock()
     mock_config.__getitem__.return_value = {}
     mock_read_config.return_value = mock_config
@@ -377,7 +366,7 @@ class TestConfigurationEdgeCases:
 
         mock_settings = mocker.patch("remote.config.Settings")
         mock_settings.return_value.get_config_path.return_value = str(nonexistent_path)
-        mock_write_config = mocker.patch("remote.config.write_config")
+        mock_write_config = mocker.patch.object(ConfigManager, "_write_config")
 
         config_manager = ConfigManager()
         config_manager.set_instance_name("test-instance")
@@ -389,18 +378,17 @@ class TestConfigurationEdgeCases:
         """Should handle config files with empty DEFAULT section."""
         config_manager = ConfigManager()
 
-        # Mock empty config
-        mock_config = mocker.MagicMock()
-        mock_config.__contains__ = lambda self, key: key == "DEFAULT"
-        mock_config.__getitem__ = lambda self, key: {}  # Empty section
-        config_manager._file_config = mock_config
+        # Mock Pydantic config with no instance name set (empty config)
+        mock_pydantic_config = mocker.MagicMock()
+        mock_pydantic_config.instance_name = None
+        config_manager._pydantic_config = mock_pydantic_config
 
         result = config_manager.get_instance_name()
         assert result is None
 
     def test_should_validate_instance_name_format(self, mocker):
         """Should validate instance name format when setting."""
-        mock_write_config = mocker.patch("remote.config.write_config")
+        mock_write_config = mocker.patch.object(ConfigManager, "_write_config")
         config_manager = ConfigManager()
 
         # Test with valid instance name
@@ -490,7 +478,7 @@ class TestConfigGetCommand:
         assert "ubuntu" in result.stdout
 
     def test_get_missing_value(self, tmpdir):
-        """Should exit with code 1 for missing value."""
+        """Should exit with code 0 for missing value with informational message."""
         config_path = str(tmpdir / "config.ini")
 
         # Create empty config file
@@ -500,9 +488,12 @@ class TestConfigGetCommand:
         with open(config_path, "w") as f:
             cfg.write(f)
 
-        result = runner.invoke(config.app, ["get", "missing_key", "-c", config_path])
+        # Use a valid key that has no value set in config
+        result = runner.invoke(config.app, ["get", "instance_name", "-c", config_path])
 
-        assert result.exit_code == 1
+        # Exit code 0 because "config not set" is a "nothing to show" scenario, not an error
+        assert result.exit_code == 0
+        assert "not set" in result.stdout
 
 
 class TestConfigUnsetCommand:
@@ -531,7 +522,7 @@ class TestConfigUnsetCommand:
         assert "ssh_user" not in cfg["DEFAULT"]
 
     def test_unset_missing_key(self, tmpdir):
-        """Should exit with code 1 for missing key."""
+        """Should exit with code 0 for missing key (nothing to do scenario)."""
         config_path = str(tmpdir / "config.ini")
 
         # Create empty config file
@@ -543,7 +534,8 @@ class TestConfigUnsetCommand:
 
         result = runner.invoke(config.app, ["unset", "missing_key", "-c", config_path])
 
-        assert result.exit_code == 1
+        # Exit code 0 because "key not found" is a "nothing to do" scenario, not an error
+        assert result.exit_code == 0
         assert "not found" in result.stdout
 
 
@@ -753,26 +745,26 @@ class TestRemoteConfigPydanticModel:
         cfg = RemoteConfig(ssh_user="")
         assert cfg.ssh_user == "ubuntu"
 
-    def test_check_ssh_key_exists_no_path(self):
-        """Should return True when no SSH key path is set."""
+    def test_validate_ssh_key_exists_no_path(self):
+        """Should not raise when no SSH key path is set."""
         from remote.config import RemoteConfig
 
         cfg = RemoteConfig()
-        exists, error = cfg.check_ssh_key_exists()
-        assert exists is True
-        assert error is None
+        # Should not raise
+        cfg.validate_ssh_key_exists()
 
-    def test_check_ssh_key_exists_missing_file(self, tmpdir):
-        """Should return False when SSH key file doesn't exist."""
+    def test_validate_ssh_key_exists_missing_file(self, tmpdir):
+        """Should raise ValidationError when SSH key file doesn't exist."""
         from remote.config import RemoteConfig
+        from remote.exceptions import ValidationError
 
         cfg = RemoteConfig(ssh_key_path="/nonexistent/key.pem")
-        exists, error = cfg.check_ssh_key_exists()
-        assert exists is False
-        assert "SSH key not found" in error
+        with pytest.raises(ValidationError) as exc_info:
+            cfg.validate_ssh_key_exists()
+        assert "SSH key not found" in str(exc_info.value)
 
-    def test_check_ssh_key_exists_valid_file(self, tmpdir):
-        """Should return True when SSH key file exists."""
+    def test_validate_ssh_key_exists_valid_file(self, tmpdir):
+        """Should not raise when SSH key file exists."""
         from remote.config import RemoteConfig
 
         # Create a temporary key file
@@ -781,9 +773,8 @@ class TestRemoteConfigPydanticModel:
             f.write("test")
 
         cfg = RemoteConfig(ssh_key_path=key_path)
-        exists, error = cfg.check_ssh_key_exists()
-        assert exists is True
-        assert error is None
+        # Should not raise
+        cfg.validate_ssh_key_exists()
 
 
 class TestRemoteConfigFromIniFile:
@@ -1012,3 +1003,439 @@ class TestConfigManagerPydanticIntegration:
         result = manager.get_value("instance_name")
 
         assert result == "env-server"
+
+
+class TestConfigurationRegressions:
+    """Regression tests for configuration-related issues.
+
+    These tests demonstrate fixes for issues like #27 where tests would fail
+    if no configuration was set up locally.
+    """
+
+    def test_config_manager_works_with_mocked_config(self, mocker):
+        """Test that config manager works when properly mocked.
+
+        Regression test for Issue #27 - demonstrates config can be mocked for testing.
+        """
+        from remote.config import ConfigManager
+
+        # Create a config manager with mocked internals
+        manager = ConfigManager()
+
+        # Mock the pydantic config to return an instance name
+        mock_pydantic_config = mocker.MagicMock()
+        mock_pydantic_config.instance_name = "test-instance"
+        manager._pydantic_config = mock_pydantic_config
+
+        # The config manager should return the mocked instance name
+        instance_name = manager.get_instance_name()
+
+        assert instance_name is not None
+        assert instance_name == "test-instance"
+
+    def test_config_manager_graceful_none_return(self, mocker):
+        """Test that config manager returns None gracefully when no config exists.
+
+        This test mocks at the Pydantic config level to ensure proper test isolation
+        when a real config file might exist at ~/.config/remote.py/config.ini.
+        """
+        from remote.config import ConfigManager
+
+        # Create a fresh config manager
+        config_manager = ConfigManager()
+
+        # Mock the pydantic config to simulate no instance name configured
+        mock_pydantic_config = mocker.MagicMock()
+        mock_pydantic_config.instance_name = None
+        config_manager._pydantic_config = mock_pydantic_config
+
+        # Should return None gracefully, not crash
+        result = config_manager.get_instance_name()
+        assert result is None
+
+    def test_settings_only_testing_flags(self):
+        """Test that Settings only contains testing-related configuration."""
+        from remote.settings import Settings
+
+        settings = Settings()
+
+        # Should only have testing flags, no instance configuration
+        assert hasattr(settings, "testing_mode")
+        assert hasattr(settings, "mock_aws_calls")
+        assert not hasattr(settings, "default_instance_name")
+        assert not hasattr(settings, "aws_region")
+
+    def test_get_instance_name_raises_exit_when_not_configured(self, mocker):
+        """Test that get_instance_name raises typer.Exit when config is missing.
+
+        Regression test for Issue #27 - the application should handle
+        missing configuration gracefully with typer.Exit instead of sys.exit(1).
+        """
+        import pytest
+        import typer
+
+        # Mock config_manager to return None (no config)
+        mocker.patch("remote.instance_resolver.config_manager.get_instance_name", return_value=None)
+
+        from remote.instance_resolver import get_instance_name
+
+        # Should raise typer.Exit, not sys.exit
+        with pytest.raises(typer.Exit) as exc_info:
+            get_instance_name()
+
+        assert exc_info.value.exit_code == 1
+
+
+# ============================================================================
+# Issue 213: Exception Handler Edge Case Tests
+# ============================================================================
+
+
+class TestConfigManagerHandleConfigError:
+    """Tests for the _handle_config_error method in ConfigManager.
+
+    These tests cover the exception handling paths that may occur when
+    reading or parsing configuration files.
+    """
+
+    def test_handle_config_error_with_configparser_error(self, capsys):
+        """Should handle configparser errors gracefully."""
+        manager = ConfigManager()
+        error = configparser.ParsingError(source="test.ini")
+        error.append(1, "Invalid line")
+
+        manager._handle_config_error(error)
+
+        captured = capsys.readouterr()
+        assert "Could not read config file" in captured.out
+
+    def test_handle_config_error_with_os_error(self, capsys):
+        """Should handle OS errors gracefully."""
+        manager = ConfigManager()
+        error = OSError("File not accessible")
+
+        manager._handle_config_error(error)
+
+        captured = capsys.readouterr()
+        assert "Could not read config file" in captured.out
+        assert "File not accessible" in captured.out
+
+    def test_handle_config_error_with_permission_error(self, capsys):
+        """Should handle permission errors gracefully."""
+        manager = ConfigManager()
+        error = PermissionError("Permission denied")
+
+        manager._handle_config_error(error)
+
+        captured = capsys.readouterr()
+        assert "Could not read config file" in captured.out
+        assert "Permission denied" in captured.out
+
+    def test_handle_config_error_with_key_error(self, capsys):
+        """Should handle key errors with appropriate message."""
+        manager = ConfigManager()
+        error = KeyError("missing_key")
+
+        manager._handle_config_error(error)
+
+        captured = capsys.readouterr()
+        assert "structure is invalid" in captured.out
+
+    def test_handle_config_error_with_type_error(self, capsys):
+        """Should handle type errors with appropriate message."""
+        manager = ConfigManager()
+        error = TypeError("expected str, got int")
+
+        manager._handle_config_error(error)
+
+        captured = capsys.readouterr()
+        assert "structure is invalid" in captured.out
+
+    def test_handle_config_error_with_attribute_error(self, capsys):
+        """Should handle attribute errors with appropriate message."""
+        manager = ConfigManager()
+        error = AttributeError("'NoneType' object has no attribute 'get'")
+
+        manager._handle_config_error(error)
+
+        captured = capsys.readouterr()
+        assert "structure is invalid" in captured.out
+
+    def test_handle_config_error_with_value_error(self, capsys):
+        """Should handle value errors with validation message."""
+        manager = ConfigManager()
+        error = ValueError("Invalid format")
+
+        manager._handle_config_error(error)
+
+        captured = capsys.readouterr()
+        assert "validation error" in captured.out
+        assert "Invalid format" in captured.out
+
+    def test_get_instance_name_returns_none_on_os_error(self, mocker, capsys):
+        """Should return None and display warning on OS error."""
+        manager = ConfigManager()
+
+        # Mock get_validated_config to raise OSError
+        mocker.patch.object(
+            manager, "get_validated_config", side_effect=OSError("Permission denied")
+        )
+
+        result = manager.get_instance_name()
+
+        assert result is None
+        captured = capsys.readouterr()
+        assert "Could not read config file" in captured.out
+
+    def test_get_instance_name_returns_none_on_configparser_error(self, mocker, capsys):
+        """Should return None and display warning on configparser error."""
+        manager = ConfigManager()
+
+        error = configparser.MissingSectionHeaderError(filename="config.ini", lineno=1, line="bad")
+        mocker.patch.object(manager, "get_validated_config", side_effect=error)
+
+        result = manager.get_instance_name()
+
+        assert result is None
+        captured = capsys.readouterr()
+        assert "Could not read config file" in captured.out
+
+    def test_get_value_returns_none_on_type_error(self, mocker, capsys):
+        """Should return None and display warning on TypeError."""
+        manager = ConfigManager()
+
+        mocker.patch.object(manager, "get_validated_config", side_effect=TypeError("bad type"))
+
+        result = manager.get_value("instance_name")
+
+        assert result is None
+        captured = capsys.readouterr()
+        assert "structure is invalid" in captured.out
+
+    def test_get_value_returns_none_on_value_error(self, mocker, capsys):
+        """Should return None and display warning on ValueError."""
+        manager = ConfigManager()
+
+        mocker.patch.object(
+            manager, "get_validated_config", side_effect=ValueError("invalid value")
+        )
+
+        result = manager.get_value("ssh_user")
+
+        assert result is None
+        captured = capsys.readouterr()
+        assert "validation error" in captured.out
+
+
+class TestConfigValidationResultEdgeCases:
+    """Additional edge case tests for ConfigValidationResult."""
+
+    def test_validate_config_with_unusual_but_valid_content(self, tmpdir):
+        """Should handle valid config file with unusual but parseable content."""
+        from remote.config import ConfigValidationResult
+
+        config_path = str(tmpdir / "unusual.ini")
+        with open(config_path, "w") as f:
+            # Write a valid but unusual config file with comments and empty values
+            f.write(
+                "[DEFAULT]\n"
+                "# This is a comment\n"
+                "ssh_user = ubuntu\n"
+                "; Another comment style\n"
+                "\n"  # Empty line
+            )
+
+        # Should be valid but may have no warnings
+        result = ConfigValidationResult.validate_config(config_path)
+        assert result.is_valid is True
+
+    def test_validate_config_with_permission_denied(self, mocker, tmpdir):
+        """Should return error when file permissions prevent reading."""
+        from remote.config import ConfigValidationResult
+
+        config_path = str(tmpdir / "config.ini")
+
+        # Create file then mock the exists check but have read fail
+        with open(config_path, "w") as f:
+            f.write("[DEFAULT]\ninstance_name = test\n")
+
+        # Mock Path.exists to return True but have configparser.read fail
+        mock_parser = mocker.patch("remote.config.configparser.ConfigParser")
+        mock_instance = mock_parser.return_value
+        mock_instance.read.side_effect = PermissionError("Permission denied")
+
+        # Note: The validation logic catches ValueError, so we need to trigger that path
+        mocker.patch(
+            "remote.config.RemoteConfig.from_ini_file",
+            side_effect=ValueError("Cannot read file"),
+        )
+
+        result = ConfigValidationResult.validate_config(config_path)
+
+        assert result.is_valid is False
+        assert any("Cannot read file" in e for e in result.errors)
+
+    def test_validate_config_with_multiple_warnings(self, tmpdir):
+        """Should collect multiple warnings for unknown keys."""
+        from remote.config import ConfigValidationResult
+
+        config_path = str(tmpdir / "config.ini")
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {
+            "ssh_user": "ubuntu",
+            "unknown_key1": "value1",
+            "unknown_key2": "value2",
+            "another_unknown": "value3",
+        }
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = ConfigValidationResult.validate_config(config_path)
+
+        assert result.is_valid is True
+        assert len(result.warnings) == 3
+        assert all("Unknown config key" in w for w in result.warnings)
+
+    def test_validate_config_with_both_errors_and_warnings(self, tmpdir):
+        """Should report both errors and warnings."""
+        from remote.config import ConfigValidationResult
+
+        config_path = str(tmpdir / "config.ini")
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {
+            "ssh_key_path": "/nonexistent/key.pem",  # Will cause error
+            "unknown_key": "value",  # Will cause warning
+        }
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = ConfigValidationResult.validate_config(config_path)
+
+        assert result.is_valid is False
+        assert len(result.errors) > 0
+        assert len(result.warnings) > 0
+        assert any("SSH key not found" in e for e in result.errors)
+        assert any("Unknown config key" in w for w in result.warnings)
+
+
+# ============================================================================
+# Tests for Uncovered Code Paths (Issue #255)
+# ============================================================================
+
+
+class TestConfigManagerSetValueEdgeCases:
+    """Test edge cases in ConfigManager.set_value()."""
+
+    def test_set_value_creates_default_section_if_missing(self, mocker, tmpdir):
+        """Should create DEFAULT section if it doesn't exist (line 360)."""
+        from remote.config import ConfigManager
+        from remote.settings import Settings
+
+        # Create empty config file without DEFAULT section
+        config_path = str(tmpdir / "config.ini")
+        with open(config_path, "w") as f:
+            f.write("")  # Empty file, no DEFAULT section
+
+        mocker.patch.object(Settings, "get_config_path", return_value=Path(config_path))
+        manager = ConfigManager()
+
+        # Setting a value should create DEFAULT section
+        manager.set_value("ssh_user", "test-user", config_path)
+
+        # Verify the value was set correctly
+        cfg = configparser.ConfigParser()
+        cfg.read(config_path)
+        assert "DEFAULT" in cfg
+        assert cfg["DEFAULT"]["ssh_user"] == "test-user"
+
+
+class TestConfigManagerRemoveValueEdgeCases:
+    """Test edge cases in ConfigManager.remove_value()."""
+
+    def test_remove_value_uses_default_config_path(self, mocker, tmpdir):
+        """Should use default config path when none is specified (line 371)."""
+        from remote.config import ConfigManager
+        from remote.settings import Settings
+
+        # Create config file with a value
+        config_path = str(tmpdir / "config.ini")
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"ssh_user": "ubuntu"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        mocker.patch.object(Settings, "get_config_path", return_value=Path(config_path))
+        manager = ConfigManager()
+
+        # Remove value without specifying config_path - should use default
+        result = manager.remove_value("ssh_user")
+
+        assert result is True
+        cfg = configparser.ConfigParser()
+        cfg.read(config_path)
+        assert "ssh_user" not in cfg["DEFAULT"]
+
+
+class TestConfigGetCommandCustomPath:
+    """Test config get command with custom config paths."""
+
+    def test_get_value_from_custom_config_path(self, tmpdir):
+        """Should read value from custom config path (line 527)."""
+        config_path = str(tmpdir / "custom_config.ini")
+
+        # Create config file with custom value
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"ssh_user": "custom-user"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = runner.invoke(config.app, ["get", "ssh_user", "-c", config_path])
+
+        assert result.exit_code == 0
+        assert "custom-user" in result.stdout
+
+
+class TestConfigInitCommandCancellation:
+    """Test config init command cancellation scenarios."""
+
+    def test_init_cancel_when_config_exists(self, tmpdir):
+        """Should cancel when user declines to overwrite existing config (lines 573-575)."""
+        config_path = str(tmpdir / "config.ini")
+
+        # Create existing config file
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"ssh_user": "existing-user"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        # User enters 'n' to decline overwrite
+        result = runner.invoke(config.app, ["init", "-c", config_path], input="n\n")
+
+        assert result.exit_code == 0
+        assert "Cancelled" in result.stdout
+
+        # Verify original config was not modified
+        cfg = configparser.ConfigParser()
+        cfg.read(config_path)
+        assert cfg["DEFAULT"]["ssh_user"] == "existing-user"
+
+
+class TestConfigValidateCommandOutputStyles:
+    """Test config validate command output styling."""
+
+    def test_validate_shows_warnings_with_yellow_border(self, tmpdir):
+        """Should show yellow border when config has warnings (lines 621, 628-629)."""
+        config_path = str(tmpdir / "config.ini")
+
+        # Create config with unknown key (causes warning but not error)
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"ssh_user": "ubuntu", "unknown_key": "value"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = runner.invoke(config.app, ["validate", "-c", config_path])
+
+        # Should exit 0 (warnings don't cause failure)
+        assert result.exit_code == 0
+        assert "Configuration has warnings" in result.stdout
+        assert "Unknown config key" in result.stdout

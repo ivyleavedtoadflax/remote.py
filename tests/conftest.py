@@ -1,10 +1,12 @@
 """Shared test configuration and fixtures."""
 
-# Set AWS_DEFAULT_REGION BEFORE any imports that might trigger boto3 client creation.
+# Set environment variables BEFORE any imports that might trigger client creation.
 # This must be at the top of conftest.py to ensure it's set before test collection.
 import os
 
 os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
+# Set COLUMNS for consistent terminal width in tests (used by Rich console)
+os.environ.setdefault("COLUMNS", "200")
 
 import configparser
 import datetime
@@ -24,6 +26,12 @@ def test_config():
     This fixture ensures that tests don't depend on the user's local configuration
     and provides sensible defaults for testing.
     """
+    # Reset the SSH config cache before each test to prevent stale cached values
+    # from affecting tests that mock the config manager with different values
+    from remote.instance import reset_ssh_config_cache
+
+    reset_ssh_config_cache()
+
     test_settings = Settings(testing_mode=True, mock_aws_calls=True)
 
     # Create a mock config manager that returns test instance name
@@ -31,9 +39,15 @@ def test_config():
     mock_config_manager.get_instance_name.return_value = "test-instance"
 
     # Mock the global settings object and config manager
+    # We need to patch config_manager in both config and instance_resolver modules
+    # because instance_resolver imports config_manager at module level
     with patch("remote.settings.settings", test_settings):
         with patch("remote.config.config_manager", mock_config_manager):
-            yield test_settings
+            with patch("remote.instance_resolver.config_manager", mock_config_manager):
+                yield test_settings
+
+    # Also reset after the test to ensure clean state
+    reset_ssh_config_cache()
 
 
 @pytest.fixture
@@ -47,6 +61,36 @@ def test_config_file(tmpdir):
         cfg.write(f)
 
     return str(config_path)
+
+
+@pytest.fixture
+def isolated_config_manager(mocker, tmpdir):
+    """Create an isolated ConfigManager for testing.
+
+    This fixture provides a ConfigManager that reads from a temporary config file
+    instead of the user's real config at ~/.config/remote.py/config.ini.
+
+    This ensures test isolation when a real config file exists locally.
+
+    Usage:
+        def test_something(isolated_config_manager):
+            manager, config_path = isolated_config_manager
+            # manager is a fresh ConfigManager
+            # config_path is the temporary config file path
+    """
+    from remote.config import ConfigManager
+    from remote.settings import Settings
+
+    # Create a temporary config path
+    config_path = tmpdir.join("config.ini")
+
+    # Mock Settings.get_config_path to return our temp path
+    mocker.patch.object(Settings, "get_config_path", return_value=config_path)
+
+    # Create a fresh ConfigManager that will use the mocked path
+    manager = ConfigManager()
+
+    return manager, str(config_path)
 
 
 # ============================================================================
