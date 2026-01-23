@@ -1,8 +1,3 @@
-import io
-import sys
-
-import pytest
-
 from remote.logo import (
     FIRE_PALETTE,
     LOGO,
