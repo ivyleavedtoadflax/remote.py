@@ -37,7 +37,7 @@ dev = [
 ]
 
 [project.scripts]
-remote = "remote.__main__:app"
+remote = "remote.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
