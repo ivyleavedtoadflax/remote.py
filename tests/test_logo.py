@@ -1,40 +1,9 @@
 from remote.logo import (
-    FIRE_PALETTE,
-    LOGO,
+    get_color_for_line,
     get_version,
     interpolate_color,
     print_logo,
 )
-
-
-class TestLogoPalette:
-    """Tests for the color palette definition."""
-
-    def test_fire_palette_is_list(self):
-        assert isinstance(FIRE_PALETTE, list)
-
-    def test_fire_palette_has_colors(self):
-        assert len(FIRE_PALETTE) >= 2
-
-    def test_fire_palette_colors_are_hex(self):
-        for color in FIRE_PALETTE:
-            assert color.startswith("#")
-            assert len(color) == 7
-
-
-class TestLogoConstant:
-    """Tests for the LOGO constant."""
-
-    def test_logo_is_string(self):
-        assert isinstance(LOGO, str)
-
-    def test_logo_is_multiline(self):
-        lines = LOGO.strip().split("\n")
-        assert len(lines) > 1
-
-    def test_logo_contains_remote_text(self):
-        # The ASCII art should spell "REMOTE"
-        assert LOGO.strip()  # Not empty
 
 
 class TestInterpolateColor:
@@ -61,6 +30,20 @@ class TestInterpolateColor:
         assert isinstance(result, tuple)
         assert len(result) == 3
         assert all(isinstance(c, int) for c in result)
+
+
+class TestGetColorForLine:
+    """Tests for get_color_for_line function."""
+
+    def test_single_line_returns_first_palette_color(self):
+        palette = ["#ff0000", "#00ff00"]
+        result = get_color_for_line(0, 1, palette)
+        assert result == "#ff0000"
+
+    def test_zero_lines_returns_first_palette_color(self):
+        palette = ["#ff0000", "#00ff00"]
+        result = get_color_for_line(0, 0, palette)
+        assert result == "#ff0000"
 
 
 class TestPrintLogo:

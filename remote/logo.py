@@ -24,7 +24,7 @@ LOGO = r"""
 """
 
 
-def hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
+def _hex_to_rgb(hex_color: str) -> tuple[int, int, int]:
     """Convert hex color string to RGB tuple."""
     hex_color = hex_color.lstrip("#")
     return (
@@ -70,7 +70,7 @@ def get_color_for_line(line_index: int, total_lines: int, palette: list[str]) ->
     if total_lines <= 1:
         return palette[0]
 
-    rgb_colors = [hex_to_rgb(c) for c in palette]
+    rgb_colors = [_hex_to_rgb(c) for c in palette]
     factor = line_index / (total_lines - 1)
 
     # Find which color segment we're in
@@ -90,9 +90,8 @@ def get_version() -> str:
     """Get the current package version."""
     try:
         version = importlib.metadata.version("remotepy")
-        if version is None:
-            return "0.0.0"
-        return version
+        # Handle deprecated implicit None return (will become KeyError in future)
+        return version if version is not None else "0.0.0"
     except importlib.metadata.PackageNotFoundError:
         return "0.0.0"
 
