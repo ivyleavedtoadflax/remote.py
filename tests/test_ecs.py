@@ -399,22 +399,12 @@ class TestECSErrorHandling:
         assert exc_info.value.aws_error_code == expected_aws_code
 
 
-def test_scale_command_invalid_count_zero(mocker):
-    """Test scale command rejects zero as desired count."""
+@pytest.mark.parametrize("invalid_count", ["0", "-1"])
+def test_scale_command_invalid_count_non_positive(mocker, invalid_count):
+    """Test scale command rejects zero and negative desired count."""
     mock_scale_service = mocker.patch("remote.ecs.scale_service")
 
-    result = runner.invoke(app, ["scale", "test-cluster", "test-service", "--count", "0"])
-
-    assert result.exit_code == 1
-    assert "must be positive" in result.stdout
-    mock_scale_service.assert_not_called()
-
-
-def test_scale_command_invalid_count_negative(mocker):
-    """Test scale command rejects negative desired count."""
-    mock_scale_service = mocker.patch("remote.ecs.scale_service")
-
-    result = runner.invoke(app, ["scale", "test-cluster", "test-service", "--count", "-1"])
+    result = runner.invoke(app, ["scale", "test-cluster", "test-service", "--count", invalid_count])
 
     assert result.exit_code == 1
     assert "must be positive" in result.stdout
