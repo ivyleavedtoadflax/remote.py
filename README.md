@@ -9,9 +9,13 @@ A Python CLI tool for managing AWS resources with a focus on EC2 instances. This
 ## Features
 
 - **EC2 Instance Management**: Start, stop, connect, list, and terminate instances
+- **Remote Execution**: Run commands on remote instances via SSH
+- **File Transfer**: Copy and sync files to/from instances using rsync
+- **Security Group Management**: Add/remove IP addresses from instance security groups
 - **AMI Operations**: Create AMIs and launch instances from images
 - **ECS Support**: Manage ECS clusters and services, including scaling operations
-- **Volume & Snapshot Management**: List and manage EBS volumes and snapshots
+- **Volume & Snapshot Management**: List, resize, and manage EBS volumes and snapshots
+- **Usage Tracking**: Track cumulative instance costs and runtime statistics
 - **Smart Configuration**: Simple config file with sensible defaults
 - **Comprehensive Error Handling**: User-friendly error messages for common AWS issues
 - **Input Validation**: Safe handling of AWS resource IDs and user input
@@ -122,6 +126,69 @@ Terminate an instance (permanent):
 remote instance terminate
 ```
 
+### Remote Command Execution
+
+Execute commands on a remote instance:
+
+```bash
+remote instance exec my-instance "ls -la"
+remote instance exec my-instance "cat /etc/hostname"
+```
+
+If the instance is stopped, use `--start` to auto-start it:
+
+```bash
+remote instance exec --start my-instance "uptime"
+```
+
+### File Transfer
+
+Copy files to/from an instance using rsync:
+
+```bash
+# Upload a file
+remote instance copy ./local-file.txt my-instance:/remote/path/
+
+# Download a file
+remote instance copy my-instance:/remote/file.txt ./local-path/
+
+# Sync a directory
+remote instance sync ./local-dir/ my-instance:/remote/dir/
+```
+
+### Security Group Management
+
+Manage IP access to your instances:
+
+```bash
+# Show your current public IP
+remote sg my-ip
+
+# Add your IP to an instance's security group
+remote sg add-ip my-instance
+
+# Add a specific IP/CIDR
+remote sg add-ip my-instance --ip 203.0.113.0/24
+
+# List allowed IPs
+remote sg list-ips my-instance
+
+# Remove an IP
+remote sg remove-ip my-instance --ip 203.0.113.50/32
+```
+
+### Usage Statistics
+
+Track instance usage and costs:
+
+```bash
+# View cumulative stats for an instance
+remote instance stats my-instance
+
+# Reset tracking data
+remote instance tracking-reset my-instance
+```
+
 ### Working with Different Instances
 
 To run commands on a different instance, pass the name as an argument:
@@ -165,6 +232,12 @@ List EBS volumes:
 
 ```bash
 remote volume list
+```
+
+Resize an EBS volume:
+
+```bash
+remote volume resize my-instance --size 100
 ```
 
 Create a snapshot:
@@ -235,7 +308,7 @@ uv build
 
 ### Testing
 
-The project includes a comprehensive test suite with 317+ tests achieving high coverage:
+The project includes a comprehensive test suite with 780+ tests achieving high coverage:
 
 #### Running Tests
 ```bash
