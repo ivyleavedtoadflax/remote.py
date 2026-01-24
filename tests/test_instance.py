@@ -1,3 +1,4 @@
+import pytest
 from typer.testing import CliRunner
 
 from remote.instance import app
@@ -121,27 +122,15 @@ class TestInstanceListCommand:
             ]
         )
 
-    def test_should_include_terminated_instances_with_all_flag(self, mocker):
-        """Should call get_instances without filter when --all flag is used."""
+    @pytest.mark.parametrize("flag", ["--all", "-a"])
+    def test_should_include_terminated_instances_with_all_flag(self, mocker, flag):
+        """Should call get_instances without filter when --all/-a flag is used."""
         mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
         mock_paginator = mocker.MagicMock()
         mock_paginator.paginate.return_value = [{"Reservations": []}]
         mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
 
-        result = runner.invoke(app, ["list", "--all"])
-
-        assert result.exit_code == 0
-        # Verify the paginate was called without filters (to include all instances)
-        mock_paginator.paginate.assert_called_once_with()
-
-    def test_should_include_terminated_instances_with_short_flag(self, mocker):
-        """Should call get_instances without filter when -a flag is used."""
-        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-        mock_paginator = mocker.MagicMock()
-        mock_paginator.paginate.return_value = [{"Reservations": []}]
-        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
-
-        result = runner.invoke(app, ["list", "-a"])
+        result = runner.invoke(app, ["list", flag])
 
         assert result.exit_code == 0
         # Verify the paginate was called without filters (to include all instances)
@@ -952,8 +941,9 @@ def test_connect_uses_accept_new_by_default(mocker):
     assert "StrictHostKeyChecking=accept-new" in ssh_command
 
 
-def test_connect_with_no_strict_host_key_flag(mocker):
-    """Test that --no-strict-host-key disables strict host key checking."""
+@pytest.mark.parametrize("flag", ["--no-strict-host-key", "-S"])
+def test_connect_with_no_strict_host_key_flag(mocker, flag):
+    """Test that --no-strict-host-key/-S disables strict host key checking."""
     mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
     mock_subprocess = mocker.patch("remote.instance.subprocess.run")
 
@@ -975,44 +965,12 @@ def test_connect_with_no_strict_host_key_flag(mocker):
         "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
     }
 
-    runner.invoke(app, ["connect", "test-instance", "--no-strict-host-key"])
+    runner.invoke(app, ["connect", "test-instance", flag])
 
     mock_subprocess.assert_called_once()
     ssh_command = mock_subprocess.call_args[0][0]
 
     # Verify the flag uses 'no' (legacy behavior)
-    assert "StrictHostKeyChecking=no" in ssh_command
-
-
-def test_connect_with_short_form_no_strict_host_key_flag(mocker):
-    """Test that -S short form disables strict host key checking."""
-    mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
-    mock_subprocess = mocker.patch("remote.instance.subprocess.run")
-
-    mock_ec2.return_value.describe_instances.return_value = {
-        "Reservations": [
-            {
-                "Instances": [
-                    {
-                        "InstanceId": "i-0123456789abcdef0",
-                        "State": {"Name": "running", "Code": 16},
-                        "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
-                        "Tags": [{"Key": "Name", "Value": "test-instance"}],
-                    }
-                ]
-            }
-        ]
-    }
-    mock_ec2.return_value.describe_instance_status.return_value = {
-        "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
-    }
-
-    runner.invoke(app, ["connect", "test-instance", "-S"])
-
-    mock_subprocess.assert_called_once()
-    ssh_command = mock_subprocess.call_args[0][0]
-
-    # Verify the short form -S works the same as --no-strict-host-key
     assert "StrictHostKeyChecking=no" in ssh_command
 
 
@@ -1751,8 +1709,9 @@ class TestConcurrentShutdownValidation:
 class TestInstanceListCostFlag:
     """Tests for the --cost flag on instance ls command."""
 
-    def test_list_shows_cost_columns_with_cost_flag(self, mocker):
-        """Test that --cost flag adds uptime, hourly rate, and estimated cost columns."""
+    @pytest.mark.parametrize("flag", ["--cost", "-c"])
+    def test_list_shows_cost_columns_with_cost_flag(self, mocker, flag):
+        """Test that --cost/-c flag adds uptime, hourly rate, and estimated cost columns."""
         import datetime
 
         mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
@@ -1785,53 +1744,10 @@ class TestInstanceListCostFlag:
             "remote.instance.get_instance_price_with_fallback", return_value=(0.0104, False)
         )
 
-        result = runner.invoke(app, ["list", "--cost"])
+        result = runner.invoke(app, ["list", flag])
 
         assert result.exit_code == 0
         # Verify cost-related columns are present
-        assert "Uptime" in result.stdout
-        assert "$/hr" in result.stdout
-        assert "Est. Cost" in result.stdout
-        # Verify instance data is present
-        assert "test-instance" in result.stdout
-        assert "i-0123456789abcdef0" in result.stdout
-
-    def test_list_shows_cost_columns_with_short_flag(self, mocker):
-        """Test that -c short flag adds cost columns."""
-        import datetime
-
-        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
-
-        launch_time = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)
-
-        mock_paginator = mocker.MagicMock()
-        mock_paginator.paginate.return_value = [
-            {
-                "Reservations": [
-                    {
-                        "Instances": [
-                            {
-                                "InstanceId": "i-0123456789abcdef0",
-                                "InstanceType": "t3.micro",
-                                "State": {"Name": "running", "Code": 16},
-                                "LaunchTime": launch_time,
-                                "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
-                                "Tags": [{"Key": "Name", "Value": "test-instance"}],
-                            }
-                        ]
-                    }
-                ]
-            }
-        ]
-        mock_ec2_client.return_value.get_paginator.return_value = mock_paginator
-
-        mocker.patch(
-            "remote.instance.get_instance_price_with_fallback", return_value=(0.0104, False)
-        )
-
-        result = runner.invoke(app, ["list", "-c"])
-
-        assert result.exit_code == 0
         assert "Uptime" in result.stdout
         assert "$/hr" in result.stdout
         assert "Est. Cost" in result.stdout
