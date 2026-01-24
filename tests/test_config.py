@@ -90,6 +90,11 @@ class TestConfigManager:
 
     def test_get_instance_name_success(self, mocker):
         manager = ConfigManager()
+        # Mock pydantic config to return None so we fall through to file config
+        mock_pydantic = mocker.MagicMock()
+        mock_pydantic.instance_name = None
+        manager._pydantic_config = mock_pydantic
+        # Mock file config
         mock_config = mocker.MagicMock()
         mock_config.__contains__ = lambda self, key: key == "DEFAULT"
         mock_config.__getitem__ = lambda self, key: {"instance_name": "test-instance"}
@@ -100,6 +105,11 @@ class TestConfigManager:
 
     def test_get_instance_name_no_default_section(self, mocker):
         manager = ConfigManager()
+        # Mock pydantic config to return None so we fall through to file config
+        mock_pydantic = mocker.MagicMock()
+        mock_pydantic.instance_name = None
+        manager._pydantic_config = mock_pydantic
+        # Mock file config
         mock_config = mocker.MagicMock()
         mock_config.__contains__ = lambda self, key: False
         manager._file_config = mock_config
@@ -109,6 +119,11 @@ class TestConfigManager:
 
     def test_get_instance_name_no_instance_name_key(self, mocker):
         manager = ConfigManager()
+        # Mock pydantic config to return None so we fall through to file config
+        mock_pydantic = mocker.MagicMock()
+        mock_pydantic.instance_name = None
+        manager._pydantic_config = mock_pydantic
+        # Mock file config
         mock_config = mocker.MagicMock()
         mock_config.__contains__ = lambda self, key: key == "DEFAULT"
         mock_config.__getitem__ = lambda self, key: {}
@@ -119,6 +134,11 @@ class TestConfigManager:
 
     def test_get_instance_name_validation_error(self, mocker):
         manager = ConfigManager()
+        # Mock pydantic config to return None so we fall through to file config
+        mock_pydantic = mocker.MagicMock()
+        mock_pydantic.instance_name = None
+        manager._pydantic_config = mock_pydantic
+        # Mock file config to raise error
         mock_config = mocker.MagicMock()
         mock_config.__contains__.side_effect = ValueError("Config validation error")
         manager._file_config = mock_config
@@ -389,7 +409,11 @@ class TestConfigurationEdgeCases:
         """Should handle config files with empty DEFAULT section."""
         config_manager = ConfigManager()
 
-        # Mock empty config
+        # Mock pydantic config to return None so we fall through to file config
+        mock_pydantic = mocker.MagicMock()
+        mock_pydantic.instance_name = None
+        config_manager._pydantic_config = mock_pydantic
+        # Mock empty file config
         mock_config = mocker.MagicMock()
         mock_config.__contains__ = lambda self, key: key == "DEFAULT"
         mock_config.__getitem__ = lambda self, key: {}  # Empty section

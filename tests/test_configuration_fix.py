@@ -28,6 +28,10 @@ def test_config_manager_graceful_none_return():
     # Create a fresh config manager (not mocked)
     real_config_manager = ConfigManager()
 
+    # Mock pydantic config to return None so we fall through to file config
+    mock_pydantic = MagicMock()
+    mock_pydantic.instance_name = None
+    real_config_manager._pydantic_config = mock_pydantic
     # Mock the file_config to return empty config
     mock_config = MagicMock()
     mock_config.__contains__ = lambda self, key: False  # No DEFAULT section
