@@ -122,3 +122,69 @@ def test_instance_commands_require_prefix():
     instance_commands = ["list", "start", "stop", "connect", "status", "launch", "terminate"]
     for cmd in instance_commands:
         assert cmd in instance_help.stdout.lower(), f"'{cmd}' not found in instance help"
+
+
+def test_should_show_logo_no_args(mocker):
+    """Test that _should_show_logo returns True when no arguments."""
+    from remote.__main__ import _should_show_logo
+
+    mocker.patch("sys.argv", ["remote"])
+    assert _should_show_logo() is True
+
+
+def test_should_show_logo_with_help_flag(mocker):
+    """Test that _should_show_logo returns True for --help."""
+    from remote.__main__ import _should_show_logo
+
+    mocker.patch("sys.argv", ["remote", "--help"])
+    assert _should_show_logo() is True
+
+
+def test_should_show_logo_with_h_flag(mocker):
+    """Test that _should_show_logo returns True for -h."""
+    from remote.__main__ import _should_show_logo
+
+    mocker.patch("sys.argv", ["remote", "-h"])
+    assert _should_show_logo() is True
+
+
+def test_should_not_show_logo_with_subcommand(mocker):
+    """Test that _should_show_logo returns False for subcommands."""
+    from remote.__main__ import _should_show_logo
+
+    mocker.patch("sys.argv", ["remote", "instance", "list"])
+    assert _should_show_logo() is False
+
+
+def test_should_not_show_logo_with_subcommand_help(mocker):
+    """Test that _should_show_logo returns False for subcommand help."""
+    from remote.__main__ import _should_show_logo
+
+    mocker.patch("sys.argv", ["remote", "instance", "--help"])
+    assert _should_show_logo() is False
+
+
+def test_main_calls_print_logo_for_help(mocker):
+    """Test that main() calls print_logo when showing help."""
+    mock_print_logo = mocker.patch("remote.__main__.print_logo")
+    mocker.patch("remote.__main__.app")
+    mocker.patch("sys.argv", ["remote", "--help"])
+
+    from remote.__main__ import main
+
+    main()
+
+    mock_print_logo.assert_called_once()
+
+
+def test_main_does_not_call_print_logo_for_subcommand(mocker):
+    """Test that main() does not call print_logo for subcommands."""
+    mock_print_logo = mocker.patch("remote.__main__.print_logo")
+    mocker.patch("remote.__main__.app")
+    mocker.patch("sys.argv", ["remote", "version"])
+
+    from remote.__main__ import main
+
+    main()
+
+    mock_print_logo.assert_not_called()
