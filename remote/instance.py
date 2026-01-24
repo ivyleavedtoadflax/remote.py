@@ -39,6 +39,8 @@ from remote.settings import (
     SECONDS_PER_HOUR,
     SSH_OPERATION_TIMEOUT_SECONDS,
     SSH_READINESS_WAIT_SECONDS,
+    SSH_SERVER_ALIVE_COUNT_MAX,
+    SSH_SERVER_ALIVE_INTERVAL,
     STARTUP_POLL_INTERVAL_SECONDS,
     TYPE_CHANGE_MAX_POLL_ATTEMPTS,
     TYPE_CHANGE_POLL_INTERVAL_SECONDS,
@@ -657,6 +659,11 @@ def _build_ssh_command(
     if not interactive:
         ssh_args.extend(["-o", "BatchMode=yes"])
         ssh_args.extend(["-o", "ConnectTimeout=10"])
+    else:
+        # Interactive sessions use keepalive to detect dead connections
+        # instead of a subprocess timeout which would kill active sessions
+        ssh_args.extend(["-o", f"ServerAliveInterval={SSH_SERVER_ALIVE_INTERVAL}"])
+        ssh_args.extend(["-o", f"ServerAliveCountMax={SSH_SERVER_ALIVE_COUNT_MAX}"])
 
     if key:
         ssh_args.extend(["-i", key])
@@ -990,7 +997,7 @@ def connect(
         DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS,
         "--timeout",
         "-t",
-        help="Connection timeout in seconds (default: 120). Use 0 for no timeout.",
+        help="Session timeout in seconds (default: 0 = no timeout). Set to limit max session duration.",
     ),
     whitelist_ip: bool = typer.Option(
         False,
@@ -1024,7 +1031,7 @@ def connect(
         remote instance connect -k ~/.ssh/my-key.pem      # With specific SSH key
         remote instance connect --start                   # Auto-start if stopped
         remote instance connect --no-start                # Fail if not running
-        remote instance connect --timeout 300             # 5 minute timeout
+        remote instance connect --timeout 3600            # Limit session to 1 hour
         remote instance connect --whitelist-ip            # Add your IP before connecting
         remote instance connect -w --exclusive            # Add your IP, remove others
     """

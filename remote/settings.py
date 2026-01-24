@@ -29,9 +29,15 @@ DEFAULT_EXEC_TIMEOUT_SECONDS = 30
 SSH_OPERATION_TIMEOUT_SECONDS = 30
 
 # SSH connect timeout (interactive sessions)
-# Longer timeout for interactive sessions since users may be slow to respond
-# to prompts, but still prevents indefinite hangs on network issues
-DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS = 120
+# Default to 0 (no timeout) for interactive sessions since they run indefinitely.
+# Users can specify --timeout to set a maximum session duration if needed.
+# Dead connection detection is handled by SSH keepalive options instead.
+DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS = 0
+
+# SSH keepalive settings for interactive sessions
+# These detect dead connections without killing active sessions
+SSH_SERVER_ALIVE_INTERVAL = 60  # Send keepalive every 60 seconds
+SSH_SERVER_ALIVE_COUNT_MAX = 3  # Disconnect after 3 missed keepalives (3 minutes)
 
 
 @dataclass
