@@ -33,8 +33,15 @@ def mock_volume_response():
     }
 
 
-def test_list_volumes_instance_not_found(mocker):
-    """Test that InstanceNotFoundError exits with code 1."""
+@pytest.mark.parametrize(
+    "instance_name,scenario",
+    [
+        ("nonexistent", "InstanceNotFoundError"),
+        ("ambiguous", "MultipleInstancesFoundError"),
+    ],
+)
+def test_list_volumes_instance_resolution_error(mocker, instance_name, scenario):
+    """Test that instance resolution errors exit with code 1."""
     import typer
 
     mocker.patch(
@@ -42,21 +49,7 @@ def test_list_volumes_instance_not_found(mocker):
         side_effect=typer.Exit(1),
     )
 
-    result = runner.invoke(app, ["list", "nonexistent"])
-
-    assert result.exit_code == 1
-
-
-def test_list_volumes_multiple_instances_found(mocker):
-    """Test that MultipleInstancesFoundError exits with code 1."""
-    import typer
-
-    mocker.patch(
-        "remote.volume.resolve_instance_or_exit",
-        side_effect=typer.Exit(1),
-    )
-
-    result = runner.invoke(app, ["list", "ambiguous"])
+    result = runner.invoke(app, ["list", instance_name])
 
     assert result.exit_code == 1
 
