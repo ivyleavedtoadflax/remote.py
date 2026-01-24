@@ -270,7 +270,9 @@ def test_add_interactive_valid_selection(mocker, mock_instances_data):
     assert "Default instance set to test-instance-1" in result.stdout
 
 
-def test_add_interactive_invalid_selection_too_high(mocker, mock_instances_data):
+@pytest.mark.parametrize("invalid_input", ["5", "0"])
+def test_add_interactive_invalid_selection_boundary(mocker, mock_instances_data, invalid_input):
+    """Test add command rejects out-of-bounds selection (too high or zero)."""
     mocker.patch("remote.config.get_instances", return_value=mock_instances_data)
     mocker.patch("remote.config.get_instance_ids", return_value=["i-123", "i-456"])
     mocker.patch(
@@ -285,29 +287,7 @@ def test_add_interactive_invalid_selection_too_high(mocker, mock_instances_data)
     )
     mock_config_manager = mocker.patch("remote.config.config_manager")
 
-    result = runner.invoke(config.app, ["add"], input="5\n")
-
-    assert result.exit_code == 0
-    mock_config_manager.set_instance_name.assert_not_called()
-    assert "Invalid number. No changes made" in result.stdout
-
-
-def test_add_interactive_invalid_selection_zero(mocker, mock_instances_data):
-    mocker.patch("remote.config.get_instances", return_value=mock_instances_data)
-    mocker.patch("remote.config.get_instance_ids", return_value=["i-123", "i-456"])
-    mocker.patch(
-        "remote.config.get_instance_info",
-        return_value=(
-            ["test-instance-1", "test-instance-2"],
-            ["dns1", "dns2"],
-            ["running", "stopped"],
-            ["t2.micro", "t2.small"],
-            ["time1", "time2"],
-        ),
-    )
-    mock_config_manager = mocker.patch("remote.config.config_manager")
-
-    result = runner.invoke(config.app, ["add"], input="0\n")
+    result = runner.invoke(config.app, ["add"], input=f"{invalid_input}\n")
 
     assert result.exit_code == 0
     mock_config_manager.set_instance_name.assert_not_called()

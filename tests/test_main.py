@@ -132,19 +132,12 @@ def test_should_show_logo_no_args(mocker):
     assert _should_show_logo() is True
 
 
-def test_should_show_logo_with_help_flag(mocker):
-    """Test that _should_show_logo returns True for --help."""
+@pytest.mark.parametrize("flag", ["--help", "-h"])
+def test_should_show_logo_with_help_flag(mocker, flag):
+    """Test that _should_show_logo returns True for help flags."""
     from remote.__main__ import _should_show_logo
 
-    mocker.patch("sys.argv", ["remote", "--help"])
-    assert _should_show_logo() is True
-
-
-def test_should_show_logo_with_h_flag(mocker):
-    """Test that _should_show_logo returns True for -h."""
-    from remote.__main__ import _should_show_logo
-
-    mocker.patch("sys.argv", ["remote", "-h"])
+    mocker.patch("sys.argv", ["remote", flag])
     assert _should_show_logo() is True
 
 

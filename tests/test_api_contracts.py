@@ -26,7 +26,6 @@ from tests.fixtures.aws_api_contracts import (
     VALID_OPERATING_SYSTEMS,
     VALID_PRE_INSTALLED_SW,
     VALID_TENANCIES,
-    validate_pricing_location,
     validate_region_to_location_mapping,
 )
 
@@ -69,17 +68,26 @@ class TestPricingApiContracts:
         missing_regions = set(REGION_TO_LOCATION_EXPECTED.keys()) - set(REGION_TO_LOCATION.keys())
         assert not missing_regions, f"Missing regions in REGION_TO_LOCATION: {missing_regions}"
 
-    def test_pricing_api_request_uses_valid_location(self, mocker):
-        """Verify get_instance_price uses valid location names in API requests.
+    @pytest.mark.parametrize(
+        "field,valid_values,region",
+        [
+            ("location", VALID_AWS_PRICING_LOCATIONS, "eu-west-1"),
+            ("operatingSystem", VALID_OPERATING_SYSTEMS, "us-east-1"),
+            ("tenancy", VALID_TENANCIES, "us-east-1"),
+            ("preInstalledSw", VALID_PRE_INSTALLED_SW, "us-east-1"),
+            ("capacitystatus", VALID_CAPACITY_STATUS, "us-east-1"),
+        ],
+    )
+    def test_pricing_api_uses_valid_filter_value(self, mocker, field, valid_values, region):
+        """Verify get_instance_price uses valid values for all pricing API filters.
 
-        This test captures the actual API request and validates that the
-        location filter value is in our known-good list.
+        This test captures the actual API request and validates that filter
+        values are in our known-good lists.
         """
         from remote.pricing import clear_price_cache
 
         clear_price_cache()
 
-        # Create mock that captures the API request
         mock_client = MagicMock()
         price_data = {
             "terms": {
@@ -91,135 +99,16 @@ class TestPricingApiContracts:
         mock_client.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
         mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
 
-        # Make the API call
-        get_instance_price("t3.micro", "eu-west-1")
-
-        # Extract and validate the location filter
-        call_args = mock_client.get_products.call_args
-        filters = call_args.kwargs["Filters"]
-        location_filter = next(f for f in filters if f["Field"] == "location")
-        location_value = location_filter["Value"]
-
-        assert validate_pricing_location(location_value), (
-            f"get_instance_price used invalid location '{location_value}' for region 'eu-west-1'.\n"
-            f"This would cause the real AWS Pricing API to return no results.\n"
-            f"Valid locations include: {sorted(list(VALID_AWS_PRICING_LOCATIONS)[:5])}..."
-        )
-
-    def test_pricing_api_uses_valid_operating_system(self, mocker):
-        """Verify get_instance_price uses valid operatingSystem values."""
-        from remote.pricing import clear_price_cache
-
-        clear_price_cache()
-
-        mock_client = MagicMock()
-        price_data = {
-            "terms": {
-                "OnDemand": {
-                    "term1": {"priceDimensions": {"dim1": {"pricePerUnit": {"USD": "0.0104"}}}}
-                }
-            }
-        }
-        mock_client.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
-        mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
-
-        get_instance_price("t3.micro", "us-east-1")
+        get_instance_price("t3.micro", region)
 
         call_args = mock_client.get_products.call_args
         filters = call_args.kwargs["Filters"]
-        os_filter = next(f for f in filters if f["Field"] == "operatingSystem")
-        os_value = os_filter["Value"]
+        filter_obj = next(f for f in filters if f["Field"] == field)
+        filter_value = filter_obj["Value"]
 
-        assert os_value in VALID_OPERATING_SYSTEMS, (
-            f"get_instance_price used invalid operatingSystem '{os_value}'.\n"
-            f"Valid values: {VALID_OPERATING_SYSTEMS}"
-        )
-
-    def test_pricing_api_uses_valid_tenancy(self, mocker):
-        """Verify get_instance_price uses valid tenancy values."""
-        from remote.pricing import clear_price_cache
-
-        clear_price_cache()
-
-        mock_client = MagicMock()
-        price_data = {
-            "terms": {
-                "OnDemand": {
-                    "term1": {"priceDimensions": {"dim1": {"pricePerUnit": {"USD": "0.0104"}}}}
-                }
-            }
-        }
-        mock_client.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
-        mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
-
-        get_instance_price("t3.micro", "us-east-1")
-
-        call_args = mock_client.get_products.call_args
-        filters = call_args.kwargs["Filters"]
-        tenancy_filter = next(f for f in filters if f["Field"] == "tenancy")
-        tenancy_value = tenancy_filter["Value"]
-
-        assert tenancy_value in VALID_TENANCIES, (
-            f"get_instance_price used invalid tenancy '{tenancy_value}'.\n"
-            f"Valid values: {VALID_TENANCIES}"
-        )
-
-    def test_pricing_api_uses_valid_pre_installed_sw(self, mocker):
-        """Verify get_instance_price uses valid preInstalledSw values."""
-        from remote.pricing import clear_price_cache
-
-        clear_price_cache()
-
-        mock_client = MagicMock()
-        price_data = {
-            "terms": {
-                "OnDemand": {
-                    "term1": {"priceDimensions": {"dim1": {"pricePerUnit": {"USD": "0.0104"}}}}
-                }
-            }
-        }
-        mock_client.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
-        mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
-
-        get_instance_price("t3.micro", "us-east-1")
-
-        call_args = mock_client.get_products.call_args
-        filters = call_args.kwargs["Filters"]
-        sw_filter = next(f for f in filters if f["Field"] == "preInstalledSw")
-        sw_value = sw_filter["Value"]
-
-        assert sw_value in VALID_PRE_INSTALLED_SW, (
-            f"get_instance_price used invalid preInstalledSw '{sw_value}'.\n"
-            f"Valid values: {VALID_PRE_INSTALLED_SW}"
-        )
-
-    def test_pricing_api_uses_valid_capacity_status(self, mocker):
-        """Verify get_instance_price uses valid capacitystatus values."""
-        from remote.pricing import clear_price_cache
-
-        clear_price_cache()
-
-        mock_client = MagicMock()
-        price_data = {
-            "terms": {
-                "OnDemand": {
-                    "term1": {"priceDimensions": {"dim1": {"pricePerUnit": {"USD": "0.0104"}}}}
-                }
-            }
-        }
-        mock_client.get_products.return_value = {"PriceList": [json.dumps(price_data)]}
-        mocker.patch("remote.pricing.get_pricing_client", return_value=mock_client)
-
-        get_instance_price("t3.micro", "us-east-1")
-
-        call_args = mock_client.get_products.call_args
-        filters = call_args.kwargs["Filters"]
-        capacity_filter = next(f for f in filters if f["Field"] == "capacitystatus")
-        capacity_value = capacity_filter["Value"]
-
-        assert capacity_value in VALID_CAPACITY_STATUS, (
-            f"get_instance_price used invalid capacitystatus '{capacity_value}'.\n"
-            f"Valid values: {VALID_CAPACITY_STATUS}"
+        assert filter_value in valid_values, (
+            f"get_instance_price used invalid {field} '{filter_value}'.\n"
+            f"Valid values: {sorted(list(valid_values)[:5]) if len(valid_values) > 5 else valid_values}..."
         )
 
 
