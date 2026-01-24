@@ -60,11 +60,22 @@ class TestPrintLogo:
         lines = captured.out.strip().split("\n")
         assert len(lines) > 1
 
-    def test_print_logo_with_version(self, mocker, capsys):
+    def test_print_logo_shows_version(self, mocker, capsys):
         mocker.patch("remote.logo.get_version", return_value="1.2.3")
-        print_logo(show_version=True)
+        print_logo()
         captured = capsys.readouterr()
-        assert "1.2.3" in captured.out
+        assert "v1.2.3" in captured.out
+
+    def test_print_logo_shows_tagline(self, capsys):
+        print_logo()
+        captured = capsys.readouterr()
+        assert "AWS EC2 Instance Management" in captured.out
+
+    def test_print_logo_ends_with_blank_line(self, capsys):
+        print_logo()
+        captured = capsys.readouterr()
+        # Output should end with at least one blank line for spacing
+        assert captured.out.endswith("\n\n")
 
 
 class TestGetVersion:
@@ -87,7 +98,11 @@ class TestLogoIntegration:
         # Should not raise any exceptions
         print_logo()
 
-    def test_logo_works_with_all_options(self, capsys):
-        print_logo(show_version=True)
+    def test_logo_displays_complete_output(self, mocker, capsys):
+        mocker.patch("remote.logo.get_version", return_value="1.0.0")
+        print_logo()
         captured = capsys.readouterr()
-        assert captured.out  # Has output
+        # Should have logo, tagline, and version
+        assert "REMOTE" in captured.out or "██" in captured.out  # Logo chars
+        assert "AWS EC2 Instance Management" in captured.out
+        assert "v1.0.0" in captured.out

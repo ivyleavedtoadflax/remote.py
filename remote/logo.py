@@ -96,24 +96,32 @@ def get_version() -> str:
         return "0.0.0"
 
 
-def print_logo(show_version: bool = False) -> None:
-    """Print the logo with gradient colors.
+TAGLINE = "AWS EC2 Instance Management"
 
-    Args:
-        show_version: If True, display version info below the logo
-    """
+
+def print_logo() -> None:
+    """Print the centered logo with gradient colors, tagline, and version."""
     console = Console()
     lines = LOGO.strip().split("\n")
     total_lines = len(lines)
 
+    # Calculate logo width and terminal width for centering
+    logo_width = max(len(line) for line in lines)
+    terminal_width = console.width
+    padding = max(0, (terminal_width - logo_width) // 2)
+    pad_str = " " * padding
+
     styled_text = Text()
     for i, line in enumerate(lines):
         color = get_color_for_line(i, total_lines, FIRE_PALETTE)
-        styled_text.append(line + "\n", style=color)
+        styled_text.append(pad_str + line + "\n", style=color)
 
     console.print(styled_text, end="")
 
-    if show_version:
-        version = get_version()
-        console.print(f"  [dim]v{version}[/dim]")
-        console.print()
+    # Build tagline with version
+    version = get_version()
+    tagline_text = f"{TAGLINE}  v{version}"
+    tagline_padding = max(0, (terminal_width - len(tagline_text)) // 2)
+
+    console.print(" " * tagline_padding + f"[dim]{tagline_text}[/dim]")
+    console.print()  # Blank line for spacing
