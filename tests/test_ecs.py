@@ -204,6 +204,34 @@ def test_list_services_command_without_cluster_name(mocker):
     mock_get_all_services.assert_called_once_with("selected-cluster")
 
 
+@pytest.mark.parametrize("command", ["ls-clusters", "list-clusters"])
+def test_clusters_command_aliases(mocker, command):
+    """Test that both ls-clusters and list-clusters commands work."""
+    mock_get_all_clusters = mocker.patch(
+        "remote.ecs.get_all_clusters", return_value=["test-cluster-1"]
+    )
+
+    result = runner.invoke(app, [command])
+
+    assert result.exit_code == 0
+    mock_get_all_clusters.assert_called_once()
+    assert "test-cluster-1" in result.stdout
+
+
+@pytest.mark.parametrize("command", ["ls-services", "list-services"])
+def test_services_command_aliases(mocker, command):
+    """Test that both ls-services and list-services commands work."""
+    mock_get_all_services = mocker.patch(
+        "remote.ecs.get_all_services", return_value=["test-service-1"]
+    )
+
+    result = runner.invoke(app, [command, "test-cluster"])
+
+    assert result.exit_code == 0
+    mock_get_all_services.assert_called_once_with("test-cluster")
+    assert "test-service-1" in result.stdout
+
+
 def test_scale_command_with_all_params(mocker):
     mock_scale_service = mocker.patch("remote.ecs.scale_service")
 
@@ -281,107 +309,146 @@ def test_scale_command_multiple_services(mocker):
     mock_scale_service.assert_any_call("test-cluster", "service-2", 2)
 
 
-# Error path tests for improved coverage
+# ============================================================================
+# Consolidated ECS Error Handling Tests
+# ============================================================================
 
 
-def test_get_all_clusters_client_error(mocker):
-    """Test get_all_clusters with ClientError."""
-    mock_ecs_client = mocker.patch("remote.ecs.get_ecs_client")
+class TestECSErrorHandling:
+    """Consolidated tests for ECS AWS error handling using parametrization."""
 
-    error_response = {"Error": {"Code": "UnauthorizedOperation", "Message": "Access denied"}}
-
-    # Mock paginator that raises error during iteration
-    mock_paginator = mocker.MagicMock()
-    mock_paginator.paginate.side_effect = ClientError(error_response, "list_clusters")
-    mock_ecs_client.return_value.get_paginator.return_value = mock_paginator
-
-    with pytest.raises(AWSServiceError) as exc_info:
-        get_all_clusters()
-
-    assert exc_info.value.service == "ECS"
-    assert exc_info.value.operation == "list_clusters"
-    assert exc_info.value.aws_error_code == "UnauthorizedOperation"
-
-
-def test_get_all_clusters_no_credentials_error(mocker):
-    """Test get_all_clusters with NoCredentialsError."""
-    mock_ecs_client = mocker.patch("remote.ecs.get_ecs_client")
-
-    # Mock paginator that raises error during iteration
-    mock_paginator = mocker.MagicMock()
-    mock_paginator.paginate.side_effect = NoCredentialsError()
-    mock_ecs_client.return_value.get_paginator.return_value = mock_paginator
-
-    with pytest.raises(AWSServiceError) as exc_info:
-        get_all_clusters()
-
-    assert exc_info.value.service == "ECS"
-    assert exc_info.value.operation == "list_clusters"
-    assert exc_info.value.aws_error_code == "NoCredentials"
-
-
-def test_get_all_services_client_error(mocker):
-    """Test get_all_services with ClientError."""
-    mock_ecs_client = mocker.patch("remote.ecs.get_ecs_client")
-
-    error_response = {"Error": {"Code": "ClusterNotFoundException", "Message": "Cluster not found"}}
-
-    # Mock paginator that raises error during iteration
-    mock_paginator = mocker.MagicMock()
-    mock_paginator.paginate.side_effect = ClientError(error_response, "list_services")
-    mock_ecs_client.return_value.get_paginator.return_value = mock_paginator
-
-    with pytest.raises(AWSServiceError) as exc_info:
-        get_all_services("nonexistent-cluster")
-
-    assert exc_info.value.service == "ECS"
-    assert exc_info.value.operation == "list_services"
-    assert exc_info.value.aws_error_code == "ClusterNotFoundException"
-
-
-def test_get_all_services_no_credentials_error(mocker):
-    """Test get_all_services with NoCredentialsError."""
-    mock_ecs_client = mocker.patch("remote.ecs.get_ecs_client")
-
-    # Mock paginator that raises error during iteration
-    mock_paginator = mocker.MagicMock()
-    mock_paginator.paginate.side_effect = NoCredentialsError()
-    mock_ecs_client.return_value.get_paginator.return_value = mock_paginator
-
-    with pytest.raises(AWSServiceError) as exc_info:
-        get_all_services("test-cluster")
-
-    assert exc_info.value.service == "ECS"
-    assert exc_info.value.operation == "list_services"
-    assert exc_info.value.aws_error_code == "NoCredentials"
-
-
-def test_scale_service_client_error(mocker):
-    """Test scale_service with ClientError."""
-    mock_ecs_client = mocker.patch("remote.ecs.get_ecs_client")
-
-    error_response = {"Error": {"Code": "ServiceNotFoundException", "Message": "Service not found"}}
-    mock_ecs_client.return_value.update_service.side_effect = ClientError(
-        error_response, "update_service"
+    @pytest.mark.parametrize(
+        "error_type,error_code,expected_aws_code",
+        [
+            ("client_error", "UnauthorizedOperation", "UnauthorizedOperation"),
+            ("no_credentials", None, "NoCredentials"),
+        ],
+        ids=["client_error", "no_credentials"],
     )
+    def test_get_all_clusters_aws_errors(self, mocker, error_type, error_code, expected_aws_code):
+        """Test get_all_clusters handles AWS errors correctly."""
+        mock_ecs_client = mocker.patch("remote.ecs.get_ecs_client")
+        mock_paginator = mocker.MagicMock()
+        mock_ecs_client.return_value.get_paginator.return_value = mock_paginator
 
-    with pytest.raises(AWSServiceError) as exc_info:
-        scale_service("test-cluster", "nonexistent-service", 5)
+        if error_type == "client_error":
+            error_response = {"Error": {"Code": error_code, "Message": "Error"}}
+            mock_paginator.paginate.side_effect = ClientError(error_response, "list_clusters")
+        else:
+            mock_paginator.paginate.side_effect = NoCredentialsError()
 
-    assert exc_info.value.service == "ECS"
-    assert exc_info.value.operation == "update_service"
-    assert exc_info.value.aws_error_code == "ServiceNotFoundException"
+        with pytest.raises(AWSServiceError) as exc_info:
+            get_all_clusters()
+
+        assert exc_info.value.service == "ECS"
+        assert exc_info.value.operation == "list_clusters"
+        assert exc_info.value.aws_error_code == expected_aws_code
+
+    @pytest.mark.parametrize(
+        "error_type,error_code,expected_aws_code",
+        [
+            ("client_error", "ClusterNotFoundException", "ClusterNotFoundException"),
+            ("no_credentials", None, "NoCredentials"),
+        ],
+        ids=["client_error", "no_credentials"],
+    )
+    def test_get_all_services_aws_errors(self, mocker, error_type, error_code, expected_aws_code):
+        """Test get_all_services handles AWS errors correctly."""
+        mock_ecs_client = mocker.patch("remote.ecs.get_ecs_client")
+        mock_paginator = mocker.MagicMock()
+        mock_ecs_client.return_value.get_paginator.return_value = mock_paginator
+
+        if error_type == "client_error":
+            error_response = {"Error": {"Code": error_code, "Message": "Error"}}
+            mock_paginator.paginate.side_effect = ClientError(error_response, "list_services")
+        else:
+            mock_paginator.paginate.side_effect = NoCredentialsError()
+
+        with pytest.raises(AWSServiceError) as exc_info:
+            get_all_services("test-cluster")
+
+        assert exc_info.value.service == "ECS"
+        assert exc_info.value.operation == "list_services"
+        assert exc_info.value.aws_error_code == expected_aws_code
+
+    @pytest.mark.parametrize(
+        "error_type,error_code,expected_aws_code",
+        [
+            ("client_error", "ServiceNotFoundException", "ServiceNotFoundException"),
+            ("no_credentials", None, "NoCredentials"),
+        ],
+        ids=["client_error", "no_credentials"],
+    )
+    def test_scale_service_aws_errors(self, mocker, error_type, error_code, expected_aws_code):
+        """Test scale_service handles AWS errors correctly."""
+        mock_ecs_client = mocker.patch("remote.ecs.get_ecs_client")
+
+        if error_type == "client_error":
+            error_response = {"Error": {"Code": error_code, "Message": "Error"}}
+            mock_ecs_client.return_value.update_service.side_effect = ClientError(
+                error_response, "update_service"
+            )
+        else:
+            mock_ecs_client.return_value.update_service.side_effect = NoCredentialsError()
+
+        with pytest.raises(AWSServiceError) as exc_info:
+            scale_service("test-cluster", "test-service", 3)
+
+        assert exc_info.value.service == "ECS"
+        assert exc_info.value.operation == "update_service"
+        assert exc_info.value.aws_error_code == expected_aws_code
 
 
-def test_scale_service_no_credentials_error(mocker):
-    """Test scale_service with NoCredentialsError."""
-    mock_ecs_client = mocker.patch("remote.ecs.get_ecs_client")
+def test_scale_command_invalid_count_zero(mocker):
+    """Test scale command rejects zero as desired count."""
+    mock_scale_service = mocker.patch("remote.ecs.scale_service")
 
-    mock_ecs_client.return_value.update_service.side_effect = NoCredentialsError()
+    result = runner.invoke(app, ["scale", "test-cluster", "test-service", "--count", "0"])
 
-    with pytest.raises(AWSServiceError) as exc_info:
-        scale_service("test-cluster", "test-service", 3)
+    assert result.exit_code == 1
+    assert "must be positive" in result.stdout
+    mock_scale_service.assert_not_called()
 
-    assert exc_info.value.service == "ECS"
-    assert exc_info.value.operation == "update_service"
-    assert exc_info.value.aws_error_code == "NoCredentials"
+
+def test_scale_command_invalid_count_negative(mocker):
+    """Test scale command rejects negative desired count."""
+    mock_scale_service = mocker.patch("remote.ecs.scale_service")
+
+    result = runner.invoke(app, ["scale", "test-cluster", "test-service", "--count", "-1"])
+
+    assert result.exit_code == 1
+    assert "must be positive" in result.stdout
+    mock_scale_service.assert_not_called()
+
+
+def test_scale_command_invalid_count_prompt_zero(mocker):
+    """Test scale command rejects zero when prompted for desired count."""
+    mock_scale_service = mocker.patch("remote.ecs.scale_service")
+
+    result = runner.invoke(app, ["scale", "test-cluster", "test-service"], input="0\n")
+
+    assert result.exit_code == 1
+    assert "must be positive" in result.stdout
+    mock_scale_service.assert_not_called()
+
+
+def test_scale_command_invalid_count_prompt_non_integer(mocker):
+    """Test scale command rejects non-integer when prompted for desired count."""
+    mock_scale_service = mocker.patch("remote.ecs.scale_service")
+
+    result = runner.invoke(app, ["scale", "test-cluster", "test-service"], input="abc\n")
+
+    assert result.exit_code == 1
+    assert "must be a valid integer" in result.stdout
+    mock_scale_service.assert_not_called()
+
+
+def test_list_services_command_no_services_found(mocker):
+    """Test list-services command when no services exist in cluster (lines 204-205)."""
+    mock_get_all_services = mocker.patch("remote.ecs.get_all_services", return_value=[])
+
+    result = runner.invoke(app, ["list-services", "test-cluster"])
+
+    assert result.exit_code == 0
+    mock_get_all_services.assert_called_once_with("test-cluster")
+    assert "No services found" in result.stdout

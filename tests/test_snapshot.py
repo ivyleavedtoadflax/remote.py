@@ -47,6 +47,7 @@ def test_create_snapshot(mocker):
             "--description",
             "Test snapshot description",
         ],
+        input="y\n",
     )
 
     assert result.exit_code == 0
@@ -69,11 +70,15 @@ def test_create_snapshot_minimal_params(mocker):
 
     mock_ec2_client.create_snapshot.return_value = {"SnapshotId": "snap-minimal"}
 
-    result = runner.invoke(app, ["create", "--volume-id", "vol-test", "--name", "minimal-snapshot"])
+    result = runner.invoke(
+        app,
+        ["create", "--volume-id", "vol-abcdef12", "--name", "minimal-snapshot"],
+        input="y\n",
+    )
 
     assert result.exit_code == 0
     mock_ec2_client.create_snapshot.assert_called_once_with(
-        VolumeId="vol-test",
+        VolumeId="vol-abcdef12",
         Description="",
         TagSpecifications=[
             {
@@ -82,6 +87,44 @@ def test_create_snapshot_minimal_params(mocker):
             }
         ],
     )
+
+
+def test_create_snapshot_cancelled(mocker):
+    """Test that declining confirmation cancels snapshot creation."""
+    mocker.patch("remote.snapshot.get_ec2_client")
+
+    result = runner.invoke(
+        app,
+        ["create", "--volume-id", "vol-abcdef12", "--name", "test-snapshot"],
+        input="n\n",
+    )
+
+    assert result.exit_code == 0
+    assert "Snapshot creation cancelled" in result.stdout
+
+
+def test_create_snapshot_with_yes_flag(mocker):
+    """Test that --yes flag skips confirmation."""
+    mock_ec2 = mocker.patch("remote.snapshot.get_ec2_client")
+    mock_ec2_client = mock_ec2.return_value
+
+    mock_ec2_client.create_snapshot.return_value = {"SnapshotId": "snap-0123456789abcdef0"}
+
+    result = runner.invoke(
+        app,
+        [
+            "create",
+            "--volume-id",
+            "vol-0123456789abcdef0",
+            "--name",
+            "test-snapshot",
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_ec2_client.create_snapshot.assert_called_once()
+    assert "Snapshot snap-0123456789abcdef0 created" in result.stdout
 
 
 def test_create_snapshot_missing_volume_id():
@@ -96,7 +139,7 @@ def test_create_snapshot_missing_volume_id():
 
 def test_create_snapshot_missing_name():
     """Should fail with helpful error when name is missing."""
-    result = runner.invoke(app, ["create", "--volume-id", "vol-test"])
+    result = runner.invoke(app, ["create", "--volume-id", "vol-abcdef12"])
 
     assert result.exit_code != 0
     # Typer shows missing required options in output (includes stderr)
@@ -104,11 +147,54 @@ def test_create_snapshot_missing_name():
     assert "name" in output or "missing" in output or "required" in output
 
 
-def test_list_snapshots_with_instance_name(mocker, mock_snapshot_response):
+def test_create_snapshot_invalid_volume_id():
+    """Should fail with validation error for invalid volume ID format."""
+    result = runner.invoke(
+        app, ["create", "--volume-id", "invalid-volume-id", "--name", "test-snapshot"]
+    )
+
+    assert result.exit_code == 1
+    assert "Error:" in result.stdout
+    assert "Invalid volume_id" in result.stdout
+    assert "vol-" in result.stdout
+
+
+def test_list_snapshots_instance_not_found(mocker):
+    """Test that InstanceNotFoundError exits with code 1."""
+    import typer
+
+    mocker.patch(
+        "remote.snapshot.resolve_instance_or_exit",
+        side_effect=typer.Exit(1),
+    )
+
+    result = runner.invoke(app, ["list", "nonexistent"])
+
+    assert result.exit_code == 1
+
+
+def test_list_snapshots_multiple_instances_found(mocker):
+    """Test that MultipleInstancesFoundError exits with code 1."""
+    import typer
+
+    mocker.patch(
+        "remote.snapshot.resolve_instance_or_exit",
+        side_effect=typer.Exit(1),
+    )
+
+    result = runner.invoke(app, ["list", "ambiguous"])
+
+    assert result.exit_code == 1
+
+
+@pytest.mark.parametrize("command", ["list", "ls"])
+def test_list_snapshots_with_instance_name(mocker, mock_snapshot_response, command):
+    """Test both list and ls commands work for listing snapshots."""
     mock_ec2 = mocker.patch("remote.snapshot.get_ec2_client")
     mock_ec2_client = mock_ec2.return_value
-    mock_get_instance_id = mocker.patch(
-        "remote.snapshot.get_instance_id", return_value="i-0123456789abcdef0"
+    mock_resolve_instance = mocker.patch(
+        "remote.snapshot.resolve_instance_or_exit",
+        return_value=("test-instance", "i-0123456789abcdef0"),
     )
     mock_get_volume_ids = mocker.patch(
         "remote.snapshot.get_volume_ids", return_value=["vol-0123456789abcdef0"]
@@ -116,10 +202,10 @@ def test_list_snapshots_with_instance_name(mocker, mock_snapshot_response):
 
     mock_ec2_client.describe_snapshots.return_value = mock_snapshot_response
 
-    result = runner.invoke(app, ["list", "test-instance"])
+    result = runner.invoke(app, [command, "test-instance"])
 
     assert result.exit_code == 0
-    mock_get_instance_id.assert_called_once_with("test-instance")
+    mock_resolve_instance.assert_called_once_with("test-instance")
     mock_get_volume_ids.assert_called_once_with("i-0123456789abcdef0")
     mock_ec2_client.describe_snapshots.assert_called_once_with(
         Filters=[{"Name": "volume-id", "Values": ["vol-0123456789abcdef0"]}]
@@ -135,11 +221,9 @@ def test_list_snapshots_with_instance_name(mocker, mock_snapshot_response):
 def test_list_snapshots_without_instance_name(mocker, mock_snapshot_response):
     mock_ec2 = mocker.patch("remote.snapshot.get_ec2_client")
     mock_ec2_client = mock_ec2.return_value
-    mock_get_instance_name = mocker.patch(
-        "remote.snapshot.get_instance_name", return_value="default-instance"
-    )
-    mock_get_instance_id = mocker.patch(
-        "remote.snapshot.get_instance_id", return_value="i-0123456789abcdef0"
+    mock_resolve_instance = mocker.patch(
+        "remote.snapshot.resolve_instance_or_exit",
+        return_value=("default-instance", "i-0123456789abcdef0"),
     )
     mock_get_volume_ids = mocker.patch(
         "remote.snapshot.get_volume_ids", return_value=["vol-0123456789abcdef0"]
@@ -150,15 +234,17 @@ def test_list_snapshots_without_instance_name(mocker, mock_snapshot_response):
     result = runner.invoke(app, ["list"])
 
     assert result.exit_code == 0
-    mock_get_instance_name.assert_called_once()
-    mock_get_instance_id.assert_called_once_with("default-instance")
+    mock_resolve_instance.assert_called_once_with(None)
     mock_get_volume_ids.assert_called_once_with("i-0123456789abcdef0")
 
 
 def test_list_snapshots_multiple_volumes(mocker):
     mock_ec2 = mocker.patch("remote.snapshot.get_ec2_client")
     mock_ec2_client = mock_ec2.return_value
-    mocker.patch("remote.snapshot.get_instance_id", return_value="i-0123456789abcdef0")
+    mocker.patch(
+        "remote.snapshot.resolve_instance_or_exit",
+        return_value=("test-instance", "i-0123456789abcdef0"),
+    )
     mocker.patch(
         "remote.snapshot.get_volume_ids",
         return_value=["vol-0123456789abcdef0", "vol-0123456789abcdef1"],
@@ -212,7 +298,10 @@ def test_list_snapshots_multiple_volumes(mocker):
 def test_list_snapshots_no_snapshots(mocker):
     mock_ec2 = mocker.patch("remote.snapshot.get_ec2_client")
     mock_ec2_client = mock_ec2.return_value
-    mocker.patch("remote.snapshot.get_instance_id", return_value="i-0123456789abcdef0")
+    mocker.patch(
+        "remote.snapshot.resolve_instance_or_exit",
+        return_value=("test-instance", "i-0123456789abcdef0"),
+    )
     mocker.patch("remote.snapshot.get_volume_ids", return_value=["vol-0123456789abcdef0"])
 
     mock_ec2_client.describe_snapshots.return_value = {"Snapshots": []}
@@ -225,22 +314,3 @@ def test_list_snapshots_no_snapshots(mocker):
     assert "SnapshotId" in result.stdout
     assert "VolumeId" in result.stdout
     assert "State" in result.stdout
-
-
-def test_list_command_alias_ls(mocker, mock_snapshot_response):
-    mock_ec2 = mocker.patch("remote.snapshot.get_ec2_client")
-    mock_ec2_client = mock_ec2.return_value
-    mock_get_instance_id = mocker.patch(
-        "remote.snapshot.get_instance_id", return_value="i-0123456789abcdef0"
-    )
-    mock_get_volume_ids = mocker.patch(
-        "remote.snapshot.get_volume_ids", return_value=["vol-0123456789abcdef0"]
-    )
-
-    mock_ec2_client.describe_snapshots.return_value = mock_snapshot_response
-
-    result = runner.invoke(app, ["ls", "test-instance"])
-
-    assert result.exit_code == 0
-    mock_get_instance_id.assert_called_once_with("test-instance")
-    mock_get_volume_ids.assert_called_once_with("i-0123456789abcdef0")

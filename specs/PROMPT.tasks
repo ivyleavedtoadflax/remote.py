@@ -3,7 +3,7 @@
 ## Instructions
 
 0. Checkout main
-1. Read plan.md and pick an issues to work on that is not complete
+1. Read plan.md and pick an issue to work on that is not complete
 2. Read the issue from github
 3. Checkout a branch
 4. Implement the fix
@@ -17,4 +17,4 @@
 12. Create a PR
 13. Merge to main
 14. Only work on one issue
-15. Once all the issues are completed output <promise>COMPLETE</promise>
+15. IF ALL THE TASKS ARE MARKED COMPLETED, PRINT <promise>COMPLETE</promise>, otherwise DON'T PRINT IT EVER

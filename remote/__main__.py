@@ -8,7 +8,9 @@ from remote.config import app as config_app
 from remote.ecs import app as ecs_app
 from remote.instance import app as instance_app
 from remote.logo import print_logo
+from remote.sg import app as sg_app
 from remote.snapshot import app as snapshot_app
+from remote.utils import handle_cli_errors
 from remote.volume import app as volume_app
 
 # Create main app
@@ -40,6 +42,7 @@ def _should_show_logo() -> bool:
 
 
 @app.command()
+@handle_cli_errors
 def version() -> None:
     """Show version."""
     typer.echo(importlib.metadata.version("remotepy"))
@@ -52,6 +55,7 @@ app.add_typer(config_app, name="config", help="Manage configuration")
 app.add_typer(snapshot_app, name="snapshot", help="Manage EBS snapshots")
 app.add_typer(volume_app, name="volume", help="Manage EBS volumes")
 app.add_typer(ecs_app, name="ecs", help="Manage ECS clusters and services")
+app.add_typer(sg_app, name="sg", help="Manage security group IP rules")
 
 
 def main() -> None:

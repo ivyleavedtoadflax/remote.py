@@ -6,6 +6,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-01-22
+
+### Added
+- **Security group management**: IP whitelisting commands (`instance add-ip` / `instance remove-ip`) with CIDR notation support
+- **Volume resize**: New `volume resize` command for EBS volume management
+- **File transfer**: Built-in `instance copy` and `instance sync` commands for file transfers via rsync/scp
+- **Cumulative cost tracking**: Track and display cumulative instance costs over time
+- **Cache clearing**: Mechanism to clear AWS client caches (`--clear-cache` flag)
+- **Dynamic region lookup**: Region location names fetched via AWS SSM for accurate pricing
+- **SSH timeout configuration**: Configurable timeout for SSH connect command (`--timeout` flag)
+- **Remote execution**: `instance exec` command to run commands on remote instances
+- **Connect enhancements**: `--start` / `--no-start` flags to auto-start stopped instances
+- **Consistency improvements**: Added `--yes` flag to `ami create`, `snapshot create`, `instance type`, and `instance launch` commands
+
+### Changed
+- Exclude terminated instances by default in `instance list` command
+- Standardized error handling with `@handle_cli_errors` decorator across all modules
+- Consolidated SSH configuration into reusable `SSHConfig` class
+- Extracted shared utilities: `create_table()`, `resolve_instance_or_exit()`, `get_status_style()`
+- Standardized table column styling across CLI
+- Moved timing constants to `settings.py` for centralized configuration
+- Improved CLI parameter patterns with consistent argument/option usage
+- Refactored ECS module with cleaner command names and selection helpers
+
+### Fixed
+- AMI pagination for large AMI counts (>1000 images)
+- SSH key path validation before connect/exec commands
+- Instance type format validation in type command
+- Empty DNS validation in connect command
+- Exit code semantics (correct codes for non-success scenarios)
+- Mutual exclusivity validation for conflicting flags
+- ECS scale command validation for desired_count parameter
+- Debug logging for silent failure cases in pricing module
+- ConfigManager test isolation for local config files
+
+### Documentation
+- Added docstring examples to ECS scale and volume list commands
+- Documented CLI parameter patterns in CLAUDE.md
+
 ## [1.1.0] - 2026-01-18
 
 ### Added

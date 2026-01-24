@@ -1,59 +1,85 @@
-import typer
-from rich.table import Table
+from typing import Any, cast
 
-from remote.exceptions import AWSServiceError, ResourceNotFoundError
+import typer
+
+from remote.exceptions import (
+    AWSServiceError,
+    ResourceNotFoundError,
+)
+from remote.instance_resolver import resolve_instance_or_exit
 from remote.utils import (
+    confirm_action,
     console,
+    create_table,
     get_account_id,
     get_ec2_client,
-    get_instance_id,
-    get_instance_name,
     get_launch_template_versions,
     get_launch_templates,
-    launch_instance_from_template,
+    get_status_style,
+    handle_aws_errors,
+    handle_cli_errors,
+    print_error,
+    print_success,
+    print_warning,
+    styled_column,
 )
+from remote.validation import validate_aws_response_structure
 
 app = typer.Typer()
 
 
 @app.command()
+@handle_cli_errors
 def create(
-    instance_name: str | None = typer.Option(None, help="Instance name"),
+    instance_name: str | None = typer.Argument(None, help="Instance name"),
     name: str | None = typer.Option(None, help="AMI name"),
     description: str | None = typer.Option(None, help="Description"),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Skip confirmation prompt (for scripting)",
+    ),
 ) -> None:
     """
     Create an AMI from an EC2 instance.
 
     Creates an Amazon Machine Image without rebooting the instance.
     Uses the default instance from config if no instance name is provided.
+    Prompts for confirmation before creating.
 
     Examples:
         remote ami create                                 # From default instance
-        remote ami create --instance-name my-server       # From specific instance
-        remote ami create --name my-ami --description "Production snapshot"
+        remote ami create my-server                       # From specific instance
+        remote ami create my-server --name my-ami --description "Production snapshot"
+        remote ami create my-server --yes                 # Create without confirmation
     """
-
-    if not instance_name:
-        instance_name = get_instance_name()
-    instance_id = get_instance_id(instance_name)
+    instance_name, instance_id = resolve_instance_or_exit(instance_name)
 
     # Ensure required fields have values
     ami_name = name if name else f"ami-{instance_name}"
     ami_description = description if description else ""
 
-    ami = get_ec2_client().create_image(
-        InstanceId=instance_id,
-        Name=ami_name,
-        Description=ami_description,
-        NoReboot=True,
-    )
+    # Confirm AMI creation
+    if not yes:
+        if not confirm_action("create", "AMI", ami_name, details=f"from instance {instance_name}"):
+            print_warning("AMI creation cancelled")
+            return
 
-    typer.secho(f"AMI {ami['ImageId']} created", fg=typer.colors.GREEN)
+    with handle_aws_errors("EC2", "create_image"):
+        ami = get_ec2_client().create_image(
+            InstanceId=instance_id,
+            Name=ami_name,
+            Description=ami_description,
+            NoReboot=True,
+        )
+        validate_aws_response_structure(ami, ["ImageId"], "create_image")
+    print_success(f"AMI {ami['ImageId']} created")
 
 
 @app.command("ls")
 @app.command("list")
+@handle_cli_errors
 def list_amis() -> None:
     """
     List all AMIs owned by the current account.
@@ -62,31 +88,41 @@ def list_amis() -> None:
     """
     account_id = get_account_id()
 
-    amis = get_ec2_client().describe_images(
-        Owners=[account_id],
-    )
+    # Use paginator to handle large AMI counts
+    with handle_aws_errors("EC2", "describe_images"):
+        paginator = get_ec2_client().get_paginator("describe_images")
+        images: list[dict[str, Any]] = []
 
-    # Format table using rich
-    table = Table(title="Amazon Machine Images")
-    table.add_column("ImageId", style="green")
-    table.add_column("Name", style="cyan")
-    table.add_column("State")
-    table.add_column("CreationDate")
+        for page in paginator.paginate(Owners=[account_id]):
+            validate_aws_response_structure(page, ["Images"], "describe_images")
+            images.extend(cast(list[dict[str, Any]], page["Images"]))
 
-    for ami in amis["Images"]:
+    columns = [
+        styled_column("ImageId", "id"),
+        styled_column("Name", "name"),
+        styled_column("State"),
+        styled_column("CreationDate"),
+    ]
+
+    rows = []
+    for ami in images:
         state = ami["State"]
-        state_style = "green" if state == "available" else "yellow"
-        table.add_row(
-            ami["ImageId"],
-            ami["Name"],
-            f"[{state_style}]{state}[/{state_style}]",
-            str(ami["CreationDate"]),
+        state_style = get_status_style(state)
+        rows.append(
+            [
+                ami["ImageId"],
+                ami["Name"],
+                f"[{state_style}]{state}[/{state_style}]",
+                str(ami["CreationDate"]),
+            ]
         )
 
-    console.print(table)
+    console.print(create_table("Amazon Machine Images", columns, rows))
 
 
+@app.command("ls-templates")
 @app.command("list-templates")
+@handle_cli_errors
 def list_launch_templates(
     filter: str | None = typer.Option(None, "-f", "--filter", help="Filter by name"),
     details: bool = typer.Option(False, "-d", "--details", help="Show template details"),
@@ -106,7 +142,7 @@ def list_launch_templates(
     templates = get_launch_templates(name_filter=filter)
 
     if not templates:
-        typer.secho("No launch templates found", fg=typer.colors.YELLOW)
+        print_warning("No launch templates found")
         return
 
     if details:
@@ -135,45 +171,28 @@ def list_launch_templates(
                 console.print("  [yellow]Warning: Could not fetch version details[/yellow]")
     else:
         # Standard table view
-        table = Table(title="Launch Templates")
-        table.add_column("Number", justify="right")
-        table.add_column("LaunchTemplateId", style="green")
-        table.add_column("LaunchTemplateName", style="cyan")
-        table.add_column("Version", justify="right")
+        columns = [
+            styled_column("Number", "numeric", justify="right"),
+            styled_column("LaunchTemplateId", "id"),
+            styled_column("LaunchTemplateName", "name"),
+            styled_column("Version", "numeric", justify="right"),
+        ]
 
-        for i, template in enumerate(templates, 1):
-            table.add_row(
+        rows = [
+            [
                 str(i),
                 template["LaunchTemplateId"],
                 template["LaunchTemplateName"],
                 str(template["LatestVersionNumber"]),
-            )
+            ]
+            for i, template in enumerate(templates, 1)
+        ]
 
-        console.print(table)
-
-
-@app.command()
-def launch(
-    name: str | None = typer.Option(None, help="Name of the instance to be launched"),
-    launch_template: str | None = typer.Option(None, help="Launch template name"),
-    version: str = typer.Option("$Latest", help="Launch template version"),
-) -> None:
-    """
-    Launch a new EC2 instance from a launch template.
-
-    Uses default template from config if not specified.
-    If no launch template is configured, lists available templates for selection.
-    If no name is provided, suggests a name based on the template name.
-
-    Examples:
-        remote ami launch                                    # Use default or interactive
-        remote ami launch --launch-template my-template      # Use specific template
-        remote ami launch --name my-server --launch-template my-template
-    """
-    launch_instance_from_template(name=name, launch_template=launch_template, version=version)
+        console.print(create_table("Launch Templates", columns, rows))
 
 
 @app.command("template-versions")
+@handle_cli_errors
 def template_versions(
     template_name: str = typer.Argument(..., help="Launch template name"),
 ) -> None:
@@ -185,41 +204,41 @@ def template_versions(
     Examples:
         remote ami template-versions my-template
     """
-    try:
-        versions = get_launch_template_versions(template_name)
-    except ResourceNotFoundError:
-        typer.secho(f"Template '{template_name}' not found", fg=typer.colors.RED)
-        raise typer.Exit(1)
+    versions = get_launch_template_versions(template_name)
 
     if not versions:
-        typer.secho("No versions found", fg=typer.colors.YELLOW)
+        print_warning("No versions found")
         return
 
-    table = Table(title=f"Versions for {template_name}")
-    table.add_column("Version", justify="right")
-    table.add_column("Created")
-    table.add_column("Description")
-    table.add_column("Default", justify="center")
+    columns = [
+        styled_column("Version", "numeric", justify="right"),
+        styled_column("Created"),
+        styled_column("Description"),
+        styled_column("Default", justify="center"),
+    ]
 
+    rows = []
     for version in versions:
         is_default = "✓" if version.get("DefaultVersion", False) else ""
         description = version.get("VersionDescription", "")
         created = str(version.get("CreateTime", "N/A"))
-
-        table.add_row(
-            str(version["VersionNumber"]),
-            created,
-            description,
-            is_default,
+        rows.append(
+            [
+                str(version["VersionNumber"]),
+                created,
+                description,
+                is_default,
+            ]
         )
 
-    console.print(table)
+    console.print(create_table(f"Versions for {template_name}", columns, rows))
 
 
 @app.command("template-info")
+@handle_cli_errors
 def template_info(
     template_name: str = typer.Argument(..., help="Launch template name"),
-    version: str = typer.Option("$Latest", "-v", "--version", help="Template version"),
+    version: str = typer.Option("$Latest", "-V", "--version", help="Template version"),
 ) -> None:
     """
     Show detailed information for a launch template.
@@ -228,16 +247,12 @@ def template_info(
 
     Examples:
         remote ami template-info my-template
-        remote ami template-info my-template -v 2
+        remote ami template-info my-template -V 2
     """
-    try:
-        versions = get_launch_template_versions(template_name)
-    except ResourceNotFoundError:
-        typer.secho(f"Template '{template_name}' not found", fg=typer.colors.RED)
-        raise typer.Exit(1)
+    versions = get_launch_template_versions(template_name)
 
     if not versions:
-        typer.secho("No versions found", fg=typer.colors.YELLOW)
+        print_warning("No versions found")
         return
 
     # Find the requested version
@@ -251,7 +266,7 @@ def template_info(
                 break
 
     if not target_version:
-        typer.secho(f"Version {version} not found", fg=typer.colors.RED)
+        print_error(f"Version {version} not found")
         raise typer.Exit(1)
 
     data = target_version.get("LaunchTemplateData", {})

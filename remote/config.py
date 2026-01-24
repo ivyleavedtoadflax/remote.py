@@ -8,10 +8,21 @@ import typer
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from rich.panel import Panel
-from rich.table import Table
 
-from remote.settings import Settings
-from remote.utils import console, get_instance_ids, get_instance_info, get_instances
+from remote.exceptions import ValidationError
+from remote.settings import DEFAULT_SSH_USER, Settings
+from remote.utils import (
+    console,
+    create_table,
+    get_instance_ids,
+    get_instance_info,
+    get_instances,
+    handle_cli_errors,
+    print_error,
+    print_success,
+    print_warning,
+)
+from remote.validation import check_instance_name_pattern, sanitize_input
 
 app = typer.Typer()
 
@@ -23,6 +34,14 @@ VALID_KEYS: dict[str, str] = {
     "aws_region": "AWS region override",
     "default_launch_template": "Default launch template name",
 }
+
+
+def validate_config_key(key: str) -> None:
+    """Validate that a config key is valid, or exit with error."""
+    if key not in VALID_KEYS:
+        print_error(f"Unknown config key: {key}")
+        print_warning(f"Valid keys: {', '.join(VALID_KEYS.keys())}")
+        raise typer.Exit(1)
 
 
 class RemoteConfig(BaseSettings):
@@ -50,7 +69,7 @@ class RemoteConfig(BaseSettings):
     )
 
     instance_name: str | None = Field(default=None, description="Default EC2 instance name")
-    ssh_user: str = Field(default="ubuntu", description="SSH username")
+    ssh_user: str = Field(default=DEFAULT_SSH_USER, description="SSH username")
     ssh_key_path: str | None = Field(default=None, description="Path to SSH private key")
     aws_region: str | None = Field(default=None, description="AWS region override")
     default_launch_template: str | None = Field(
@@ -60,15 +79,15 @@ class RemoteConfig(BaseSettings):
     @field_validator("instance_name", mode="before")
     @classmethod
     def validate_instance_name(cls, v: str | None) -> str | None:
-        """Validate instance name contains only allowed characters."""
+        """Validate instance name contains only allowed characters.
+
+        Uses shared validation logic from remote.validation module.
+        """
         if v is None or v == "":
             return None
-        # Allow alphanumeric, hyphens, underscores, and dots
-        if not re.match(r"^[a-zA-Z0-9_\-\.]+$", v):
-            raise ValueError(
-                f"Invalid instance name '{v}': "
-                "must contain only alphanumeric characters, hyphens, underscores, and dots"
-            )
+        error = check_instance_name_pattern(v)
+        if error:
+            raise ValueError(error)
         return v
 
     @field_validator("ssh_key_path", mode="before")
@@ -78,14 +97,14 @@ class RemoteConfig(BaseSettings):
         if v is None or v == "":
             return None
         # Expand ~ to home directory
-        return os.path.expanduser(v)
+        return str(Path(v).expanduser())
 
     @field_validator("ssh_user", mode="before")
     @classmethod
     def validate_ssh_user(cls, v: str | None) -> str:
         """Validate SSH username."""
         if v is None or v == "":
-            return "ubuntu"
+            return DEFAULT_SSH_USER
         # Allow alphanumeric, hyphens, underscores
         if not re.match(r"^[a-zA-Z0-9_\-]+$", v):
             raise ValueError(
@@ -107,19 +126,18 @@ class RemoteConfig(BaseSettings):
             )
         return v
 
-    def check_ssh_key_exists(self) -> tuple[bool, str | None]:
+    def validate_ssh_key_exists(self) -> None:
         """
-        Check if SSH key file exists.
+        Validate that SSH key file exists.
 
-        Returns:
-            Tuple of (exists, error_message). If exists is True, error_message is None.
+        Raises:
+            ValidationError: If SSH key path is set but file doesn't exist
         """
         if self.ssh_key_path is None:
-            return True, None
+            return
         path = Path(self.ssh_key_path)
         if not path.exists():
-            return False, f"SSH key not found: {self.ssh_key_path}"
-        return True, None
+            raise ValidationError(f"SSH key not found: {self.ssh_key_path}")
 
     @classmethod
     def from_ini_file(cls, config_path: Path | str | None = None) -> "RemoteConfig":
@@ -190,10 +208,11 @@ class ConfigValidationResult(BaseModel):
             errors.append(f"Configuration error: {e}")
             return cls(is_valid=False, errors=errors, warnings=warnings)
 
-        # Check SSH key exists
-        key_exists, key_error = config.check_ssh_key_exists()
-        if not key_exists and key_error:
-            errors.append(key_error)
+        # Validate SSH key exists
+        try:
+            config.validate_ssh_key_exists()
+        except ValidationError as e:
+            errors.append(e.message)
 
         # Check for unknown keys in INI file
         parser = configparser.ConfigParser()
@@ -212,6 +231,28 @@ class ConfigManager:
     def __init__(self) -> None:
         self._file_config: configparser.ConfigParser | None = None
         self._pydantic_config: RemoteConfig | None = None
+
+    @staticmethod
+    def _read_config(config_path: str) -> configparser.ConfigParser:
+        """Read a configuration file and return a ConfigParser instance."""
+        config = configparser.ConfigParser()
+        config.read(config_path)
+        return config
+
+    @staticmethod
+    def _ensure_config_dir(config_path: str) -> None:
+        """Ensure the config directory exists, creating it if necessary."""
+        config_dir = Path(config_path).parent
+        if not config_dir.exists():
+            config_dir.mkdir(parents=True)
+            print_success(f"Created config directory: {config_dir}")
+
+    @staticmethod
+    def _write_config(config: configparser.ConfigParser, config_path: str) -> None:
+        """Write a configuration to file, creating the directory if needed."""
+        ConfigManager._ensure_config_dir(config_path)
+        with open(config_path, "w") as configfile:
+            config.write(configfile)
 
     @property
     def file_config(self) -> configparser.ConfigParser:
@@ -244,23 +285,24 @@ class ConfigManager:
     def _handle_config_error(self, error: Exception) -> None:
         """Handle and display config-related errors."""
         if isinstance(error, configparser.Error | OSError | PermissionError):
-            typer.secho(f"Warning: Could not read config file: {error}", fg=typer.colors.YELLOW)
+            print_warning(f"Warning: Could not read config file: {error}")
         elif isinstance(error, KeyError | TypeError | AttributeError):
-            typer.secho("Warning: Config file structure is invalid", fg=typer.colors.YELLOW)
+            print_warning("Warning: Config file structure is invalid")
         elif isinstance(error, ValueError):
-            typer.secho(f"Warning: Config validation error: {error}", fg=typer.colors.YELLOW)
+            print_warning(f"Warning: Config validation error: {error}")
 
     def get_instance_name(self) -> str | None:
-        """Get default instance name from config file or environment variable."""
-        try:
-            # Try Pydantic config first (includes env var override)
-            config = self.get_validated_config()
-            if config.instance_name:
-                return config.instance_name
+        """Get default instance name from config file or environment variable.
 
-            # Fall back to file config for backwards compatibility
-            if "DEFAULT" in self.file_config and "instance_name" in self.file_config["DEFAULT"]:
-                return self.file_config["DEFAULT"]["instance_name"]
+        Configuration is loaded through the Pydantic model which handles:
+        1. INI file values from ~/.config/remote.py/config.ini
+        2. Environment variable overrides (REMOTE_INSTANCE_NAME)
+
+        Environment variables take precedence over INI file values.
+        """
+        try:
+            config = self.get_validated_config()
+            return config.instance_name
         except (
             configparser.Error,
             OSError,
@@ -279,17 +321,19 @@ class ConfigManager:
         self.set_value("instance_name", instance_name, config_path)
 
     def get_value(self, key: str) -> str | None:
-        """Get a config value by key, with environment variable override support."""
+        """Get a config value by key, with environment variable override support.
+
+        Configuration is loaded through the Pydantic model which handles:
+        1. INI file values from ~/.config/remote.py/config.ini
+        2. Environment variable overrides (REMOTE_<KEY>)
+
+        Environment variables take precedence over INI file values.
+        """
         try:
-            # Try Pydantic config first (includes env var override)
             config = self.get_validated_config()
             value = getattr(config, key, None)
             if value is not None:
                 return str(value) if not isinstance(value, str) else value
-
-            # Fall back to file config for backwards compatibility
-            if "DEFAULT" in self.file_config and key in self.file_config["DEFAULT"]:
-                return self.file_config["DEFAULT"][key]
         except (
             configparser.Error,
             OSError,
@@ -316,7 +360,7 @@ class ConfigManager:
             config.add_section("DEFAULT")
 
         config.set("DEFAULT", key, value)
-        write_config(config, config_path)
+        self._write_config(config, config_path)
 
         # Reset pydantic config to reload on next access
         self._pydantic_config = None
@@ -327,13 +371,13 @@ class ConfigManager:
             config_path = str(Settings.get_config_path())
 
         # Read from specified config path
-        config = read_config(config_path)
+        config = self._read_config(config_path)
 
         if "DEFAULT" not in config or key not in config["DEFAULT"]:
             return False
 
         config.remove_option("DEFAULT", key)
-        write_config(config, config_path)
+        self._write_config(config, config_path)
 
         # Reset cached configs to reload on next access
         self._file_config = None
@@ -348,29 +392,8 @@ config_manager = ConfigManager()
 CONFIG_PATH = str(Settings.get_config_path())
 
 
-def read_config(config_path: str) -> configparser.ConfigParser:
-    config = configparser.ConfigParser()
-    config.read(config_path)
-
-    return config
-
-
-def create_config_dir(config_path: str) -> None:
-    # check whether the config path exists, and create if not.
-
-    if not os.path.exists(os.path.dirname(config_path)):
-        os.makedirs(os.path.dirname(config_path))
-        typer.secho(f"Created config directory: {os.path.dirname(config_path)}", fg="green")
-
-
-def write_config(config: configparser.ConfigParser, config_path: str) -> None:
-    create_config_dir(config_path)
-
-    with open(config_path, "w") as configfile:
-        config.write(configfile)
-
-
 @app.command()
+@handle_cli_errors
 def show(config_path: str = typer.Option(CONFIG_PATH, "--config", "-c")) -> None:
     """
     Show current configuration settings.
@@ -379,23 +402,22 @@ def show(config_path: str = typer.Option(CONFIG_PATH, "--config", "-c")) -> None
     """
 
     # Print out the config file
-    config = read_config(config_path=config_path)
+    config = ConfigManager._read_config(config_path=config_path)
     default_section = config["DEFAULT"]
 
-    # Format table using rich
-    table = Table(title="Configuration")
-    table.add_column("Section")
-    table.add_column("Name", style="cyan")
-    table.add_column("Value", style="green")
+    columns = [
+        {"name": "Section"},
+        {"name": "Name", "style": "cyan"},
+        {"name": "Value", "style": "green"},
+    ]
+    rows = [["DEFAULT", k, v] for k, v in default_section.items()]
 
-    for k, v in default_section.items():
-        table.add_row("DEFAULT", k, v)
-
-    typer.secho(f"Printing config file: {config_path}", fg=typer.colors.YELLOW)
-    console.print(table)
+    print_warning(f"Printing config file: {config_path}")
+    console.print(create_table("Configuration", columns, rows))
 
 
 @app.command()
+@handle_cli_errors
 def add(
     instance_name: str | None = typer.Argument(None),
     config_path: str = typer.Option(CONFIG_PATH, "--config", "-c"),
@@ -415,7 +437,7 @@ def add(
         # No instance name provided. Fetch the list of currently running
         # instances (excluding terminated ones)
 
-        instances = get_instances()
+        instances = get_instances(exclude_terminated=True)
 
         # Get the instance ids for the instances
         ids = get_instance_ids(instances)
@@ -423,19 +445,19 @@ def add(
         # Get other details like name, type etc for these instances
         names, _, _, instance_types, _ = get_instance_info(instances)
 
-        # Format table using rich
-        table = Table(title="Select Instance")
-        table.add_column("Number", justify="right")
-        table.add_column("Name", style="cyan")
-        table.add_column("InstanceId", style="green")
-        table.add_column("Type")
-
-        for i, (name, instance_id, it) in enumerate(
-            zip(names, ids, instance_types, strict=True), 1
-        ):
-            table.add_row(str(i), name or "", instance_id, it or "")
-
-        console.print(table)
+        columns = [
+            {"name": "Number", "justify": "right"},
+            {"name": "Name", "style": "cyan"},
+            {"name": "InstanceId", "style": "green"},
+            {"name": "Type"},
+        ]
+        rows = [
+            [str(i), name or "", instance_id, it or ""]
+            for i, (name, instance_id, it) in enumerate(
+                zip(names, ids, instance_types, strict=True), 1
+            )
+        ]
+        console.print(create_table("Select Instance", columns, rows))
 
         # Prompt the user to select an instance from the table
         instance_number = typer.prompt("Select a instance by number", type=int)
@@ -447,16 +469,17 @@ def add(
             instance_name = names[instance_number - 1]
         else:
             # Invalid input. Display an error message and exit.
-            typer.secho("Invalid number. No changes made", fg=typer.colors.YELLOW)
+            print_warning("Invalid number. No changes made")
 
             return
 
     # If an instance name was directly provided or selected from the list, update the configuration file
     config_manager.set_instance_name(instance_name, config_path)
-    typer.secho(f"Default instance set to {instance_name}", fg=typer.colors.GREEN)
+    print_success(f"Default instance set to {instance_name}")
 
 
 @app.command("set")
+@handle_cli_errors
 def set_value(
     key: str = typer.Argument(..., help="Config key to set"),
     value: str = typer.Argument(..., help="Value to set"),
@@ -470,16 +493,14 @@ def set_value(
         remote config set ssh_user ec2-user
         remote config set ssh_key_path ~/.ssh/my-key.pem
     """
-    if key not in VALID_KEYS:
-        typer.secho(f"Unknown config key: {key}", fg=typer.colors.RED)
-        typer.secho(f"Valid keys: {', '.join(VALID_KEYS.keys())}", fg=typer.colors.YELLOW)
-        raise typer.Exit(1)
+    validate_config_key(key)
 
     config_manager.set_value(key, value, config_path)
-    typer.secho(f"Set {key} = {value}", fg=typer.colors.GREEN)
+    print_success(f"Set {key} = {value}")
 
 
 @app.command("get")
+@handle_cli_errors
 def get_value_cmd(
     key: str = typer.Argument(..., help="Config key to get"),
     config_path: str = typer.Option(CONFIG_PATH, "--config", "-c"),
@@ -494,27 +515,26 @@ def get_value_cmd(
         remote config get instance_name
         INSTANCE=$(remote config get instance_name)
     """
-    if key not in VALID_KEYS:
-        typer.secho(f"Unknown config key: {key}", fg=typer.colors.RED)
-        typer.secho(f"Valid keys: {', '.join(VALID_KEYS.keys())}", fg=typer.colors.YELLOW)
-        raise typer.Exit(1)
+    validate_config_key(key)
 
     # Use a temporary ConfigManager if custom config path is provided
     if config_path != CONFIG_PATH:
         # For custom paths, read directly from file (no env var overrides)
-        config = read_config(config_path)
+        config = ConfigManager._read_config(config_path)
         value = config.get("DEFAULT", key, fallback=None)
     else:
         # Use ConfigManager for default path (includes env var overrides and validation)
         value = config_manager.get_value(key)
 
     if value is None:
-        raise typer.Exit(1)
+        print_warning(f"Config key '{key}' is not set")
+        return
 
     typer.echo(value)
 
 
 @app.command("unset")
+@handle_cli_errors
 def unset_value(
     key: str = typer.Argument(..., help="Config key to remove"),
     config_path: str = typer.Option(CONFIG_PATH, "--config", "-c"),
@@ -526,13 +546,14 @@ def unset_value(
         remote config unset ssh_key_path
     """
     if not config_manager.remove_value(key, config_path):
-        typer.secho(f"Key '{key}' not found in config", fg=typer.colors.YELLOW)
-        raise typer.Exit(1)
+        print_warning(f"Key '{key}' not found in config")
+        return
 
-    typer.secho(f"Removed {key}", fg=typer.colors.GREEN)
+    print_success(f"Removed {key}")
 
 
 @app.command()
+@handle_cli_errors
 def init(
     config_path: str = typer.Option(CONFIG_PATH, "--config", "-c"),
 ) -> None:
@@ -548,14 +569,20 @@ def init(
     typer.echo()
 
     # Check if config exists
-    if os.path.exists(config_path):
-        if not typer.confirm("Config already exists. Overwrite?"):
-            raise typer.Exit(0)
+    if Path(config_path).exists():
+        if not typer.confirm("Config already exists. Overwrite?", default=False):
+            print_warning("Cancelled.")
+            return
 
-    # Guided prompts
+    # Guided prompts with whitespace sanitization
     instance_name = typer.prompt("Default instance name (optional)", default="", show_default=False)
-    ssh_user = typer.prompt("SSH username", default="ubuntu")
+    ssh_user = typer.prompt("SSH username", default=DEFAULT_SSH_USER)
     ssh_key = typer.prompt("SSH key path (optional)", default="", show_default=False)
+
+    # Sanitize all inputs to handle whitespace-only values
+    instance_name = sanitize_input(instance_name)
+    ssh_user = sanitize_input(ssh_user) or DEFAULT_SSH_USER  # Fallback to default if empty
+    ssh_key = sanitize_input(ssh_key)
 
     # Write config
     config = configparser.ConfigParser()
@@ -565,11 +592,12 @@ def init(
     if ssh_key:
         config.set("DEFAULT", "ssh_key_path", ssh_key)
 
-    write_config(config, config_path)
-    typer.secho(f"\nConfig written to {config_path}", fg=typer.colors.GREEN)
+    ConfigManager._write_config(config, config_path)
+    print_success(f"\nConfig written to {config_path}")
 
 
 @app.command()
+@handle_cli_errors
 def validate(
     config_path: str = typer.Option(CONFIG_PATH, "--config", "-c"),
 ) -> None:
@@ -613,17 +641,16 @@ def validate(
 
 
 @app.command()
+@handle_cli_errors
 def keys() -> None:
     """
     List all valid configuration keys.
 
     Shows available keys and their descriptions.
     """
-    table = Table(title="Valid Configuration Keys")
-    table.add_column("Key", style="cyan")
-    table.add_column("Description")
-
-    for key, description in VALID_KEYS.items():
-        table.add_row(key, description)
-
-    console.print(table)
+    columns = [
+        {"name": "Key", "style": "cyan"},
+        {"name": "Description"},
+    ]
+    rows = [[key, description] for key, description in VALID_KEYS.items()]
+    console.print(create_table("Valid Configuration Keys", columns, rows))

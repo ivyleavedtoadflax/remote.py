@@ -1,3 +1,4 @@
+import pytest
 from typer.testing import CliRunner
 
 from remote.__main__ import app
@@ -13,6 +14,25 @@ def test_version_command(mocker):
     assert result.exit_code == 0
     mock_version.assert_called_once_with("remotepy")
     assert "0.2.5" in result.stdout
+
+
+def test_version_command_has_error_handling_decorator(mocker):
+    """Test that version command has @handle_cli_errors decorator applied."""
+    from remote.exceptions import ValidationError
+
+    # Simulate a ValidationError being raised (which @handle_cli_errors catches)
+    mocker.patch(
+        "remote.__main__.importlib.metadata.version",
+        side_effect=ValidationError("Test validation error"),
+    )
+
+    result = runner.invoke(app, ["version"])
+
+    # Should exit with error code 1 (handled by @handle_cli_errors)
+    assert result.exit_code == 1
+    # Should show user-friendly error message from the decorator
+    assert "Error:" in result.stdout
+    assert "Test validation error" in result.stdout
 
 
 def test_main_app_imports():
@@ -56,39 +76,12 @@ def test_help_shows_subcommands():
     assert "version" in result.stdout
 
 
-def test_ami_subcommand_exists():
-    """Test that ami subcommand is properly registered."""
-    result = runner.invoke(app, ["ami", "--help"])
+@pytest.mark.parametrize("subcommand", ["ami", "config", "snapshot", "volume", "ecs"])
+def test_subcommand_exists(subcommand):
+    """Test that subcommands are properly registered."""
+    result = runner.invoke(app, [subcommand, "--help"])
     assert result.exit_code == 0
-    assert "ami" in result.stdout.lower()
-
-
-def test_config_subcommand_exists():
-    """Test that config subcommand is properly registered."""
-    result = runner.invoke(app, ["config", "--help"])
-    assert result.exit_code == 0
-    assert "config" in result.stdout.lower()
-
-
-def test_snapshot_subcommand_exists():
-    """Test that snapshot subcommand is properly registered."""
-    result = runner.invoke(app, ["snapshot", "--help"])
-    assert result.exit_code == 0
-    assert "snapshot" in result.stdout.lower()
-
-
-def test_volume_subcommand_exists():
-    """Test that volume subcommand is properly registered."""
-    result = runner.invoke(app, ["volume", "--help"])
-    assert result.exit_code == 0
-    assert "volume" in result.stdout.lower()
-
-
-def test_ecs_subcommand_exists():
-    """Test that ecs subcommand is properly registered."""
-    result = runner.invoke(app, ["ecs", "--help"])
-    assert result.exit_code == 0
-    assert "ecs" in result.stdout.lower()
+    assert subcommand in result.stdout.lower()
 
 
 def test_root_level_does_not_have_instance_commands():

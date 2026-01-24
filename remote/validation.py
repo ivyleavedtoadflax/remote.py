@@ -5,9 +5,93 @@ identifiers to prevent errors and improve security.
 """
 
 import re
+from pathlib import Path
 from typing import Any
 
+import typer
+
 from .exceptions import InvalidInputError, ValidationError
+
+
+def sanitize_input(value: str | None) -> str | None:
+    """Sanitize user input by stripping whitespace and normalizing empty values.
+
+    This function provides consistent input sanitization across the application:
+    - Returns None for None input
+    - Returns None for whitespace-only strings
+    - Returns the stripped value otherwise
+
+    Use this function early in input processing pipelines to ensure consistent
+    handling of whitespace-only values across all commands.
+
+    Args:
+        value: The input string to sanitize, or None
+
+    Returns:
+        The stripped string if non-empty after stripping, None otherwise
+
+    Examples:
+        >>> sanitize_input(None)
+        None
+        >>> sanitize_input("")
+        None
+        >>> sanitize_input("   ")
+        None
+        >>> sanitize_input("  hello  ")
+        "hello"
+    """
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped if stripped else None
+
+
+class _Unset:
+    """Sentinel class to distinguish between 'no default provided' and 'None as default'.
+
+    This allows safe_get_array_item() to accept None as a valid default value while
+    still being able to detect when no default was provided at all.
+    """
+
+    def __repr__(self) -> str:
+        return "<UNSET>"
+
+
+_UNSET = _Unset()
+
+
+def validate_instance_type(instance_type: str) -> str:
+    """Validate EC2 instance type format.
+
+    Instance types follow the pattern: family[generation][size_modifier].size
+    Examples: t3.micro, m5.large, g4dn.xlarge, r6g.medium
+
+    Args:
+        instance_type: The instance type to validate
+
+    Returns:
+        The validated instance type (stripped of leading/trailing whitespace)
+
+    Raises:
+        InvalidInputError: If instance type format is invalid
+    """
+    sanitized = sanitize_input(instance_type)
+    if not sanitized:
+        raise InvalidInputError("instance_type", "", "t3.micro or m5.large")
+
+    # Pattern: family.size (e.g., t3.micro, m5.large, g4dn.xlarge)
+    # Family: lowercase letters followed by optional numbers and modifiers (like 'dn', 'g')
+    # Size: lowercase letters, numbers, and hyphens (micro, small, large, xlarge, 2xlarge, etc.)
+    pattern = r"^[a-z][a-z0-9-]*\.[a-z0-9-]+$"
+    if not re.match(pattern, sanitized, re.IGNORECASE):
+        raise InvalidInputError(
+            "instance_type",
+            sanitized,
+            "format like 't3.micro' or 'm5.large'",
+            "Instance types consist of a family and size separated by a dot",
+        )
+
+    return sanitized
 
 
 def validate_instance_id(instance_id: str) -> str:
@@ -17,25 +101,59 @@ def validate_instance_id(instance_id: str) -> str:
         instance_id: The instance ID to validate
 
     Returns:
-        The validated instance ID
+        The validated instance ID (stripped of leading/trailing whitespace)
 
     Raises:
         InvalidInputError: If instance ID format is invalid
     """
-    if not instance_id:
+    sanitized = sanitize_input(instance_id)
+    if not sanitized:
         raise InvalidInputError("instance_id", "", "i-xxxxxxxxx")
 
     # EC2 instance IDs should match pattern: i-[0-9a-f]{8,17}
     pattern = r"^i-[0-9a-f]{8,17}$"
-    if not re.match(pattern, instance_id, re.IGNORECASE):
+    if not re.match(pattern, sanitized, re.IGNORECASE):
         raise InvalidInputError(
             "instance_id",
-            instance_id,
+            sanitized,
             "i-xxxxxxxxx (where x is alphanumeric)",
             "Instance IDs start with 'i-' followed by 8-17 alphanumeric characters",
         )
 
-    return instance_id
+    return sanitized
+
+
+# Constants for instance name validation
+INSTANCE_NAME_MAX_LENGTH = 255
+INSTANCE_NAME_PATTERN = r"^[a-zA-Z0-9_\-\.\s]+$"
+INSTANCE_NAME_PATTERN_DESC = "alphanumeric characters, hyphens, underscores, dots, and spaces only"
+
+
+def check_instance_name_pattern(instance_name: str) -> str | None:
+    """Check if instance name matches the allowed pattern.
+
+    This is the core validation logic shared between Pydantic validators
+    and standalone validation functions.
+
+    Args:
+        instance_name: The instance name to check
+
+    Returns:
+        None if valid, or an error message string if invalid
+    """
+    if len(instance_name) > INSTANCE_NAME_MAX_LENGTH:
+        return (
+            f"Instance name exceeds maximum length of {INSTANCE_NAME_MAX_LENGTH} characters "
+            f"(got {len(instance_name)})"
+        )
+
+    if not re.match(INSTANCE_NAME_PATTERN, instance_name):
+        return (
+            f"Invalid instance name '{instance_name}': "
+            f"must contain only {INSTANCE_NAME_PATTERN_DESC}"
+        )
+
+    return None
 
 
 def validate_instance_name(instance_name: str) -> str:
@@ -45,32 +163,25 @@ def validate_instance_name(instance_name: str) -> str:
         instance_name: The instance name to validate
 
     Returns:
-        The validated instance name
+        The validated instance name (stripped of leading/trailing whitespace)
 
     Raises:
         InvalidInputError: If instance name is invalid
     """
-    if not instance_name:
+    sanitized = sanitize_input(instance_name)
+    if not sanitized:
         raise InvalidInputError("instance_name", "", "non-empty string")
 
-    if len(instance_name) > 255:
+    error = check_instance_name_pattern(sanitized)
+    if error:
         raise InvalidInputError(
             "instance_name",
-            instance_name,
-            "string with maximum 255 characters",
-            f"Instance name is {len(instance_name)} characters long",
+            sanitized,
+            INSTANCE_NAME_PATTERN_DESC,
+            error,
         )
 
-    # Allow alphanumeric, hyphens, underscores, and spaces
-    if not re.match(r"^[a-zA-Z0-9_\-\s]+$", instance_name):
-        raise InvalidInputError(
-            "instance_name",
-            instance_name,
-            "alphanumeric characters, hyphens, underscores, and spaces only",
-            "Special characters except hyphens and underscores are not allowed",
-        )
-
-    return instance_name
+    return sanitized
 
 
 def validate_volume_id(volume_id: str) -> str:
@@ -80,25 +191,26 @@ def validate_volume_id(volume_id: str) -> str:
         volume_id: The volume ID to validate
 
     Returns:
-        The validated volume ID
+        The validated volume ID (stripped of leading/trailing whitespace)
 
     Raises:
         InvalidInputError: If volume ID format is invalid
     """
-    if not volume_id:
+    sanitized = sanitize_input(volume_id)
+    if not sanitized:
         raise InvalidInputError("volume_id", "", "vol-xxxxxxxxx")
 
     # Volume IDs should match pattern: vol-[0-9a-f]{8,17}
     pattern = r"^vol-[0-9a-f]{8,17}$"
-    if not re.match(pattern, volume_id, re.IGNORECASE):
+    if not re.match(pattern, sanitized, re.IGNORECASE):
         raise InvalidInputError(
             "volume_id",
-            volume_id,
+            sanitized,
             "vol-xxxxxxxxx (where x is alphanumeric)",
             "Volume IDs start with 'vol-' followed by 8-17 alphanumeric characters",
         )
 
-    return volume_id
+    return sanitized
 
 
 def validate_positive_integer(value: Any, parameter_name: str, max_value: int | None = None) -> int:
@@ -120,7 +232,7 @@ def validate_positive_integer(value: Any, parameter_name: str, max_value: int | 
     except (ValueError, TypeError):
         raise ValidationError(f"{parameter_name} must be a valid integer, got: {value}")
 
-    if int_value < 0:
+    if int_value <= 0:
         raise ValidationError(f"{parameter_name} must be positive, got: {int_value}")
 
     if max_value is not None and int_value > max_value:
@@ -179,28 +291,61 @@ def safe_get_nested_value(data: dict[str, Any], keys: list[str], default: Any = 
     return current
 
 
-def safe_get_array_item(array: list[Any], index: int, context: str, default: Any = None) -> Any:
+def safe_get_array_item(array: list[Any], index: int, context: str, default: Any = _UNSET) -> Any:
     """Safely get an item from an array with bounds checking.
 
+    This function has dual behavior based on whether a default is provided:
+
+    - **With default**: Returns the default value on any failure (empty array or
+      out-of-bounds index). This makes the function "safe" in that it never raises.
+    - **Without default**: Raises ValidationError on failure. Use this when the
+      absence of data indicates a programming error or unexpected state.
+
     Args:
-        array: The array to access
-        index: The index to access
-        context: Description for error messages
-        default: Default value if index is out of bounds
+        array: The array to access. Can be None or empty.
+        index: The zero-based index to access.
+        context: Description of what's being accessed, used in error messages
+            (e.g., "instance reservations", "launched instances").
+        default: Optional default value to return if the array is empty or the
+            index is out of bounds. Pass any value (including None) to enable
+            "safe" mode that never raises. Omit entirely to enable "strict" mode
+            that raises ValidationError on failure.
 
     Returns:
-        The array item or default value
+        The array item at the specified index, or the default value if provided
+        and access fails.
 
     Raises:
-        ValidationError: If array is None or empty when default is None
+        ValidationError: If array is empty or index is out of bounds AND no
+            default was provided. Never raises if default is provided.
+
+    Examples:
+        Strict mode (raises on failure)::
+
+            >>> safe_get_array_item([], 0, "items")
+            ValidationError: No items found in items
+
+            >>> safe_get_array_item(["a"], 5, "items")
+            ValidationError: Index 5 out of range for items (length: 1)
+
+        Safe mode (returns default on failure)::
+
+            >>> safe_get_array_item([], 0, "items", default="fallback")
+            "fallback"
+
+            >>> safe_get_array_item([], 0, "items", default=None)
+            None
+
+            >>> safe_get_array_item(["a", "b"], 1, "items", default="fallback")
+            "b"
     """
     if not array:
-        if default is not None:
+        if default is not _UNSET:
             return default
         raise ValidationError(f"No items found in {context}")
 
     if index < 0 or index >= len(array):
-        if default is not None:
+        if default is not _UNSET:
             return default
         raise ValidationError(f"Index {index} out of range for {context} (length: {len(array)})")
 
@@ -245,3 +390,37 @@ def ensure_non_empty_array(array: list[Any], context: str) -> list[Any]:
         raise ValidationError(f"No items found in {context}")
 
     return array
+
+
+def validate_ssh_key_path(key: str | None) -> str | None:
+    """Validate SSH key file path at option parse time.
+
+    This is a Typer callback for validating the --key option. It ensures the
+    SSH key file exists and is a regular file before attempting any operations.
+
+    Args:
+        key: SSH key path provided by user, or None if not specified
+
+    Returns:
+        The expanded key path as a string if valid, None if not provided
+
+    Raises:
+        typer.BadParameter: If the key file does not exist or is not a file
+    """
+    sanitized = sanitize_input(key)
+    if sanitized is None:
+        # Treat None and empty/whitespace-only strings as "not provided"
+        if key is not None:
+            # Original was non-None but empty/whitespace-only
+            raise typer.BadParameter("SSH key path cannot be empty")
+        return None
+
+    path = Path(sanitized).expanduser()
+
+    if not path.exists():
+        raise typer.BadParameter(f"SSH key file not found: {sanitized}")
+
+    if not path.is_file():
+        raise typer.BadParameter(f"SSH key path is not a file: {sanitized}")
+
+    return str(path)

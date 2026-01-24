@@ -8,6 +8,11 @@ runner = CliRunner()
 
 @pytest.fixture
 def mock_volume_response():
+    """Mock response from describe_volumes with server-side filter.
+
+    This fixture simulates the response when filtering by attachment.instance-id,
+    so it only contains volumes attached to the target instance.
+    """
     return {
         "Volumes": [
             {
@@ -24,33 +29,58 @@ def mock_volume_response():
                 ],
                 "Tags": [{"Key": "Name", "Value": "test-volume"}],
             },
-            {
-                "VolumeId": "vol-0123456789abcdef1",
-                "Size": 10,
-                "State": "available",
-                "AvailabilityZone": "us-east-1b",
-                "Attachments": [],
-                "Tags": [],
-            },
         ]
     }
 
 
-def test_list_volumes_with_instance_name(mocker, mock_volume_response):
+def test_list_volumes_instance_not_found(mocker):
+    """Test that InstanceNotFoundError exits with code 1."""
+    import typer
+
+    mocker.patch(
+        "remote.volume.resolve_instance_or_exit",
+        side_effect=typer.Exit(1),
+    )
+
+    result = runner.invoke(app, ["list", "nonexistent"])
+
+    assert result.exit_code == 1
+
+
+def test_list_volumes_multiple_instances_found(mocker):
+    """Test that MultipleInstancesFoundError exits with code 1."""
+    import typer
+
+    mocker.patch(
+        "remote.volume.resolve_instance_or_exit",
+        side_effect=typer.Exit(1),
+    )
+
+    result = runner.invoke(app, ["list", "ambiguous"])
+
+    assert result.exit_code == 1
+
+
+@pytest.mark.parametrize("command", ["list", "ls"])
+def test_list_volumes_with_instance_name(mocker, mock_volume_response, command):
+    """Test both list and ls commands work for listing volumes."""
     mock_ec2 = mocker.patch("remote.volume.get_ec2_client")
     mock_ec2_client = mock_ec2.return_value
-    mock_get_instance_id = mocker.patch(
-        "remote.volume.get_instance_id", return_value="i-0123456789abcdef0"
+    mock_resolve_instance = mocker.patch(
+        "remote.volume.resolve_instance_or_exit",
+        return_value=("test-instance", "i-0123456789abcdef0"),
     )
     mock_get_volume_name = mocker.patch("remote.volume.get_volume_name", return_value="test-volume")
 
     mock_ec2_client.describe_volumes.return_value = mock_volume_response
 
-    result = runner.invoke(app, ["list", "test-instance"])
+    result = runner.invoke(app, [command, "test-instance"])
 
     assert result.exit_code == 0
-    mock_get_instance_id.assert_called_once_with("test-instance")
-    mock_ec2_client.describe_volumes.assert_called_once()
+    mock_resolve_instance.assert_called_once_with("test-instance")
+    mock_ec2_client.describe_volumes.assert_called_once_with(
+        Filters=[{"Name": "attachment.instance-id", "Values": ["i-0123456789abcdef0"]}]
+    )
     mock_get_volume_name.assert_called_once_with("vol-0123456789abcdef0")
 
     assert "test-instance" in result.stdout
@@ -61,11 +91,9 @@ def test_list_volumes_with_instance_name(mocker, mock_volume_response):
 def test_list_volumes_without_instance_name(mocker, mock_volume_response):
     mock_ec2 = mocker.patch("remote.volume.get_ec2_client")
     mock_ec2_client = mock_ec2.return_value
-    mock_get_instance_name = mocker.patch(
-        "remote.volume.get_instance_name", return_value="default-instance"
-    )
-    mock_get_instance_id = mocker.patch(
-        "remote.volume.get_instance_id", return_value="i-0123456789abcdef0"
+    mock_resolve_instance = mocker.patch(
+        "remote.volume.resolve_instance_or_exit",
+        return_value=("default-instance", "i-0123456789abcdef0"),
     )
     mocker.patch("remote.volume.get_volume_name", return_value="test-volume")
 
@@ -74,51 +102,46 @@ def test_list_volumes_without_instance_name(mocker, mock_volume_response):
     result = runner.invoke(app, ["list"])
 
     assert result.exit_code == 0
-    mock_get_instance_name.assert_called_once()
-    mock_get_instance_id.assert_called_once_with("default-instance")
-    mock_ec2_client.describe_volumes.assert_called_once()
+    mock_resolve_instance.assert_called_once_with(None)
+    mock_ec2_client.describe_volumes.assert_called_once_with(
+        Filters=[{"Name": "attachment.instance-id", "Values": ["i-0123456789abcdef0"]}]
+    )
 
 
 def test_list_volumes_no_attachments(mocker):
     mock_ec2 = mocker.patch("remote.volume.get_ec2_client")
     mock_ec2_client = mock_ec2.return_value
-    mock_get_instance_id = mocker.patch(
-        "remote.volume.get_instance_id", return_value="i-0123456789abcdef0"
+    mock_resolve_instance = mocker.patch(
+        "remote.volume.resolve_instance_or_exit",
+        return_value=("test-instance", "i-0123456789abcdef0"),
     )
 
-    # Volume with no attachments to our instance
-    mock_ec2_client.describe_volumes.return_value = {
-        "Volumes": [
-            {
-                "VolumeId": "vol-unattached",
-                "Size": 5,
-                "State": "available",
-                "AvailabilityZone": "us-east-1a",
-                "Attachments": [],
-                "Tags": [],
-            }
-        ]
-    }
+    # Server-side filter returns empty list when no volumes attached to instance
+    mock_ec2_client.describe_volumes.return_value = {"Volumes": []}
 
     result = runner.invoke(app, ["list", "test-instance"])
 
     assert result.exit_code == 0
-    mock_get_instance_id.assert_called_once_with("test-instance")
-    mock_ec2_client.describe_volumes.assert_called_once()
+    mock_resolve_instance.assert_called_once_with("test-instance")
+    mock_ec2_client.describe_volumes.assert_called_once_with(
+        Filters=[{"Name": "attachment.instance-id", "Values": ["i-0123456789abcdef0"]}]
+    )
 
     # Should show headers but no volume data since no volumes are attached to our instance
     assert "Instance Name" in result.stdout
     assert "VolumeId" in result.stdout
-    assert "vol-unattached" not in result.stdout
 
 
 def test_list_volumes_multiple_attachments(mocker):
     mock_ec2 = mocker.patch("remote.volume.get_ec2_client")
     mock_ec2_client = mock_ec2.return_value
-    mocker.patch("remote.volume.get_instance_id", return_value="i-0123456789abcdef0")
+    mocker.patch(
+        "remote.volume.resolve_instance_or_exit",
+        return_value=("test-instance", "i-0123456789abcdef0"),
+    )
     mocker.patch("remote.volume.get_volume_name", side_effect=["vol1-name", "vol2-name"])
 
-    # Multiple volumes attached to the same instance
+    # Multiple volumes attached to the same instance (returned by server-side filter)
     mock_ec2_client.describe_volumes.return_value = {
         "Volumes": [
             {
@@ -155,24 +178,10 @@ def test_list_volumes_multiple_attachments(mocker):
     result = runner.invoke(app, ["list", "test-instance"])
 
     assert result.exit_code == 0
+    mock_ec2_client.describe_volumes.assert_called_once_with(
+        Filters=[{"Name": "attachment.instance-id", "Values": ["i-0123456789abcdef0"]}]
+    )
     assert "vol-0123456789abcdef0" in result.stdout
     assert "vol-0123456789abcdef1" in result.stdout
     assert "vol1-name" in result.stdout
     assert "vol2-name" in result.stdout
-
-
-def test_list_command_alias_ls(mocker, mock_volume_response):
-    mock_ec2 = mocker.patch("remote.volume.get_ec2_client")
-    mock_ec2_client = mock_ec2.return_value
-    mock_get_instance_id = mocker.patch(
-        "remote.volume.get_instance_id", return_value="i-0123456789abcdef0"
-    )
-    mocker.patch("remote.volume.get_volume_name", return_value="test-volume")
-
-    mock_ec2_client.describe_volumes.return_value = mock_volume_response
-
-    result = runner.invoke(app, ["ls", "test-instance"])
-
-    assert result.exit_code == 0
-    mock_get_instance_id.assert_called_once_with("test-instance")
-    mock_ec2_client.describe_volumes.assert_called_once()
