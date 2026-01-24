@@ -155,26 +155,21 @@ def test_create_ami_with_yes_flag(mocker):
     assert "AMI ami-0123456789abcdef0 created" in result.stdout
 
 
-def test_create_ami_instance_not_found(mocker):
-    """Test that InstanceNotFoundError exits with code 1."""
+@pytest.mark.parametrize(
+    "instance_name,scenario",
+    [
+        ("nonexistent", "InstanceNotFoundError"),
+        ("ambiguous", "MultipleInstancesFoundError"),
+    ],
+)
+def test_create_ami_instance_resolution_error(mocker, instance_name, scenario):
+    """Test that instance resolution errors exit with code 1."""
     mocker.patch(
         "remote.ami.resolve_instance_or_exit",
         side_effect=typer.Exit(1),
     )
 
-    result = runner.invoke(app, ["create", "nonexistent", "--yes"])
-
-    assert result.exit_code == 1
-
-
-def test_create_ami_multiple_instances_found(mocker):
-    """Test that MultipleInstancesFoundError exits with code 1."""
-    mocker.patch(
-        "remote.ami.resolve_instance_or_exit",
-        side_effect=typer.Exit(1),
-    )
-
-    result = runner.invoke(app, ["create", "ambiguous", "--yes"])
+    result = runner.invoke(app, ["create", instance_name, "--yes"])
 
     assert result.exit_code == 1
 
