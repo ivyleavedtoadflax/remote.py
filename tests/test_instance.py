@@ -3305,6 +3305,9 @@ class TestBuildSshCommand:
         result_str = " ".join(result)
         assert "BatchMode" not in result_str
         assert "ConnectTimeout" not in result_str
+        # Should have keepalive options for interactive sessions
+        assert "ServerAliveInterval=60" in result_str
+        assert "ServerAliveCountMax=3" in result_str
 
     def test_should_add_port_forwarding_when_specified(self):
         """Should add -L flag with port forwarding specification."""
@@ -3343,6 +3346,9 @@ class TestBuildSshCommand:
         # Should NOT have BatchMode/ConnectTimeout due to interactive=True
         result_str = " ".join(result)
         assert "BatchMode" not in result_str
+        # Should have keepalive options for interactive sessions
+        assert "ServerAliveInterval=60" in result_str
+        assert "ServerAliveCountMax=3" in result_str
 
 
 class TestGetSshConfig:
