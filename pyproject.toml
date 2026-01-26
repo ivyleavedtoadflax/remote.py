@@ -1,6 +1,6 @@
 [project]
 name = "remotepy"
-version = "1.3.0"
+version = "1.4.0"
 description = "CLI tool for managing AWS EC2 instances, ECS services, and related resources"
 authors = [{name = "Matthew Upson", email = "matt@mattupson.com"}]
 license = {text = "MIT License"}
