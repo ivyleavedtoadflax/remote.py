@@ -2,6 +2,7 @@ import contextlib
 import subprocess
 import sys
 import time
+import webbrowser
 from collections.abc import Generator
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -625,6 +626,53 @@ def _ensure_ssh_key(key: str | None) -> str | None:
     return key
 
 
+def parse_port_specification(port_spec: str) -> tuple[int, int]:
+    """Parse a port specification string into local and remote ports.
+
+    Args:
+        port_spec: Port specification in format "port" or "local:remote"
+
+    Returns:
+        Tuple of (local_port, remote_port)
+
+    Raises:
+        ValueError: If the port specification is invalid
+    """
+    parts = port_spec.split(":")
+
+    if len(parts) == 1:
+        # Single port: use same for local and remote
+        try:
+            port = int(parts[0])
+        except ValueError:
+            raise ValueError(f"Invalid port: {parts[0]}")
+
+        if port <= 0 or port > 65535:
+            raise ValueError(f"Invalid port: {port} (must be 1-65535)")
+
+        return port, port
+
+    elif len(parts) == 2:
+        # local:remote format
+        try:
+            local_port = int(parts[0])
+            remote_port = int(parts[1])
+        except ValueError:
+            raise ValueError(f"Invalid port specification: {port_spec}")
+
+        if local_port <= 0 or local_port > 65535:
+            raise ValueError(f"Invalid port: {local_port} (must be 1-65535)")
+        if remote_port <= 0 or remote_port > 65535:
+            raise ValueError(f"Invalid port: {remote_port} (must be 1-65535)")
+
+        return local_port, remote_port
+
+    else:
+        raise ValueError(
+            f"Invalid port specification: {port_spec} (expected 'port' or 'local:remote')"
+        )
+
+
 def _build_ssh_command(
     dns: str,
     key: str | None = None,
@@ -1093,6 +1141,120 @@ def connect(
         result = subprocess.run(ssh_command, timeout=timeout_value)
         if result.returncode != 0:
             print_error(f"SSH connection failed with exit code {result.returncode}")
+            raise typer.Exit(result.returncode)
+
+
+@app.command("forward")
+@handle_cli_errors
+def forward(
+    port_spec: str = typer.Argument(..., help="Port specification: 'port' or 'local:remote'"),
+    instance_name: str | None = typer.Argument(
+        None, help="Instance name (uses default if not provided)"
+    ),
+    user: str = typer.Option(DEFAULT_SSH_USER, "--user", "-u", help="SSH username"),
+    key: str | None = typer.Option(
+        None,
+        "--key",
+        "-k",
+        callback=validate_ssh_key_path,
+        help="Path to SSH private key file. Falls back to config ssh_key_path.",
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable SSH verbose mode"),
+    no_strict_host_key: bool = typer.Option(
+        False,
+        "--no-strict-host-key",
+        "-S",
+        help="Disable strict host key checking (less secure, use StrictHostKeyChecking=no)",
+    ),
+    no_browser: bool = typer.Option(
+        False,
+        "--no-browser",
+        "-n",
+        help="Don't automatically open the browser",
+    ),
+    auto_start: bool = typer.Option(
+        False,
+        "--start",
+        help="Automatically start the instance if stopped (no prompt)",
+    ),
+    no_start: bool = typer.Option(
+        False,
+        "--no-start",
+        help="Fail immediately if instance is not running (no prompt)",
+        callback=_validate_no_start_flag,
+    ),
+) -> None:
+    """
+    Forward a port from a remote EC2 instance to localhost.
+
+    Opens an SSH tunnel to forward a remote port to your local machine,
+    optionally opening a browser to the forwarded port.
+
+    Port specification:
+      - Single port (e.g., '8000'): Forward remote port 8000 to local port 8000
+      - local:remote (e.g., '8000:3000'): Forward remote port 3000 to local port 8000
+
+    Examples:
+        remote instance forward 8000              # Forward port 8000 (same local/remote)
+        remote instance forward 8000:3000         # Forward remote 3000 to local 8000
+        remote instance forward 8000 my-server    # Forward from specific instance
+        remote instance forward 8000 --no-browser # Don't open browser
+        remote instance forward 8000 --start      # Auto-start if stopped
+    """
+    # Parse port specification
+    try:
+        local_port, remote_port = parse_port_specification(port_spec)
+    except ValueError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+
+    instance_name, instance_id = resolve_instance_or_exit(instance_name)
+
+    # Ensure instance is running (may start it if needed)
+    _ensure_instance_running(
+        instance_name, instance_id, auto_start, no_start, allow_interactive=True
+    )
+
+    print_warning(f"Forwarding port {remote_port} from {instance_name} to localhost:{local_port}")
+
+    # Ensure SSH key is available (falls back to config)
+    key = _ensure_ssh_key(key)
+
+    # Get instance DNS and build SSH command
+    dns = get_instance_dns(instance_id)
+    if not dns:
+        print_error(f"Error: Instance {instance_name} has no public DNS")
+        raise typer.Exit(1)
+
+    # Build port forwarding specification for SSH -L option
+    # Format: local_port:localhost:remote_port
+    port_forward_spec = f"{local_port}:localhost:{remote_port}"
+
+    ssh_command = _build_ssh_command(
+        dns,
+        key=key,
+        user=user,
+        no_strict_host_key=no_strict_host_key,
+        verbose=verbose,
+        interactive=True,
+        port_forward=port_forward_spec,
+    )
+
+    # Add -N flag to not execute a remote command (just forward ports)
+    ssh_command.insert(1, "-N")
+
+    # Open browser if requested
+    if not no_browser:
+        url = f"http://localhost:{local_port}"
+        print_success(f"Opening browser to {url}")
+        webbrowser.open(url)
+
+    print_warning("Press Ctrl+C to stop port forwarding")
+
+    with handle_ssh_errors("SSH port forwarding"):
+        result = subprocess.run(ssh_command)
+        if result.returncode != 0:
+            print_error(f"SSH port forwarding failed with exit code {result.returncode}")
             raise typer.Exit(result.returncode)
 
 
