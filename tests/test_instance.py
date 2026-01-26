@@ -4888,3 +4888,271 @@ class TestSyncCommand:
 
         assert result.exit_code == 12
         assert "rsync failed" in result.stdout
+
+
+# ============================================================================
+# Port Specification Parsing Tests
+# ============================================================================
+
+
+class TestParsePortSpecification:
+    """Test the parse_port_specification function."""
+
+    def test_single_port_returns_same_local_and_remote(self):
+        """Single port like '8000' should return local=8000, remote=8000."""
+        from remote.instance import parse_port_specification
+
+        local_port, remote_port = parse_port_specification("8000")
+
+        assert local_port == 8000
+        assert remote_port == 8000
+
+    def test_colon_separated_ports_returns_local_and_remote(self):
+        """Port spec '8000:3000' should return local=8000, remote=3000."""
+        from remote.instance import parse_port_specification
+
+        local_port, remote_port = parse_port_specification("8000:3000")
+
+        assert local_port == 8000
+        assert remote_port == 3000
+
+    def test_invalid_port_raises_value_error(self):
+        """Invalid port specification should raise ValueError."""
+        from remote.instance import parse_port_specification
+
+        with pytest.raises(ValueError, match="Invalid port"):
+            parse_port_specification("invalid")
+
+    def test_port_out_of_range_raises_value_error(self):
+        """Port number > 65535 should raise ValueError."""
+        from remote.instance import parse_port_specification
+
+        with pytest.raises(ValueError, match="Invalid port"):
+            parse_port_specification("70000")
+
+    def test_negative_port_raises_value_error(self):
+        """Negative port should raise ValueError."""
+        from remote.instance import parse_port_specification
+
+        with pytest.raises(ValueError, match="Invalid port"):
+            parse_port_specification("-1")
+
+    def test_zero_port_raises_value_error(self):
+        """Zero port should raise ValueError."""
+        from remote.instance import parse_port_specification
+
+        with pytest.raises(ValueError, match="Invalid port"):
+            parse_port_specification("0")
+
+    def test_too_many_colons_raises_value_error(self):
+        """Port spec with too many colons should raise ValueError."""
+        from remote.instance import parse_port_specification
+
+        with pytest.raises(ValueError, match="Invalid port specification"):
+            parse_port_specification("8000:3000:1000")
+
+
+# ============================================================================
+# Forward Command Tests
+# ============================================================================
+
+
+class TestForwardCommand:
+    """Test the 'remote instance forward' command."""
+
+    def test_forward_builds_correct_ssh_command(self, mocker):
+        """Forward command should build SSH with correct -L port forwarding."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+        mocker.patch("remote.instance.webbrowser.open")
+
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running", "Code": 16},
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        runner.invoke(app, ["forward", "8000", "test-instance"])
+
+        mock_subprocess.assert_called_once()
+        ssh_command = mock_subprocess.call_args[0][0]
+
+        # Verify SSH command includes port forwarding
+        assert "ssh" in ssh_command
+        assert "-L" in ssh_command
+        # Port forward format is local_port:localhost:remote_port
+        assert "8000:localhost:8000" in ssh_command
+
+    def test_forward_with_different_local_and_remote_ports(self, mocker):
+        """Forward '8000:3000' should forward local 8000 to remote 3000."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+        mocker.patch("remote.instance.webbrowser.open")
+
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running", "Code": 16},
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        runner.invoke(app, ["forward", "8000:3000", "test-instance"])
+
+        mock_subprocess.assert_called_once()
+        ssh_command = mock_subprocess.call_args[0][0]
+
+        assert "-L" in ssh_command
+        assert "8000:localhost:3000" in ssh_command
+
+    def test_forward_opens_browser_to_local_port(self, mocker):
+        """Forward command should open browser to localhost:local_port."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mocker.patch("remote.instance.subprocess.run")
+        mock_browser = mocker.patch("remote.instance.webbrowser.open")
+
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running", "Code": 16},
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        runner.invoke(app, ["forward", "8000", "test-instance"])
+
+        mock_browser.assert_called_once_with("http://localhost:8000")
+
+    def test_forward_no_browser_flag_skips_browser(self, mocker):
+        """Forward with --no-browser should not open browser."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mocker.patch("remote.instance.subprocess.run")
+        mock_browser = mocker.patch("remote.instance.webbrowser.open")
+
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running", "Code": 16},
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        runner.invoke(app, ["forward", "8000", "test-instance", "--no-browser"])
+
+        mock_browser.assert_not_called()
+
+    def test_forward_invalid_port_fails(self, mocker):
+        """Forward with invalid port should exit with error."""
+        mocker.patch("remote.utils.get_ec2_client")
+
+        result = runner.invoke(app, ["forward", "invalid", "test-instance"])
+
+        assert result.exit_code != 0
+        assert "Invalid port" in result.stdout
+
+    def test_forward_uses_default_instance_when_none_provided(self, mocker):
+        """Forward should use default instance from config when not specified."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch(
+            "remote.instance.subprocess.run",
+            return_value=mocker.MagicMock(returncode=0),
+        )
+        mocker.patch("remote.instance.webbrowser.open")
+
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running", "Code": 16},
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        # Just provide port, no instance name (should use default from config)
+        result = runner.invoke(app, ["forward", "8000"])
+
+        assert result.exit_code == 0
+        mock_subprocess.assert_called_once()
+
+    def test_forward_adds_n_flag_to_prevent_reading_stdin(self, mocker):
+        """Forward should use -N flag to not execute remote command."""
+        mock_ec2 = mocker.patch("remote.utils.get_ec2_client")
+        mock_subprocess = mocker.patch("remote.instance.subprocess.run")
+        mocker.patch("remote.instance.webbrowser.open")
+
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-0123456789abcdef0",
+                            "State": {"Name": "running", "Code": 16},
+                            "PublicDnsName": "ec2-123-45-67-89.compute-1.amazonaws.com",
+                            "Tags": [{"Key": "Name", "Value": "test-instance"}],
+                        }
+                    ]
+                }
+            ]
+        }
+        mock_ec2.return_value.describe_instance_status.return_value = {
+            "InstanceStatuses": [{"InstanceState": {"Name": "running"}}]
+        }
+
+        runner.invoke(app, ["forward", "8000", "test-instance"])
+
+        mock_subprocess.assert_called_once()
+        ssh_command = mock_subprocess.call_args[0][0]
+
+        # SSH -N flag means "do not execute a remote command"
+        assert "-N" in ssh_command
