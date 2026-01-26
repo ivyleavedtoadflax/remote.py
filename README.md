@@ -141,6 +141,24 @@ If the instance is stopped, use `--start` to auto-start it:
 remote instance exec --start my-instance "uptime"
 ```
 
+### Port Forwarding
+
+Forward a port from a remote instance to localhost (useful for viewing web servers):
+
+```bash
+# Forward remote port 8000 to localhost:8000 and open browser
+remote instance forward 8000
+
+# Forward remote port 3000 to local port 8000
+remote instance forward 8000:3000
+
+# Forward from a specific instance
+remote instance forward 8000 my-instance
+
+# Don't automatically open the browser
+remote instance forward 8000 --no-browser
+```
+
 ### File Transfer
 
 Copy files to/from an instance using rsync:

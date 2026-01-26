@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-01-26
+
+### Added
+- **Port forwarding**: New `instance forward` command to forward ports from remote instances to localhost with automatic browser opening
+
 ## [1.2.0] - 2026-01-22
 
 ### Added
