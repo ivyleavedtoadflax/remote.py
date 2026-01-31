@@ -44,7 +44,7 @@ def _should_show_logo() -> bool:
 @app.command()
 @handle_cli_errors
 def version() -> None:
-    """Show version."""
+    """Show version"""
     typer.echo(importlib.metadata.version("remotepy"))
 
 
