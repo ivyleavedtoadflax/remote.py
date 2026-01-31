@@ -358,6 +358,7 @@ This policy includes all permissions needed for the full remote.py tool:
             "Sid": "EC2LaunchTemplates",
             "Effect": "Allow",
             "Action": [
+                "ec2:CreateLaunchTemplate",
                 "ec2:DescribeLaunchTemplates",
                 "ec2:DescribeLaunchTemplateVersions"
             ],

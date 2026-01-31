@@ -23,7 +23,7 @@ from remote.utils import (
     print_warning,
     styled_column,
 )
-from remote.validation import validate_aws_response_structure
+from remote.validation import validate_aws_response_structure, validate_instance_type
 
 app = typer.Typer()
 
@@ -306,3 +306,53 @@ def template_info(
             console.print(
                 f"  {bd.get('DeviceName', 'N/A')}: {ebs.get('VolumeSize', 'N/A')} GB ({ebs.get('VolumeType', 'N/A')})"
             )
+
+
+@app.command("create-template")
+@handle_cli_errors
+def create_template(
+    name: str = typer.Argument(..., help="Name for the launch template"),
+    ami: str = typer.Option(..., "--ami", "-a", help="AMI ID"),
+    instance_type: str = typer.Option(..., "--instance-type", "-t", help="Instance type"),
+    key_name: str = typer.Option(..., "--key-name", "-k", help="SSH key pair name"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+) -> None:
+    """
+    Create a new EC2 launch template.
+
+    Creates a launch template with the specified AMI, instance type, and key pair.
+    The template can then be used to launch instances with consistent configuration.
+
+    Examples:
+        remote ami create-template my-template --ami ami-123 --instance-type t3.small --key-name my-key
+        remote ami create-template my-template -a ami-123 -t t3.micro -k my-key --yes
+    """
+    # Validate instance type
+    validate_instance_type(instance_type)
+
+    # Confirm
+    if not yes:
+        details = f"AMI: {ami}, Type: {instance_type}, Key: {key_name}"
+        if not confirm_action("create launch template", "template", name, details=details):
+            print_warning("Cancelled.")
+            return
+
+    # Create template
+    with handle_aws_errors("EC2", "create_launch_template"):
+        response = get_ec2_client().create_launch_template(
+            LaunchTemplateName=name,
+            LaunchTemplateData={
+                "ImageId": ami,
+                "InstanceType": instance_type,
+                "KeyName": key_name,
+            },
+            TagSpecifications=[
+                {
+                    "ResourceType": "launch-template",
+                    "Tags": [{"Key": "Name", "Value": name}],
+                }
+            ],
+        )
+
+    template_id = response["LaunchTemplate"]["LaunchTemplateId"]
+    print_success(f"Created launch template '{name}' ({template_id})")
