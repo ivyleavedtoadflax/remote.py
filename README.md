@@ -195,6 +195,26 @@ remote sg list-ips my-instance
 remote sg remove-ip my-instance --ip 203.0.113.50/32
 ```
 
+### Auto-Termination
+
+Automatically terminate instances when they become idle (based on CPU utilization):
+
+```bash
+# Enable auto-termination (default: CPU < 5% for 30 min)
+remote instance auto-terminate enable
+
+# Enable with custom thresholds
+remote instance auto-terminate enable my-server --threshold 10 --duration 60
+
+# Check auto-termination status
+remote instance auto-terminate status
+
+# Disable auto-termination
+remote instance auto-terminate disable
+```
+
+**Warning**: Auto-termination uses AWS CloudWatch alarms to permanently terminate instances when CPU falls below the threshold for the specified duration. Termination is irreversible.
+
 ### Usage Statistics
 
 Track instance usage and costs:
@@ -287,6 +307,149 @@ remote config show
 ```
 
 The config file is stored at `~/.config/remote.py/config.ini` and serves as the single source of truth for your settings.
+
+## IAM Permissions
+
+RemotePy requires specific AWS IAM permissions to function. Below are the permissions needed for each feature.
+
+### Complete IAM Policy
+
+This policy includes all permissions needed for the full remote.py tool:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "EC2InstanceManagement",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:DescribeInstances",
+                "ec2:DescribeInstanceStatus",
+                "ec2:StartInstances",
+                "ec2:StopInstances",
+                "ec2:TerminateInstances",
+                "ec2:ModifyInstanceAttribute",
+                "ec2:RunInstances"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "EC2VolumeManagement",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:DescribeVolumes",
+                "ec2:ModifyVolume",
+                "ec2:CreateSnapshot",
+                "ec2:DescribeSnapshots"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "EC2AMIManagement",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:CreateImage",
+                "ec2:DescribeImages"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "EC2LaunchTemplates",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:DescribeLaunchTemplates",
+                "ec2:DescribeLaunchTemplateVersions"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "EC2SecurityGroups",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:DescribeSecurityGroups",
+                "ec2:AuthorizeSecurityGroupIngress",
+                "ec2:RevokeSecurityGroupIngress"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "ECSManagement",
+            "Effect": "Allow",
+            "Action": [
+                "ecs:ListClusters",
+                "ecs:ListServices",
+                "ecs:UpdateService"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "CloudWatchAutoTerminate",
+            "Effect": "Allow",
+            "Action": [
+                "cloudwatch:PutMetricAlarm",
+                "cloudwatch:DeleteAlarms",
+                "cloudwatch:DescribeAlarms"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "PricingLookup",
+            "Effect": "Allow",
+            "Action": [
+                "pricing:GetProducts",
+                "ssm:GetParameter"
+            ],
+            "Resource": "*"
+        },
+        {
+            "Sid": "STSIdentity",
+            "Effect": "Allow",
+            "Action": [
+                "sts:GetCallerIdentity"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+```
+
+### Permissions by Feature
+
+| Feature | Commands | Required Permissions |
+|---------|----------|---------------------|
+| **Instance Management** | `list`, `status`, `start`, `stop`, `terminate`, `type` | EC2: DescribeInstances, DescribeInstanceStatus, StartInstances, StopInstances, TerminateInstances, ModifyInstanceAttribute |
+| **Instance Launch** | `launch` | EC2: RunInstances, DescribeLaunchTemplates, DescribeLaunchTemplateVersions |
+| **SSH/Connect** | `connect`, `exec`, `copy`, `sync`, `forward` | EC2: DescribeInstances (to get IP) |
+| **Volumes** | `volume list`, `volume resize` | EC2: DescribeVolumes, ModifyVolume |
+| **Snapshots** | `snapshot create`, `snapshot list` | EC2: CreateSnapshot, DescribeSnapshots, DescribeVolumes |
+| **AMIs** | `ami create`, `ami list` | EC2: CreateImage, DescribeImages |
+| **Security Groups** | `sg show`, `sg allow`, `sg revoke` | EC2: DescribeSecurityGroups, AuthorizeSecurityGroupIngress, RevokeSecurityGroupIngress |
+| **ECS** | `ecs list-services`, `ecs scale` | ECS: ListClusters, ListServices, UpdateService |
+| **Auto-Terminate** | `auto-terminate enable/disable/status` | CloudWatch: PutMetricAlarm, DeleteAlarms, DescribeAlarms |
+| **Cost Tracking** | `--cost` flag | Pricing: GetProducts, SSM: GetParameter |
+
+### Minimal Policy (Instance Management Only)
+
+For users who only need basic instance management:
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "ec2:DescribeInstances",
+                "ec2:DescribeInstanceStatus",
+                "ec2:StartInstances",
+                "ec2:StopInstances"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+```
 
 ## Development
 
