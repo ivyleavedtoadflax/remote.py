@@ -343,7 +343,7 @@ def create_template(
             LaunchTemplateName=name,
             LaunchTemplateData={
                 "ImageId": ami,
-                "InstanceType": instance_type,
+                "InstanceType": instance_type,  # type: ignore[typeddict-item]
                 "KeyName": key_name,
             },
             TagSpecifications=[
