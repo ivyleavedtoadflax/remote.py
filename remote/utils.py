@@ -35,6 +35,7 @@ from .validation import (
 if TYPE_CHECKING:
     from collections.abc import Generator
 
+    from mypy_boto3_cloudwatch.client import CloudWatchClient
     from mypy_boto3_ec2.client import EC2Client
     from mypy_boto3_sts.client import STSClient
 
@@ -342,6 +343,18 @@ def get_sts_client() -> "STSClient":
     return boto3.client("sts")
 
 
+@lru_cache(maxsize=1)
+def get_cloudwatch_client() -> "CloudWatchClient":
+    """Get or create the CloudWatch client.
+
+    Uses lazy initialization and caches the client for reuse.
+
+    Returns:
+        boto3 CloudWatch client instance
+    """
+    return boto3.client("cloudwatch")
+
+
 def clear_ec2_client_cache() -> None:
     """Clear the EC2 client cache.
 
@@ -358,14 +371,23 @@ def clear_sts_client_cache() -> None:
     get_sts_client.cache_clear()
 
 
+def clear_cloudwatch_client_cache() -> None:
+    """Clear the CloudWatch client cache.
+
+    Useful for testing or when you need to reset the client state.
+    """
+    get_cloudwatch_client.cache_clear()
+
+
 def clear_aws_client_caches() -> None:
     """Clear all AWS client caches in utils.py.
 
-    Convenience function that clears both EC2 and STS client caches.
+    Convenience function that clears EC2, STS, and CloudWatch client caches.
     Useful for test isolation and resetting state between tests.
     """
     clear_ec2_client_cache()
     clear_sts_client_cache()
+    clear_cloudwatch_client_cache()
 
 
 @contextmanager

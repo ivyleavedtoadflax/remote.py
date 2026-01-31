@@ -73,6 +73,9 @@ wheels = [
 ]
 
 [package.optional-dependencies]
+cloudwatch = [
+    { name = "mypy-boto3-cloudwatch" },
+]
 ec2 = [
     { name = "mypy-boto3-ec2" },
 ]
@@ -661,6 +664,18 @@ wheels = [
 ]
 
 [[package]]
+name = "mypy-boto3-cloudwatch"
+version = "1.42.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions", marker = "python_full_version < '3.12'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f5/c3/0db17528604b47c3dae0b9e724168f83f7a5453367193c7a5bc9069d75d7/mypy_boto3_cloudwatch-1.42.7.tar.gz", hash = "sha256:8182118dbf94c9f9f9251aead780a3a31419c7704cb2e9f50013551cf93aef04", size = 32581 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e1/85/f70fdd8e8090a8bc5a9a1f945b8d25fd353cebda32be0fa97e88957f5915/mypy_boto3_cloudwatch-1.42.7-py3-none-any.whl", hash = "sha256:313b36d5261a32fe27dfca29be88ccca763fcbd27b8cae6b7b355d3aa805e22f", size = 44364 },
+]
+
+[[package]]
 name = "mypy-boto3-ec2"
 version = "1.42.29"
 source = { registry = "https://pypi.org/simple" }
@@ -1143,7 +1158,7 @@ dev = [
 [package.dev-dependencies]
 dev = [
     { name = "bandit" },
-    { name = "boto3-stubs", extra = ["ec2", "ecs", "sts"] },
+    { name = "boto3-stubs", extra = ["cloudwatch", "ec2", "ecs", "sts"] },
     { name = "hypothesis" },
     { name = "mypy" },
     { name = "pip-audit" },
@@ -1171,7 +1186,7 @@ provides-extras = ["dev"]
 [package.metadata.requires-dev]
 dev = [
     { name = "bandit", specifier = ">=1.9.2" },
-    { name = "boto3-stubs", extras = ["ec2", "ecs", "sts"], specifier = ">=1.42.0" },
+    { name = "boto3-stubs", extras = ["cloudwatch", "ec2", "ecs", "sts"], specifier = ">=1.42.0" },
     { name = "hypothesis", specifier = ">=6.135.14" },
     { name = "mypy", specifier = ">=1.14.0" },
     { name = "pip-audit", specifier = ">=2.10.0" },
