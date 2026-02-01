@@ -12,7 +12,7 @@ import typer
 from rich.live import Live
 from rich.panel import Panel
 
-from remote.autoterminate import app as autoterminate_app
+from remote.autoshutdown import app as autoshutdown_app
 from remote.config import config_manager
 from remote.exceptions import (
     AWSServiceError,
@@ -2134,9 +2134,9 @@ def tracking_reset(
         print_warning(f"No tracking data found for instance '{instance_name}'")
 
 
-# Register auto-terminate sub-commands
+# Register auto-shutdown sub-commands
 app.add_typer(
-    autoterminate_app,
-    name="auto-terminate",
-    help="Manage automatic termination based on CPU idle",
+    autoshutdown_app,
+    name="auto-shutdown",
+    help="Manage automatic shutdown based on CPU idle",
 )

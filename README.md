@@ -195,25 +195,25 @@ remote sg list-ips my-instance
 remote sg remove-ip my-instance --ip 203.0.113.50/32
 ```
 
-### Auto-Termination
+### Auto-Shutdown
 
-Automatically terminate instances when they become idle (based on CPU utilization):
+Automatically stop instances when they become idle (based on CPU utilization):
 
 ```bash
-# Enable auto-termination (default: CPU < 5% for 30 min)
-remote instance auto-terminate enable
+# Enable auto-shutdown (default: CPU < 5% for 30 min)
+remote instance auto-shutdown enable
 
 # Enable with custom thresholds
-remote instance auto-terminate enable my-server --threshold 10 --duration 60
+remote instance auto-shutdown enable my-server --threshold 10 --duration 60
 
-# Check auto-termination status
-remote instance auto-terminate status
+# Check auto-shutdown status
+remote instance auto-shutdown status
 
-# Disable auto-termination
-remote instance auto-terminate disable
+# Disable auto-shutdown
+remote instance auto-shutdown disable
 ```
 
-**Warning**: Auto-termination uses AWS CloudWatch alarms to permanently terminate instances when CPU falls below the threshold for the specified duration. Termination is irreversible.
+**Note**: Auto-shutdown uses AWS CloudWatch alarms to stop instances when CPU falls below the threshold for the specified duration. Stopped instances can be started again later.
 
 ### Usage Statistics
 
@@ -427,7 +427,7 @@ This policy includes all permissions needed for the full remote.py tool:
 | **AMIs** | `ami create`, `ami list` | EC2: CreateImage, DescribeImages |
 | **Security Groups** | `sg show`, `sg allow`, `sg revoke` | EC2: DescribeSecurityGroups, AuthorizeSecurityGroupIngress, RevokeSecurityGroupIngress |
 | **ECS** | `ecs list-services`, `ecs scale` | ECS: ListClusters, ListServices, UpdateService |
-| **Auto-Terminate** | `auto-terminate enable/disable/status` | CloudWatch: PutMetricAlarm, DeleteAlarms, DescribeAlarms |
+| **Auto-Shutdown** | `auto-shutdown enable/disable/status` | CloudWatch: PutMetricAlarm, DeleteAlarms, DescribeAlarms |
 | **Cost Tracking** | `--cost` flag | Pricing: GetProducts, SSM: GetParameter |
 
 ### Minimal Policy (Instance Management Only)

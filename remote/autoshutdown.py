@@ -1,11 +1,11 @@
-"""CloudWatch-based auto-termination for EC2 instances.
+"""CloudWatch-based auto-shutdown for EC2 instances.
 
 This module provides commands to enable, disable, and check the status of
-automatic EC2 instance termination based on CPU idle detection. When enabled,
-a CloudWatch alarm monitors CPU utilization and terminates the instance when
+automatic EC2 instance shutdown based on CPU idle detection. When enabled,
+a CloudWatch alarm monitors CPU utilization and stops the instance when
 CPU falls below a threshold for a specified duration.
 
-WARNING: Termination is irreversible and deletes instance store volumes.
+Note: Shutdown stops the instance but preserves it - it can be started again.
 """
 
 from typing import TYPE_CHECKING
@@ -51,13 +51,13 @@ def _get_existing_alarm(alarm_name: str) -> "MetricAlarmTypeDef | None":
         return alarms[0] if alarms else None
 
 
-def _create_auto_terminate_alarm(
+def _create_auto_shutdown_alarm(
     instance_id: str,
     instance_name: str,
     threshold: int,
     duration_minutes: int,
 ) -> None:
-    """Create or update a CloudWatch alarm for auto-termination.
+    """Create or update a CloudWatch alarm for auto-shutdown.
 
     Args:
         instance_id: EC2 instance ID (e.g., "i-0123456789abcdef0")
@@ -65,9 +65,9 @@ def _create_auto_terminate_alarm(
         threshold: CPU percentage threshold (e.g., 5 means < 5%)
         duration_minutes: How long CPU must be below threshold
     """
-    alarm_name = f"remotepy-autoterminate-{instance_id}"
+    alarm_name = f"remotepy-autoshutdown-{instance_id}"
     region = get_current_region()
-    terminate_action = f"arn:aws:automate:{region}:ec2:terminate"
+    stop_action = f"arn:aws:automate:{region}:ec2:stop"
 
     # CloudWatch uses 5-minute minimum periods
     period_seconds = 300
@@ -78,7 +78,7 @@ def _create_auto_terminate_alarm(
             # Alarm identification
             AlarmName=alarm_name,
             AlarmDescription=(
-                f"Auto-terminate {instance_name} ({instance_id}) "
+                f"Auto-shutdown {instance_name} ({instance_id}) "
                 f"when CPU < {threshold}% for {duration_minutes} minutes"
             ),
             # Metric configuration
@@ -99,7 +99,7 @@ def _create_auto_terminate_alarm(
             # Behavior when no data
             TreatMissingData="missing",  # Don't trigger on missing data
             # Action to take when alarm triggers
-            AlarmActions=[terminate_action],
+            AlarmActions=[stop_action],
             # Tags for organization
             Tags=[
                 {"Key": "CreatedBy", "Value": "remotepy"},
@@ -108,8 +108,8 @@ def _create_auto_terminate_alarm(
         )
 
 
-def _delete_auto_terminate_alarm(instance_id: str) -> bool:
-    """Delete the auto-terminate alarm for an instance.
+def _delete_auto_shutdown_alarm(instance_id: str) -> bool:
+    """Delete the auto-shutdown alarm for an instance.
 
     Args:
         instance_id: EC2 instance ID
@@ -117,7 +117,7 @@ def _delete_auto_terminate_alarm(instance_id: str) -> bool:
     Returns:
         True if alarm existed and was deleted, False if no alarm found
     """
-    alarm_name = f"remotepy-autoterminate-{instance_id}"
+    alarm_name = f"remotepy-autoshutdown-{instance_id}"
 
     # Check if alarm exists first
     existing = _get_existing_alarm(alarm_name)
@@ -143,22 +143,22 @@ def enable(
         30,
         "--duration",
         "-d",
-        help="Duration in minutes before termination (default: 30)",
+        help="Duration in minutes before shutdown (default: 30)",
     ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
 ) -> None:
-    """Enable auto-termination based on CPU idle detection.
+    """Enable auto-shutdown based on CPU idle detection.
 
-    Creates a CloudWatch alarm that TERMINATES the instance when CPU
+    Creates a CloudWatch alarm that STOPS the instance when CPU
     utilization falls below the threshold for the specified duration.
 
-    WARNING: Termination is irreversible and deletes instance store volumes.
+    The instance can be started again afterwards.
 
     Examples:
-        remote instance auto-terminate enable
-        remote instance auto-terminate enable my-server
-        remote instance auto-terminate enable --threshold 10 --duration 60
-        remote instance auto-terminate enable my-server --threshold 10 --yes
+        remote instance auto-shutdown enable
+        remote instance auto-shutdown enable my-server
+        remote instance auto-shutdown enable --threshold 10 --duration 60
+        remote instance auto-shutdown enable my-server --threshold 10 --yes
     """
     # Validate inputs
     if not 1 <= threshold <= 99:
@@ -173,15 +173,15 @@ def enable(
     instance_name, instance_id = resolve_instance_or_exit(instance_name)
 
     # Check for existing alarm
-    alarm_name = f"remotepy-autoterminate-{instance_id}"
+    alarm_name = f"remotepy-autoshutdown-{instance_id}"
     existing = _get_existing_alarm(alarm_name)
     action = "update" if existing else "enable"
 
     # Confirm with user
     if not yes:
-        details = f"CPU < {threshold}% for {duration} min will TERMINATE instance"
+        details = f"CPU < {threshold}% for {duration} min will stop instance"
         if not confirm_action(
-            f"{action} auto-termination for",
+            f"{action} auto-shutdown for",
             "instance",
             instance_name,
             details=details,
@@ -190,14 +190,14 @@ def enable(
             return
 
     # Create/update the alarm
-    _create_auto_terminate_alarm(instance_id, instance_name, threshold, duration)
+    _create_auto_shutdown_alarm(instance_id, instance_name, threshold, duration)
 
     if existing:
-        print_success(f"Updated auto-termination for '{instance_name}'")
+        print_success(f"Updated auto-shutdown for '{instance_name}'")
     else:
-        print_success(f"Enabled auto-termination for '{instance_name}'")
+        print_success(f"Enabled auto-shutdown for '{instance_name}'")
 
-    print_warning(f"Instance will be TERMINATED when CPU < {threshold}% for {duration} minutes")
+    print_warning(f"Instance will be stopped when CPU < {threshold}% for {duration} minutes")
 
 
 @app.command()
@@ -206,34 +206,34 @@ def disable(
     instance_name: str | None = typer.Argument(None, help="Instance name"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
 ) -> None:
-    """Disable auto-termination for an instance.
+    """Disable auto-shutdown for an instance.
 
     Removes the CloudWatch alarm monitoring CPU utilization.
 
     Examples:
-        remote instance auto-terminate disable
-        remote instance auto-terminate disable my-server
-        remote instance auto-terminate disable --yes
+        remote instance auto-shutdown disable
+        remote instance auto-shutdown disable my-server
+        remote instance auto-shutdown disable --yes
     """
     instance_name, instance_id = resolve_instance_or_exit(instance_name)
 
     # Check if alarm exists
-    alarm_name = f"remotepy-autoterminate-{instance_id}"
+    alarm_name = f"remotepy-autoshutdown-{instance_id}"
     existing = _get_existing_alarm(alarm_name)
 
     if not existing:
-        print_warning(f"Auto-termination is not enabled for '{instance_name}'")
+        print_warning(f"Auto-shutdown is not enabled for '{instance_name}'")
         return
 
     # Confirm
     if not yes:
-        if not confirm_action("disable auto-termination for", "instance", instance_name):
+        if not confirm_action("disable auto-shutdown for", "instance", instance_name):
             print_warning("Cancelled.")
             return
 
     # Delete
-    _delete_auto_terminate_alarm(instance_id)
-    print_success(f"Disabled auto-termination for '{instance_name}'")
+    _delete_auto_shutdown_alarm(instance_id)
+    print_success(f"Disabled auto-shutdown for '{instance_name}'")
 
 
 @app.command()
@@ -241,21 +241,21 @@ def disable(
 def status(
     instance_name: str | None = typer.Argument(None, help="Instance name"),
 ) -> None:
-    """Show auto-termination status for an instance.
+    """Show auto-shutdown status for an instance.
 
     Displays the current CloudWatch alarm configuration and state.
 
     Examples:
-        remote instance auto-terminate status
-        remote instance auto-terminate status my-server
+        remote instance auto-shutdown status
+        remote instance auto-shutdown status my-server
     """
     instance_name, instance_id = resolve_instance_or_exit(instance_name)
 
-    alarm_name = f"remotepy-autoterminate-{instance_id}"
+    alarm_name = f"remotepy-autoshutdown-{instance_id}"
     alarm = _get_existing_alarm(alarm_name)
 
     if not alarm:
-        print_warning(f"Auto-termination is not enabled for '{instance_name}'")
+        print_warning(f"Auto-shutdown is not enabled for '{instance_name}'")
         return
 
     # Extract details from alarm response
@@ -281,7 +281,7 @@ def status(
 
     panel = Panel(
         "\n".join(lines),
-        title="[bold]Auto-Termination Status[/bold]",
+        title="[bold]Auto-Shutdown Status[/bold]",
         border_style="blue",
         expand=False,
     )
