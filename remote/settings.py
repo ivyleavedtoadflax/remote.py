@@ -39,6 +39,12 @@ DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS = 0
 SSH_SERVER_ALIVE_INTERVAL = 60  # Send keepalive every 60 seconds
 SSH_SERVER_ALIVE_COUNT_MAX = 3  # Disconnect after 3 missed keepalives (3 minutes)
 
+# SSM (AWS Systems Manager) constants
+SSM_COMMAND_TIMEOUT_SECONDS = 60  # Default timeout for SSM send-command
+SSM_POLL_INTERVAL_SECONDS = 2  # Polling interval for command status
+SSM_MAX_POLL_ATTEMPTS = 30  # Max polling attempts (2s * 30 = 60s timeout)
+SSM_DEFAULT_SHELL_USER = "ubuntu"  # Default user for interactive shell
+
 
 @dataclass
 class Settings:

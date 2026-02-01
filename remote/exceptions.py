@@ -125,3 +125,44 @@ class ValidationError(RemotePyError):
 
     def __init__(self, validation_message: str, details: str | None = None):
         super().__init__(f"Validation error: {validation_message}", details)
+
+
+class SSMError(RemotePyError):
+    """Raised when SSM operations fail."""
+
+    def __init__(self, operation: str, message: str, details: str | None = None):
+        self.operation = operation
+        if not details:
+            details = (
+                "Troubleshooting tips:\n"
+                "- Ensure SSM Agent is running on the instance\n"
+                "- Check instance has IAM role with AmazonSSMManagedInstanceCore policy\n"
+                "- Verify network access to SSM endpoints (outbound HTTPS)\n"
+                "- Confirm AWS CLI Session Manager plugin is installed locally"
+            )
+        super().__init__(f"SSM {operation} failed: {message}", details)
+
+
+class ConnectionMethodError(RemotePyError):
+    """Raised when an invalid connection method is specified."""
+
+    def __init__(self, method: str, details: str | None = None):
+        self.method = method
+        if not details:
+            details = "Valid connection methods: ssh, ssm"
+        super().__init__(f"Invalid connection method: {method}", details)
+
+
+class FileTransferNotSupportedError(RemotePyError):
+    """Raised when file transfer is attempted with a provider that doesn't support it."""
+
+    def __init__(self, provider: str, details: str | None = None):
+        self.provider = provider
+        if not details:
+            details = (
+                "SSM does not support file transfer. Alternatives:\n"
+                "- Use --connection ssh for rsync-based file transfer\n"
+                "- Transfer files via S3 bucket\n"
+                "- For small files, use base64 encoding with SSM exec"
+            )
+        super().__init__(f"File transfer not supported with {provider} connection", details)

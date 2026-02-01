@@ -38,13 +38,30 @@ def test_config():
     mock_config_manager = MagicMock()
     mock_config_manager.get_instance_name.return_value = "test-instance"
 
+    # Configure get_value to return sensible defaults for known config keys
+    def mock_get_value(key: str) -> str | None:
+        config_defaults: dict[str, str | None] = {
+            "instance_name": "test-instance",
+            "ssh_user": None,
+            "ssh_key_path": None,
+            "aws_region": None,
+            "default_launch_template": None,
+            "connection_method": None,  # Default to None so SSH is used
+            "ssm_profile": None,
+        }
+        return config_defaults.get(key)
+
+    mock_config_manager.get_value.side_effect = mock_get_value
+
     # Mock the global settings object and config manager
     # We need to patch config_manager in both config and instance_resolver modules
     # because instance_resolver imports config_manager at module level
+    # Also patch in connection module which uses config_manager for connection method resolution
     with patch("remote.settings.settings", test_settings):
         with patch("remote.config.config_manager", mock_config_manager):
             with patch("remote.instance_resolver.config_manager", mock_config_manager):
-                yield test_settings
+                with patch("remote.connection.config_manager", mock_config_manager):
+                    yield test_settings
 
     # Also reset after the test to ensure clean state
     reset_ssh_config_cache()

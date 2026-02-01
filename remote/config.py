@@ -33,6 +33,8 @@ VALID_KEYS: dict[str, str] = {
     "ssh_key_path": "Path to SSH private key",
     "aws_region": "AWS region override",
     "default_launch_template": "Default launch template name",
+    "connection_method": "Default connection method (ssh or ssm)",
+    "ssm_profile": "AWS profile for SSM connections",
 }
 
 
@@ -75,6 +77,10 @@ class RemoteConfig(BaseSettings):
     default_launch_template: str | None = Field(
         default=None, description="Default launch template name"
     )
+    connection_method: str | None = Field(
+        default=None, description="Default connection method (ssh or ssm)"
+    )
+    ssm_profile: str | None = Field(default=None, description="AWS profile for SSM connections")
 
     @field_validator("instance_name", mode="before")
     @classmethod
@@ -123,6 +129,31 @@ class RemoteConfig(BaseSettings):
         if not re.match(r"^[a-z]{2}-[a-z]+-\d+$", v):
             raise ValueError(
                 f"Invalid AWS region '{v}': must be in format like 'us-east-1' or 'eu-west-2'"
+            )
+        return v
+
+    @field_validator("connection_method", mode="before")
+    @classmethod
+    def validate_connection_method(cls, v: str | None) -> str | None:
+        """Validate connection method is either 'ssh' or 'ssm'."""
+        if v is None or v == "":
+            return None
+        normalized = v.lower()
+        if normalized not in ("ssh", "ssm"):
+            raise ValueError(f"Invalid connection method '{v}': must be 'ssh' or 'ssm'")
+        return normalized
+
+    @field_validator("ssm_profile", mode="before")
+    @classmethod
+    def validate_ssm_profile(cls, v: str | None) -> str | None:
+        """Validate SSM profile name."""
+        if v is None or v == "":
+            return None
+        # AWS profile names should be alphanumeric with hyphens and underscores
+        if not re.match(r"^[a-zA-Z0-9_\-]+$", v):
+            raise ValueError(
+                f"Invalid SSM profile '{v}': "
+                "must contain only alphanumeric characters, hyphens, and underscores"
             )
         return v
 

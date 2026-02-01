@@ -1025,7 +1025,7 @@ def connect(
         callback=validate_ssh_key_path,
         help="Path to SSH private key file. Falls back to config ssh_key_path.",
     ),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable SSH verbose mode"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose mode"),
     no_strict_host_key: bool = typer.Option(
         False,
         "--no-strict-host-key",
@@ -1061,31 +1061,41 @@ def connect(
         "-e",
         help="Used with --whitelist-ip: remove all other IPs from the security group first",
     ),
+    connection: str | None = typer.Option(
+        None,
+        "--connection",
+        "-C",
+        help="Connection method: 'ssh' (default) or 'ssm'. SSM requires no SSH keys or open ports.",
+    ),
+    ssm_profile: str | None = typer.Option(
+        None,
+        "--ssm-profile",
+        help="AWS profile to use for SSM connections",
+    ),
 ) -> None:
     """
-    Connect to an EC2 instance via SSH.
+    Connect to an EC2 instance via SSH or SSM.
 
     If the instance is not running, prompts to start it first.
     Uses the default instance from config if no name is provided.
 
-    Use --start to automatically start a stopped instance without prompting.
-    Use --no-start to fail immediately if the instance is not running.
-    Use --whitelist-ip to automatically add your current IP to the security group.
-    Use --exclusive with --whitelist-ip to remove all other IPs first.
-
     Examples:
-        remote instance connect                           # Connect to default instance
-        remote instance connect my-server                 # Connect to specific instance
-        remote instance connect -u ec2-user               # Connect as ec2-user
-        remote instance connect -p 8080:80                # With port forwarding
-        remote instance connect -k ~/.ssh/my-key.pem      # With specific SSH key
-        remote instance connect --start                   # Auto-start if stopped
-        remote instance connect --no-start                # Fail if not running
-        remote instance connect --timeout 3600            # Limit session to 1 hour
-        remote instance connect --whitelist-ip            # Add your IP before connecting
-        remote instance connect -w --exclusive            # Add your IP, remove others
+        remote instance connect                  # Connect to default instance
+        remote instance connect my-server        # Connect to specific instance
+        remote instance connect --start          # Auto-start if stopped
+        remote instance connect --whitelist-ip   # Add your IP to security group
+        remote instance connect --connection ssm # Connect via SSM (no SSH keys)
     """
+    from remote.connection import (
+        ConnectionMethod,
+        get_connection_provider,
+        resolve_connection_method,
+    )
+
     instance_name, instance_id = resolve_instance_or_exit(instance_name)
+
+    # Resolve connection method (CLI > env > config > default)
+    conn_method = resolve_connection_method(connection)
 
     # Validate --exclusive requires --whitelist-ip
     if exclusive and not whitelist_ip:
@@ -1097,53 +1107,64 @@ def connect(
         instance_name, instance_id, auto_start, no_start, allow_interactive=True
     )
 
-    # Handle IP whitelisting before connecting
+    # Handle IP whitelisting before connecting (SSH only)
     if whitelist_ip:
-        from remote.sg import whitelist_ip_for_instance
+        if conn_method == ConnectionMethod.SSM:
+            print_warning("--whitelist-ip is ignored with SSM connection (no inbound ports needed)")
+        else:
+            from remote.sg import whitelist_ip_for_instance
 
-        print_warning("Adding your IP to security group...")
-        try:
-            ip, modified_groups = whitelist_ip_for_instance(
-                instance_id, ip_address=None, exclusive=exclusive
-            )
-            if modified_groups:
-                print_success(f"Whitelisted IP {ip} in {len(modified_groups)} security group(s)")
-            else:
-                print_warning(f"IP {ip} was already whitelisted")
-        except Exception as e:
-            print_error(f"Failed to whitelist IP: {e}")
-            print_warning("Continuing with connection attempt...")
+            print_warning("Adding your IP to security group...")
+            try:
+                ip, modified_groups = whitelist_ip_for_instance(
+                    instance_id, ip_address=None, exclusive=exclusive
+                )
+                if modified_groups:
+                    print_success(
+                        f"Whitelisted IP {ip} in {len(modified_groups)} security group(s)"
+                    )
+                else:
+                    print_warning(f"IP {ip} was already whitelisted")
+            except Exception as e:
+                print_error(f"Failed to whitelist IP: {e}")
+                print_warning("Continuing with connection attempt...")
 
-    # Now connect to the instance
+    # Get connection provider
+    provider = get_connection_provider(conn_method)
 
-    print_warning(f"Connecting to instance {instance_name}")
+    # Configure SSM profile if using SSM
+    if conn_method == ConnectionMethod.SSM and ssm_profile:
+        from remote.connection_ssm import SSMConnectionProvider
 
-    # Ensure SSH key is available (falls back to config)
-    key = _ensure_ssh_key(key)
+        provider = SSMConnectionProvider(ssm_profile=ssm_profile)
 
-    # Get instance DNS and build SSH command
-    dns = get_instance_dns(instance_id)
-    if not dns:
+    conn_method_str = "SSM" if conn_method == ConnectionMethod.SSM else "SSH"
+    print_warning(f"Connecting to instance {instance_name} via {conn_method_str}")
+
+    # Ensure SSH key is available (falls back to config) - only needed for SSH
+    if conn_method == ConnectionMethod.SSH:
+        key = _ensure_ssh_key(key)
+
+    # Get instance DNS - only required for SSH
+    dns = get_instance_dns(instance_id) or ""
+    if conn_method == ConnectionMethod.SSH and not dns:
         print_error(f"Error: Instance {instance_name} has no public DNS")
         raise typer.Exit(1)
 
-    ssh_command = _build_ssh_command(
-        dns,
-        key=key,
-        user=user,
-        no_strict_host_key=no_strict_host_key,
-        verbose=verbose,
-        interactive=True,
-        port_forward=port_forward,
-    )
-
-    with handle_ssh_errors("SSH connection"):
-        # Use timeout if specified (0 means no timeout)
-        timeout_value = timeout if timeout > 0 else None
-        result = subprocess.run(ssh_command, timeout=timeout_value)
-        if result.returncode != 0:
-            print_error(f"SSH connection failed with exit code {result.returncode}")
-            raise typer.Exit(result.returncode)
+    with handle_ssh_errors(f"{conn_method_str} connection"):
+        exit_code = provider.connect_interactive(
+            instance_id=instance_id,
+            dns=dns,
+            user=user,
+            key_path=key,
+            verbose=verbose,
+            timeout=timeout,
+            port_forward=port_forward,
+            no_strict_host_key=no_strict_host_key,
+        )
+        if exit_code != 0:
+            print_error(f"{conn_method_str} connection failed with exit code {exit_code}")
+            raise typer.Exit(exit_code)
 
 
 @app.command("forward")
@@ -1161,7 +1182,7 @@ def forward(
         callback=validate_ssh_key_path,
         help="Path to SSH private key file. Falls back to config ssh_key_path.",
     ),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable SSH verbose mode"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose mode"),
     no_strict_host_key: bool = typer.Option(
         False,
         "--no-strict-host-key",
@@ -1185,11 +1206,22 @@ def forward(
         help="Fail immediately if instance is not running (no prompt)",
         callback=_validate_no_start_flag,
     ),
+    connection: str | None = typer.Option(
+        None,
+        "--connection",
+        "-C",
+        help="Connection method: 'ssh' (default) or 'ssm'. SSM requires no SSH keys or open ports.",
+    ),
+    ssm_profile: str | None = typer.Option(
+        None,
+        "--ssm-profile",
+        help="AWS profile to use for SSM connections",
+    ),
 ) -> None:
     """
     Forward a port from a remote EC2 instance to localhost.
 
-    Opens an SSH tunnel to forward a remote port to your local machine,
+    Opens a tunnel to forward a remote port to your local machine,
     optionally opening a browser to the forwarded port.
 
     Port specification:
@@ -1202,7 +1234,14 @@ def forward(
         remote instance forward 8000 my-server    # Forward from specific instance
         remote instance forward 8000 --no-browser # Don't open browser
         remote instance forward 8000 --start      # Auto-start if stopped
+        remote instance forward 8000 --connection ssm  # Forward via SSM (no SSH keys)
     """
+    from remote.connection import (
+        ConnectionMethod,
+        get_connection_provider,
+        resolve_connection_method,
+    )
+
     # Parse port specification
     try:
         local_port, remote_port = parse_port_specification(port_spec)
@@ -1212,38 +1251,37 @@ def forward(
 
     instance_name, instance_id = resolve_instance_or_exit(instance_name)
 
+    # Resolve connection method (CLI > env > config > default)
+    conn_method = resolve_connection_method(connection)
+
     # Ensure instance is running (may start it if needed)
     _ensure_instance_running(
         instance_name, instance_id, auto_start, no_start, allow_interactive=True
     )
 
-    print_warning(f"Forwarding port {remote_port} from {instance_name} to localhost:{local_port}")
+    # Get connection provider
+    provider = get_connection_provider(conn_method)
 
-    # Ensure SSH key is available (falls back to config)
-    key = _ensure_ssh_key(key)
+    # Configure SSM profile if using SSM
+    if conn_method == ConnectionMethod.SSM and ssm_profile:
+        from remote.connection_ssm import SSMConnectionProvider
 
-    # Get instance DNS and build SSH command
-    dns = get_instance_dns(instance_id)
-    if not dns:
-        print_error(f"Error: Instance {instance_name} has no public DNS")
-        raise typer.Exit(1)
+        provider = SSMConnectionProvider(ssm_profile=ssm_profile)
 
-    # Build port forwarding specification for SSH -L option
-    # Format: local_port:localhost:remote_port
-    port_forward_spec = f"{local_port}:localhost:{remote_port}"
-
-    ssh_command = _build_ssh_command(
-        dns,
-        key=key,
-        user=user,
-        no_strict_host_key=no_strict_host_key,
-        verbose=verbose,
-        interactive=True,
-        port_forward=port_forward_spec,
+    conn_method_str = "SSM" if conn_method == ConnectionMethod.SSM else "SSH"
+    print_warning(
+        f"Forwarding port {remote_port} from {instance_name} to localhost:{local_port} via {conn_method_str}"
     )
 
-    # Add -N flag to not execute a remote command (just forward ports)
-    ssh_command.insert(1, "-N")
+    # Ensure SSH key is available (falls back to config) - only needed for SSH
+    if conn_method == ConnectionMethod.SSH:
+        key = _ensure_ssh_key(key)
+
+    # Get instance DNS - only required for SSH
+    dns = get_instance_dns(instance_id) or ""
+    if conn_method == ConnectionMethod.SSH and not dns:
+        print_error(f"Error: Instance {instance_name} has no public DNS")
+        raise typer.Exit(1)
 
     # Open browser if requested
     if not no_browser:
@@ -1253,11 +1291,20 @@ def forward(
 
     print_warning("Press Ctrl+C to stop port forwarding")
 
-    with handle_ssh_errors("SSH port forwarding"):
-        result = subprocess.run(ssh_command)
-        if result.returncode != 0:
-            print_error(f"SSH port forwarding failed with exit code {result.returncode}")
-            raise typer.Exit(result.returncode)
+    with handle_ssh_errors(f"{conn_method_str} port forwarding"):
+        exit_code = provider.port_forward(
+            instance_id=instance_id,
+            dns=dns,
+            local_port=local_port,
+            remote_port=remote_port,
+            user=user,
+            key_path=key,
+            verbose=verbose,
+            no_strict_host_key=no_strict_host_key,
+        )
+        if exit_code != 0:
+            print_error(f"{conn_method_str} port forwarding failed with exit code {exit_code}")
+            raise typer.Exit(exit_code)
 
 
 @app.command(
@@ -1276,7 +1323,7 @@ def exec_command(
         callback=validate_ssh_key_path,
         help="Path to SSH private key file. Falls back to config ssh_key_path.",
     ),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable SSH verbose mode"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Enable verbose mode"),
     no_strict_host_key: bool = typer.Option(
         False,
         "--no-strict-host-key",
@@ -1306,29 +1353,41 @@ def exec_command(
         "-q",
         help="Suppress status messages, output only command result",
     ),
+    connection: str | None = typer.Option(
+        None,
+        "--connection",
+        "-C",
+        help="Connection method: 'ssh' (default) or 'ssm'. SSM requires no SSH keys or open ports.",
+    ),
+    ssm_profile: str | None = typer.Option(
+        None,
+        "--ssm-profile",
+        help="AWS profile to use for SSM connections",
+    ),
 ) -> None:
     """
-    Execute a command on a remote EC2 instance via SSH.
+    Execute a command on a remote EC2 instance via SSH or SSM.
 
     Runs a single command on the instance and returns the output.
     Unlike 'connect' which opens an interactive session, 'exec' runs
     a command and exits.
 
-    If only one argument is provided and it doesn't match a known instance,
-    it will be treated as a command to run on the default instance.
-
     Examples:
         remote instance exec my-instance ls -la
-        remote instance exec my-instance -- ps aux | grep python
-        remote instance exec --start my-instance uptime
-        remote instance exec -u ec2-user my-instance hostname
-        remote instance exec --timeout 60 my-instance "long-running-script"
-        remote instance exec --quiet my-instance cat /etc/hostname
-        remote instance exec -v my-instance hostname    # Verbose SSH output
-        remote instance exec ls    # Run 'ls' on default instance
+        remote instance exec ls                       # Run on default instance
+        remote instance exec --connection ssm whoami  # Execute via SSM
     """
+    from remote.connection import (
+        ConnectionMethod,
+        get_connection_provider,
+        resolve_connection_method,
+    )
+
     # Get command from extra args
     command = list(ctx.args)
+
+    # Resolve connection method (CLI > env > config > default)
+    conn_method = resolve_connection_method(connection)
 
     # Resolve instance name and command
     # Handle the case where user runs "exec ls" meaning "use default instance, run ls"
@@ -1365,39 +1424,52 @@ def exec_command(
         instance_name, instance_id, auto_start, no_start, allow_interactive=False, quiet=quiet
     )
 
-    # Ensure SSH key is available (falls back to config)
-    key = _ensure_ssh_key(key)
+    # Get connection provider
+    provider = get_connection_provider(conn_method)
 
-    # Get instance DNS
-    dns = get_instance_dns(instance_id)
-    if not dns:
+    # Configure SSM profile if using SSM
+    if conn_method == ConnectionMethod.SSM and ssm_profile:
+        from remote.connection_ssm import SSMConnectionProvider
+
+        provider = SSMConnectionProvider(ssm_profile=ssm_profile)
+
+    conn_method_str = "SSM" if conn_method == ConnectionMethod.SSM else "SSH"
+
+    # Ensure SSH key is available (falls back to config) - only needed for SSH
+    if conn_method == ConnectionMethod.SSH:
+        key = _ensure_ssh_key(key)
+
+    # Get instance DNS - only required for SSH
+    dns = get_instance_dns(instance_id) or ""
+    if conn_method == ConnectionMethod.SSH and not dns:
         print_error(f"Error: Instance {instance_name} has no public DNS")
         raise typer.Exit(1)
 
-    # Build SSH command
-    ssh_args = _build_ssh_command(
-        dns, key, user, no_strict_host_key=no_strict_host_key, verbose=verbose
-    )
-
-    # Append the remote command
-    ssh_args.extend(command)
-
     if not quiet:
-        print_warning(f"Executing on {instance_name}: {' '.join(command)}")
+        print_warning(f"Executing on {instance_name} via {conn_method_str}: {' '.join(command)}")
 
-    with handle_ssh_errors("Remote command execution"):
-        result = subprocess.run(ssh_args, capture_output=True, text=True, timeout=timeout)
+    with handle_ssh_errors(f"Remote command execution ({conn_method_str})"):
+        exit_code, stdout, stderr = provider.execute_command(
+            instance_id=instance_id,
+            dns=dns,
+            command=command,
+            user=user,
+            key_path=key,
+            verbose=verbose,
+            timeout=timeout,
+            no_strict_host_key=no_strict_host_key,
+        )
 
         # Print stdout
-        if result.stdout:
-            typer.echo(result.stdout, nl=False)
+        if stdout:
+            typer.echo(stdout, nl=False)
 
         # Print stderr to stderr
-        if result.stderr:
-            typer.echo(result.stderr, nl=False, err=True)
+        if stderr:
+            typer.echo(stderr, nl=False, err=True)
 
-        if result.returncode != 0:
-            raise typer.Exit(result.returncode)
+        if exit_code != 0:
+            raise typer.Exit(exit_code)
 
 
 @app.command("type")
@@ -1775,6 +1847,12 @@ def copy(
         "-t",
         help="Transfer timeout in seconds (0 for no timeout)",
     ),
+    connection: str | None = typer.Option(
+        None,
+        "--connection",
+        "-C",
+        help="Connection method: only 'ssh' is supported for file transfer.",
+    ),
 ) -> None:
     """
     Copy files to/from an EC2 instance using rsync.
@@ -1784,6 +1862,8 @@ def copy(
 
     Uses rsync with archive mode (-a), compression (-z), and preserves permissions.
     SSH key is automatically retrieved from config if not specified.
+
+    Note: File transfer requires SSH. SSM does not support rsync.
 
     Examples:
         # Copy local files to remote
@@ -1801,6 +1881,18 @@ def copy(
         # Exclude certain files
         remote instance copy -e "*.pyc" -e "__pycache__" ./src/ my-instance:/app/
     """
+    from remote.connection import ConnectionMethod, resolve_connection_method
+
+    # Resolve connection method and check it supports file transfer
+    conn_method = resolve_connection_method(connection)
+    if conn_method == ConnectionMethod.SSM:
+        print_error("File transfer is not supported with SSM connection.")
+        print_warning("SSM does not support rsync-based file transfer. Alternatives:")
+        print_warning("  - Use --connection ssh for rsync-based file transfer")
+        print_warning("  - Transfer files via S3 bucket")
+        print_warning("  - For small files, use base64 encoding with 'exec' command")
+        raise typer.Exit(1)
+
     # Resolve paths and determine transfer direction
     instance_name, src_path, dst_path, is_upload = _resolve_transfer_paths(source, destination)
 
@@ -1912,6 +2004,12 @@ def sync(
         "-y",
         help="Skip confirmation prompt for --delete",
     ),
+    connection: str | None = typer.Option(
+        None,
+        "--connection",
+        "-C",
+        help="Connection method: only 'ssh' is supported for file transfer.",
+    ),
 ) -> None:
     """
     Sync files to/from an EC2 instance using rsync.
@@ -1925,6 +2023,8 @@ def sync(
 
     WARNING: The --delete flag will permanently remove files from the destination
     that don't exist in the source. Use --dry-run first to preview changes.
+
+    Note: File transfer requires SSH. SSM does not support rsync.
 
     Examples:
         # Sync local directory to remote
@@ -1942,6 +2042,18 @@ def sync(
         # Exclude patterns
         remote instance sync -e "*.log" -e "tmp/" ./data/ my-instance:/data/
     """
+    from remote.connection import ConnectionMethod, resolve_connection_method
+
+    # Resolve connection method and check it supports file transfer
+    conn_method = resolve_connection_method(connection)
+    if conn_method == ConnectionMethod.SSM:
+        print_error("File transfer is not supported with SSM connection.")
+        print_warning("SSM does not support rsync-based file transfer. Alternatives:")
+        print_warning("  - Use --connection ssh for rsync-based file transfer")
+        print_warning("  - Transfer files via S3 bucket")
+        print_warning("  - For small files, use base64 encoding with 'exec' command")
+        raise typer.Exit(1)
+
     # Resolve paths and determine transfer direction
     instance_name, src_path, dst_path, is_upload = _resolve_transfer_paths(source, destination)
 
