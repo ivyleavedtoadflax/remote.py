@@ -827,6 +827,7 @@ def test_terminate_instance_confirmed(mocker):
         "remote.instance.resolve_instance_or_exit",
         return_value=("test-instance", "i-0123456789abcdef0"),
     )
+    mocker.patch("remote.instance.delete_auto_shutdown_alarm", return_value=False)
 
     mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [{"Instances": [{"Tags": []}]}]
@@ -847,6 +848,7 @@ def test_terminate_terraform_managed_instance(mocker):
         "remote.instance.resolve_instance_or_exit",
         return_value=("test-instance", "i-0123456789abcdef0"),
     )
+    mocker.patch("remote.instance.delete_auto_shutdown_alarm", return_value=False)
 
     mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [
@@ -858,6 +860,49 @@ def test_terminate_terraform_managed_instance(mocker):
 
     assert result.exit_code == 0
     assert "This instance appears to be managed by Terraform" in result.stdout
+
+
+def test_terminate_should_cleanup_autoshutdown_alarm(mocker):
+    """Should delete auto-shutdown alarm when terminating an instance."""
+    mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+    mocker.patch(
+        "remote.instance.resolve_instance_or_exit",
+        return_value=("test-instance", "i-0123456789abcdef0"),
+    )
+    mock_delete_alarm = mocker.patch(
+        "remote.instance.delete_auto_shutdown_alarm", return_value=True
+    )
+
+    mock_ec2_client.return_value.describe_instances.return_value = {
+        "Reservations": [{"Instances": [{"Tags": []}]}]
+    }
+
+    result = runner.invoke(app, ["terminate", "test-instance", "--yes"])
+
+    assert result.exit_code == 0
+    mock_delete_alarm.assert_called_once_with("i-0123456789abcdef0")
+
+
+def test_terminate_should_succeed_even_if_no_autoshutdown_alarm(mocker):
+    """Should not fail if no auto-shutdown alarm exists for the instance."""
+    mock_ec2_client = mocker.patch("remote.instance.get_ec2_client")
+    mocker.patch(
+        "remote.instance.resolve_instance_or_exit",
+        return_value=("test-instance", "i-0123456789abcdef0"),
+    )
+    mock_delete_alarm = mocker.patch(
+        "remote.instance.delete_auto_shutdown_alarm", return_value=False
+    )
+
+    mock_ec2_client.return_value.describe_instances.return_value = {
+        "Reservations": [{"Instances": [{"Tags": []}]}]
+    }
+
+    result = runner.invoke(app, ["terminate", "test-instance", "--yes"])
+
+    assert result.exit_code == 0
+    mock_delete_alarm.assert_called_once_with("i-0123456789abcdef0")
+    mock_ec2_client.return_value.terminate_instances.assert_called_once()
 
 
 def test_connect_with_key_option(mocker, tmp_path):

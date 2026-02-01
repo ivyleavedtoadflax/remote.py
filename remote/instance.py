@@ -12,6 +12,8 @@ import typer
 from rich.live import Live
 from rich.panel import Panel
 
+from remote.autoshutdown import app as autoshutdown_app
+from remote.autoshutdown import delete_auto_shutdown_alarm
 from remote.config import config_manager
 from remote.exceptions import (
     AWSServiceError,
@@ -1604,6 +1606,9 @@ def terminate(
             print_warning(f"Termination of instance {instance_name} has been cancelled")
             return
 
+    # Clean up any auto-shutdown alarm before terminating
+    delete_auto_shutdown_alarm(instance_id)
+
     with handle_aws_errors("EC2", "terminate_instances"):
         get_ec2_client().terminate_instances(InstanceIds=[instance_id])
     print_success(f"Instance {instance_name} is being terminated")
@@ -2131,3 +2136,11 @@ def tracking_reset(
         print_success(f"Reset tracking data for instance '{instance_name}'")
     else:
         print_warning(f"No tracking data found for instance '{instance_name}'")
+
+
+# Register auto-shutdown sub-commands
+app.add_typer(
+    autoshutdown_app,
+    name="auto-shutdown",
+    help="Manage automatic shutdown based on CPU idle",
+)

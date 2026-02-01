@@ -505,3 +505,219 @@ def test_template_info_no_versions(mocker):
 
     assert result.exit_code == 0
     assert "No versions found" in result.stdout
+
+
+class TestCreateTemplateCommand:
+    """Tests for the create-template command."""
+
+    def test_should_create_template_with_all_options(self, mocker):
+        """Should create launch template with all required options."""
+        mock_ec2 = mocker.patch("remote.ami.get_ec2_client")
+        mock_ec2.return_value.create_launch_template.return_value = {
+            "LaunchTemplate": {"LaunchTemplateId": "lt-0123456789abcdef0"}
+        }
+
+        result = runner.invoke(
+            app,
+            [
+                "create-template",
+                "my-template",
+                "--ami",
+                "ami-03446a3af42c5e74e",
+                "--instance-type",
+                "t3.small",
+                "--key-name",
+                "my-key",
+                "--yes",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "Created launch template" in result.stdout
+        assert "my-template" in result.stdout
+        assert "lt-0123456789abcdef0" in result.stdout
+
+        mock_ec2.return_value.create_launch_template.assert_called_once_with(
+            LaunchTemplateName="my-template",
+            LaunchTemplateData={
+                "ImageId": "ami-03446a3af42c5e74e",
+                "InstanceType": "t3.small",
+                "KeyName": "my-key",
+            },
+            TagSpecifications=[
+                {
+                    "ResourceType": "launch-template",
+                    "Tags": [{"Key": "Name", "Value": "my-template"}],
+                }
+            ],
+        )
+
+    def test_should_require_ami_option(self):
+        """Should require --ami option."""
+        result = runner.invoke(
+            app,
+            [
+                "create-template",
+                "my-template",
+                "--instance-type",
+                "t3.small",
+                "--key-name",
+                "my-key",
+                "--yes",
+            ],
+        )
+
+        assert result.exit_code != 0
+
+    def test_should_require_instance_type_option(self):
+        """Should require --instance-type option."""
+        result = runner.invoke(
+            app,
+            [
+                "create-template",
+                "my-template",
+                "--ami",
+                "ami-123",
+                "--key-name",
+                "my-key",
+                "--yes",
+            ],
+        )
+
+        assert result.exit_code != 0
+
+    def test_should_require_key_name_option(self):
+        """Should require --key-name option."""
+        result = runner.invoke(
+            app,
+            [
+                "create-template",
+                "my-template",
+                "--ami",
+                "ami-123",
+                "--instance-type",
+                "t3.small",
+                "--yes",
+            ],
+        )
+
+        assert result.exit_code != 0
+
+    def test_should_require_template_name_argument(self):
+        """Should require template name argument."""
+        result = runner.invoke(
+            app,
+            [
+                "create-template",
+                "--ami",
+                "ami-123",
+                "--instance-type",
+                "t3.small",
+                "--key-name",
+                "my-key",
+                "--yes",
+            ],
+        )
+
+        assert result.exit_code != 0
+
+    def test_should_validate_instance_type(self, mocker):
+        """Should validate instance type format."""
+        mocker.patch("remote.ami.get_ec2_client")
+
+        result = runner.invoke(
+            app,
+            [
+                "create-template",
+                "my-template",
+                "--ami",
+                "ami-123",
+                "--instance-type",
+                "invalid",
+                "--key-name",
+                "my-key",
+                "--yes",
+            ],
+        )
+
+        assert result.exit_code == 1
+        assert "Invalid instance_type" in result.stdout
+
+    def test_should_prompt_for_confirmation(self, mocker):
+        """Should prompt for confirmation without --yes flag."""
+        mock_ec2 = mocker.patch("remote.ami.get_ec2_client")
+        mock_ec2.return_value.create_launch_template.return_value = {
+            "LaunchTemplate": {"LaunchTemplateId": "lt-123"}
+        }
+
+        result = runner.invoke(
+            app,
+            [
+                "create-template",
+                "my-template",
+                "--ami",
+                "ami-123",
+                "--instance-type",
+                "t3.small",
+                "--key-name",
+                "my-key",
+            ],
+            input="y\n",
+        )
+
+        assert result.exit_code == 0
+        assert "Created launch template" in result.stdout
+
+    def test_should_cancel_on_declined_confirmation(self, mocker):
+        """Should cancel when user declines confirmation."""
+        mocker.patch("remote.ami.get_ec2_client")
+
+        result = runner.invoke(
+            app,
+            [
+                "create-template",
+                "my-template",
+                "--ami",
+                "ami-123",
+                "--instance-type",
+                "t3.small",
+                "--key-name",
+                "my-key",
+            ],
+            input="n\n",
+        )
+
+        assert result.exit_code == 0
+        assert "Cancelled" in result.stdout
+
+    def test_should_handle_aws_error(self, mocker):
+        """Should handle AWS errors gracefully."""
+        from botocore.exceptions import ClientError
+
+        mock_ec2 = mocker.patch("remote.ami.get_ec2_client")
+        mock_ec2.return_value.create_launch_template.side_effect = ClientError(
+            {
+                "Error": {
+                    "Code": "InvalidLaunchTemplateName.AlreadyExistsException",
+                    "Message": "Template already exists",
+                }
+            },
+            "CreateLaunchTemplate",
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "create-template",
+                "my-template",
+                "--ami",
+                "ami-123",
+                "--instance-type",
+                "t3.small",
+                "--key-name",
+                "my-key",
+                "--yes",
+            ],
+        )
+
+        assert result.exit_code == 1

@@ -93,7 +93,7 @@ line-ending = "auto"
 [dependency-groups]
 dev = [
     "bandit>=1.9.2",
-    "boto3-stubs[ec2,ecs,sts]>=1.42.0",
+    "boto3-stubs[cloudwatch,ec2,ecs,sts]>=1.42.0",
     "hypothesis>=6.135.14",
     "mypy>=1.14.0",
     "pip-audit>=2.10.0",
