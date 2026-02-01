@@ -7,6 +7,8 @@ from hypothesis import strategies as st
 
 from remote.exceptions import InvalidInputError, ValidationError
 from remote.validation import (
+    USERNAME_MAX_LENGTH,
+    USERNAME_PATTERN_DESC,
     safe_get_array_item,
     safe_get_nested_value,
     sanitize_input,
@@ -17,6 +19,7 @@ from remote.validation import (
     validate_instance_type,
     validate_positive_integer,
     validate_ssh_key_path,
+    validate_ssh_username,
     validate_volume_id,
 )
 
@@ -761,3 +764,124 @@ class TestValidateSshKeyPath:
             validate_ssh_key_path("   ")
 
         assert "SSH key path cannot be empty" in str(exc_info.value)
+
+
+class TestValidateSshUsername:
+    """Test SSH/SSM username validation function."""
+
+    def test_valid_usernames(self):
+        """Should accept valid usernames."""
+        valid_usernames = [
+            "ubuntu",
+            "ec2-user",
+            "root",
+            "admin",
+            "test_user",
+            "user123",
+            "a",
+            "user-name_123",
+        ]
+        for username in valid_usernames:
+            result = validate_ssh_username(username)
+            assert result == username
+
+    def test_strips_whitespace(self):
+        """Should strip leading/trailing whitespace."""
+        result = validate_ssh_username("  ubuntu  ")
+        assert result == "ubuntu"
+
+    def test_empty_string_raises_bad_parameter(self):
+        """Should raise BadParameter for empty string."""
+        with pytest.raises(typer.BadParameter) as exc_info:
+            validate_ssh_username("")
+
+        assert "Username cannot be empty" in str(exc_info.value)
+
+    def test_whitespace_only_raises_bad_parameter(self):
+        """Should raise BadParameter for whitespace-only string."""
+        with pytest.raises(typer.BadParameter) as exc_info:
+            validate_ssh_username("   ")
+
+        assert "Username cannot be empty" in str(exc_info.value)
+
+    def test_username_too_long_raises_bad_parameter(self):
+        """Should raise BadParameter for username exceeding max length."""
+        long_username = "a" * (USERNAME_MAX_LENGTH + 1)
+
+        with pytest.raises(typer.BadParameter) as exc_info:
+            validate_ssh_username(long_username)
+
+        assert "exceeds maximum length" in str(exc_info.value)
+        assert str(USERNAME_MAX_LENGTH) in str(exc_info.value)
+
+    def test_username_at_max_length(self):
+        """Should accept username at exactly max length."""
+        max_length_username = "a" * USERNAME_MAX_LENGTH
+        result = validate_ssh_username(max_length_username)
+        assert result == max_length_username
+
+    def test_shell_metacharacters_rejected(self):
+        """Should reject usernames with shell metacharacters (security test)."""
+        dangerous_usernames = [
+            "ubuntu; rm -rf /",
+            "user$(whoami)",
+            "user`id`",
+            "user|cat /etc/passwd",
+            "user&& echo pwned",
+            "user\nid",
+            "user'injection",
+            'user"injection',
+            "user>output",
+            "user<input",
+        ]
+        for username in dangerous_usernames:
+            with pytest.raises(typer.BadParameter) as exc_info:
+                validate_ssh_username(username)
+
+            assert "Invalid username" in str(exc_info.value)
+            assert USERNAME_PATTERN_DESC in str(exc_info.value)
+
+    def test_spaces_rejected(self):
+        """Should reject usernames with internal spaces."""
+        with pytest.raises(typer.BadParameter) as exc_info:
+            validate_ssh_username("user name")
+
+        assert "Invalid username" in str(exc_info.value)
+
+    def test_special_characters_rejected(self):
+        """Should reject usernames with special characters."""
+        invalid_usernames = [
+            "user@host",
+            "user.name",
+            "user/path",
+            "user\\path",
+            "user:colon",
+            "user#hash",
+            "user%percent",
+            "user*star",
+            "user?question",
+        ]
+        for username in invalid_usernames:
+            with pytest.raises(typer.BadParameter) as exc_info:
+                validate_ssh_username(username)
+
+            assert "Invalid username" in str(exc_info.value)
+
+    @given(st.text(alphabet="abcdefghijklmnopqrstuvwxyz0123456789_-", min_size=1, max_size=32))
+    def test_should_accept_valid_username_characters(self, username: str):
+        """Property-based test: usernames with only valid characters should be accepted."""
+        result = validate_ssh_username(username)
+        assert result == username
+
+    @given(
+        st.text(min_size=1, max_size=20).filter(
+            lambda s: any(
+                c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
+                for c in s
+            )
+        )
+    )
+    def test_should_reject_invalid_characters(self, username: str):
+        """Property-based test: usernames with invalid characters should be rejected."""
+        with pytest.raises(typer.BadParameter):
+            validate_ssh_username(username)

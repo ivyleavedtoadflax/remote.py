@@ -79,6 +79,7 @@ from remote.validation import (
     sanitize_input,
     validate_instance_type,
     validate_ssh_key_path,
+    validate_ssh_username,
 )
 
 app = typer.Typer()
@@ -1017,7 +1018,13 @@ def connect(
         "-p",
         help="Port forwarding configuration (local:remote)",
     ),
-    user: str = typer.Option(DEFAULT_SSH_USER, "--user", "-u", help="SSH username"),
+    user: str = typer.Option(
+        DEFAULT_SSH_USER,
+        "--user",
+        "-u",
+        callback=validate_ssh_username,
+        help="SSH/SSM username",
+    ),
     key: str | None = typer.Option(
         None,
         "--key",
@@ -1174,7 +1181,13 @@ def forward(
     instance_name: str | None = typer.Argument(
         None, help="Instance name (uses default if not provided)"
     ),
-    user: str = typer.Option(DEFAULT_SSH_USER, "--user", "-u", help="SSH username"),
+    user: str = typer.Option(
+        DEFAULT_SSH_USER,
+        "--user",
+        "-u",
+        callback=validate_ssh_username,
+        help="SSH/SSM username",
+    ),
     key: str | None = typer.Option(
         None,
         "--key",
@@ -1315,7 +1328,13 @@ def forward(
 def exec_command(
     ctx: typer.Context,
     instance_name: str | None = typer.Argument(None, help="Instance name"),
-    user: str = typer.Option(DEFAULT_SSH_USER, "--user", "-u", help="SSH username"),
+    user: str = typer.Option(
+        DEFAULT_SSH_USER,
+        "--user",
+        "-u",
+        callback=validate_ssh_username,
+        help="SSH/SSM username",
+    ),
     key: str | None = typer.Option(
         None,
         "--key",
@@ -1809,7 +1828,13 @@ def copy(
     destination: str = typer.Argument(
         ..., help="Destination path (local or instance-name:/remote/path)"
     ),
-    user: str = typer.Option(DEFAULT_SSH_USER, "--user", "-u", help="SSH username"),
+    user: str = typer.Option(
+        DEFAULT_SSH_USER,
+        "--user",
+        "-u",
+        callback=validate_ssh_username,
+        help="SSH/SSM username",
+    ),
     key: str | None = typer.Option(
         None,
         "--key",
@@ -1954,7 +1979,13 @@ def sync(
     destination: str = typer.Argument(
         ..., help="Destination path (local or instance-name:/remote/path)"
     ),
-    user: str = typer.Option(DEFAULT_SSH_USER, "--user", "-u", help="SSH username"),
+    user: str = typer.Option(
+        DEFAULT_SSH_USER,
+        "--user",
+        "-u",
+        callback=validate_ssh_username,
+        help="SSH/SSM username",
+    ),
     key: str | None = typer.Option(
         None,
         "--key",

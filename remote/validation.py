@@ -424,3 +424,42 @@ def validate_ssh_key_path(key: str | None) -> str | None:
         raise typer.BadParameter(f"SSH key path is not a file: {sanitized}")
 
     return str(path)
+
+
+# Username validation constants (shared with config.py Pydantic validator)
+USERNAME_PATTERN = r"^[a-zA-Z0-9_\-]+$"
+USERNAME_PATTERN_DESC = "alphanumeric characters, hyphens, and underscores only"
+USERNAME_MAX_LENGTH = 32  # Linux username limit
+
+
+def validate_ssh_username(username: str) -> str:
+    """Validate SSH/SSM username at option parse time.
+
+    This is a Typer callback for validating the --user option. It ensures the
+    username contains only safe characters to prevent command injection when
+    the username is used in shell commands (e.g., `sudo su - {username}`).
+
+    Args:
+        username: Username provided by user
+
+    Returns:
+        The validated username
+
+    Raises:
+        typer.BadParameter: If the username contains invalid characters
+    """
+    sanitized = sanitize_input(username)
+    if sanitized is None:
+        raise typer.BadParameter("Username cannot be empty")
+
+    if len(sanitized) > USERNAME_MAX_LENGTH:
+        raise typer.BadParameter(
+            f"Username exceeds maximum length of {USERNAME_MAX_LENGTH} characters"
+        )
+
+    if not re.match(USERNAME_PATTERN, sanitized):
+        raise typer.BadParameter(
+            f"Invalid username '{sanitized}': must contain only {USERNAME_PATTERN_DESC}"
+        )
+
+    return sanitized
