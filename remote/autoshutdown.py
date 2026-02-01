@@ -129,6 +129,21 @@ def _delete_auto_shutdown_alarm(instance_id: str) -> bool:
     return True
 
 
+def delete_auto_shutdown_alarm(instance_id: str) -> bool:
+    """Delete the auto-shutdown alarm for an instance (public API).
+
+    This function is used by the terminate command to clean up
+    auto-shutdown alarms when an instance is terminated.
+
+    Args:
+        instance_id: EC2 instance ID
+
+    Returns:
+        True if alarm existed and was deleted, False if no alarm found
+    """
+    return _delete_auto_shutdown_alarm(instance_id)
+
+
 @app.command()
 @handle_cli_errors
 def enable(
@@ -200,40 +215,71 @@ def enable(
     print_warning(f"Instance will be stopped when CPU < {threshold}% for {duration} minutes")
 
 
+def _is_valid_instance_id(instance_id: str) -> bool:
+    """Check if a string is a valid EC2 instance ID format.
+
+    Args:
+        instance_id: String to validate
+
+    Returns:
+        True if valid instance ID format (i-xxxxx or i-xxxxxxxxxxxxxxxxx)
+    """
+    import re
+
+    return bool(re.match(r"^i-[0-9a-f]{8,17}$", instance_id))
+
+
 @app.command()
 @handle_cli_errors
 def disable(
     instance_name: str | None = typer.Argument(None, help="Instance name"),
+    instance_id: str | None = typer.Option(
+        None,
+        "--instance-id",
+        help="Instance ID (use to delete orphaned alarms when instance is terminated)",
+    ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
 ) -> None:
     """Disable auto-shutdown for an instance.
 
     Removes the CloudWatch alarm monitoring CPU utilization.
 
+    Use --instance-id to clean up orphaned alarms when the instance
+    has already been terminated.
+
     Examples:
         remote instance auto-shutdown disable
         remote instance auto-shutdown disable my-server
         remote instance auto-shutdown disable --yes
+        remote instance auto-shutdown disable --instance-id i-0123456789abcdef0 --yes
     """
-    instance_name, instance_id = resolve_instance_or_exit(instance_name)
+    # If instance ID provided directly, use it (for orphaned alarm cleanup)
+    if instance_id:
+        if not _is_valid_instance_id(instance_id):
+            print_error("Invalid instance ID format. Expected format: i-xxxxxxxxxxxxxxxxx")
+            raise typer.Exit(1)
+        display_name = instance_id
+    else:
+        instance_name, instance_id = resolve_instance_or_exit(instance_name)
+        display_name = instance_name
 
     # Check if alarm exists
     alarm_name = f"remotepy-autoshutdown-{instance_id}"
     existing = _get_existing_alarm(alarm_name)
 
     if not existing:
-        print_warning(f"Auto-shutdown is not enabled for '{instance_name}'")
+        print_warning(f"Auto-shutdown is not enabled for '{display_name}'")
         return
 
     # Confirm
     if not yes:
-        if not confirm_action("disable auto-shutdown for", "instance", instance_name):
+        if not confirm_action("disable auto-shutdown for", "instance", display_name):
             print_warning("Cancelled.")
             return
 
     # Delete
     _delete_auto_shutdown_alarm(instance_id)
-    print_success(f"Disabled auto-shutdown for '{instance_name}'")
+    print_success(f"Disabled auto-shutdown for '{display_name}'")
 
 
 @app.command()

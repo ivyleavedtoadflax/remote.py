@@ -352,6 +352,40 @@ class TestDisableCommand:
         mock_confirm.assert_called_once()
         assert "Cancelled" in result.stdout
 
+    def test_should_delete_alarm_by_instance_id(self, mocker):
+        """Should delete alarm using --instance-id without resolving name."""
+        mocker.patch(
+            "remote.autoshutdown._get_existing_alarm",
+            return_value={"AlarmName": "remotepy-autoshutdown-i-0123456789abcdef0"},
+        )
+        mock_delete = mocker.patch(
+            "remote.autoshutdown._delete_auto_shutdown_alarm", return_value=True
+        )
+        mock_resolve = mocker.patch("remote.autoshutdown.resolve_instance_or_exit")
+
+        result = runner.invoke(app, ["disable", "--instance-id", "i-0123456789abcdef0", "--yes"])
+
+        assert result.exit_code == 0
+        mock_resolve.assert_not_called()
+        mock_delete.assert_called_once_with("i-0123456789abcdef0")
+        assert "Disabled auto-shutdown" in result.stdout
+
+    def test_should_reject_invalid_instance_id_format(self, mocker):
+        """Should reject instance IDs that don't match expected format."""
+        result = runner.invoke(app, ["disable", "--instance-id", "invalid-id", "--yes"])
+
+        assert result.exit_code == 1
+        assert "Invalid instance ID format" in result.stdout
+
+    def test_should_warn_when_alarm_not_found_by_instance_id(self, mocker):
+        """Should show warning when no alarm exists for instance ID."""
+        mocker.patch("remote.autoshutdown._get_existing_alarm", return_value=None)
+
+        result = runner.invoke(app, ["disable", "--instance-id", "i-0123456789abcdef0", "--yes"])
+
+        assert result.exit_code == 0
+        assert "not enabled" in result.stdout
+
 
 # ============================================================================
 # Status Command Tests

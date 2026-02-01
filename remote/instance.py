@@ -13,6 +13,7 @@ from rich.live import Live
 from rich.panel import Panel
 
 from remote.autoshutdown import app as autoshutdown_app
+from remote.autoshutdown import delete_auto_shutdown_alarm
 from remote.config import config_manager
 from remote.exceptions import (
     AWSServiceError,
@@ -1604,6 +1605,9 @@ def terminate(
         if not confirm_action("terminate", "instance", instance_name):
             print_warning(f"Termination of instance {instance_name} has been cancelled")
             return
+
+    # Clean up any auto-shutdown alarm before terminating
+    delete_auto_shutdown_alarm(instance_id)
 
     with handle_aws_errors("EC2", "terminate_instances"):
         get_ec2_client().terminate_instances(InstanceIds=[instance_id])

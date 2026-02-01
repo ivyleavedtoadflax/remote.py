@@ -211,9 +211,12 @@ remote instance auto-shutdown status
 
 # Disable auto-shutdown
 remote instance auto-shutdown disable
+
+# Clean up orphaned alarm by instance ID (if instance was terminated elsewhere)
+remote instance auto-shutdown disable --instance-id i-0123456789abcdef0
 ```
 
-**Note**: Auto-shutdown uses AWS CloudWatch alarms to stop instances when CPU falls below the threshold for the specified duration. Stopped instances can be started again later.
+**Note**: Auto-shutdown uses AWS CloudWatch alarms to stop instances when CPU falls below the threshold for the specified duration. Stopped instances can be started again later. When you terminate an instance using `remote instance terminate`, the associated auto-shutdown alarm is automatically cleaned up.
 
 ### Usage Statistics
 
