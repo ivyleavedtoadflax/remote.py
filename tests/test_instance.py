@@ -827,6 +827,7 @@ def test_terminate_instance_confirmed(mocker):
         "remote.instance.resolve_instance_or_exit",
         return_value=("test-instance", "i-0123456789abcdef0"),
     )
+    mocker.patch("remote.instance.delete_auto_shutdown_alarm", return_value=False)
 
     mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [{"Instances": [{"Tags": []}]}]
@@ -847,6 +848,7 @@ def test_terminate_terraform_managed_instance(mocker):
         "remote.instance.resolve_instance_or_exit",
         return_value=("test-instance", "i-0123456789abcdef0"),
     )
+    mocker.patch("remote.instance.delete_auto_shutdown_alarm", return_value=False)
 
     mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [
