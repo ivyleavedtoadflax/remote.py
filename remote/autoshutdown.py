@@ -16,6 +16,7 @@ from rich.panel import Panel
 if TYPE_CHECKING:
     from mypy_boto3_cloudwatch.type_defs import MetricAlarmTypeDef
 
+from remote.exceptions import InvalidInputError
 from remote.instance_resolver import resolve_instance_or_exit
 from remote.pricing import get_current_region
 from remote.utils import (
@@ -29,6 +30,7 @@ from remote.utils import (
     print_success,
     print_warning,
 )
+from remote.validation import validate_instance_id
 
 app = typer.Typer()
 
@@ -108,8 +110,11 @@ def _create_auto_shutdown_alarm(
         )
 
 
-def _delete_auto_shutdown_alarm(instance_id: str) -> bool:
+def delete_auto_shutdown_alarm(instance_id: str) -> bool:
     """Delete the auto-shutdown alarm for an instance.
+
+    This function is used by the terminate command to clean up
+    auto-shutdown alarms when an instance is terminated.
 
     Args:
         instance_id: EC2 instance ID
@@ -127,21 +132,6 @@ def _delete_auto_shutdown_alarm(instance_id: str) -> bool:
     with handle_aws_errors("CloudWatch", "delete_alarms"):
         get_cloudwatch_client().delete_alarms(AlarmNames=[alarm_name])
     return True
-
-
-def delete_auto_shutdown_alarm(instance_id: str) -> bool:
-    """Delete the auto-shutdown alarm for an instance (public API).
-
-    This function is used by the terminate command to clean up
-    auto-shutdown alarms when an instance is terminated.
-
-    Args:
-        instance_id: EC2 instance ID
-
-    Returns:
-        True if alarm existed and was deleted, False if no alarm found
-    """
-    return _delete_auto_shutdown_alarm(instance_id)
 
 
 @app.command()
@@ -215,20 +205,6 @@ def enable(
     print_warning(f"Instance will be stopped when CPU < {threshold}% for {duration} minutes")
 
 
-def _is_valid_instance_id(instance_id: str) -> bool:
-    """Check if a string is a valid EC2 instance ID format.
-
-    Args:
-        instance_id: String to validate
-
-    Returns:
-        True if valid instance ID format (i-xxxxx or i-xxxxxxxxxxxxxxxxx)
-    """
-    import re
-
-    return bool(re.match(r"^i-[0-9a-f]{8,17}$", instance_id))
-
-
 @app.command()
 @handle_cli_errors
 def disable(
@@ -255,7 +231,9 @@ def disable(
     """
     # If instance ID provided directly, use it (for orphaned alarm cleanup)
     if instance_id:
-        if not _is_valid_instance_id(instance_id):
+        try:
+            validate_instance_id(instance_id)
+        except InvalidInputError:
             print_error("Invalid instance ID format. Expected format: i-xxxxxxxxxxxxxxxxx")
             raise typer.Exit(1)
         display_name = instance_id
@@ -278,7 +256,7 @@ def disable(
             return
 
     # Delete
-    _delete_auto_shutdown_alarm(instance_id)
+    delete_auto_shutdown_alarm(instance_id)
     print_success(f"Disabled auto-shutdown for '{display_name}'")
 
 

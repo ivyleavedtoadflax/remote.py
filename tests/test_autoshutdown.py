@@ -7,9 +7,9 @@ from typer.testing import CliRunner
 
 from remote.autoshutdown import (
     _create_auto_shutdown_alarm,
-    _delete_auto_shutdown_alarm,
     _get_existing_alarm,
     app,
+    delete_auto_shutdown_alarm,
 )
 
 runner = CliRunner()
@@ -118,7 +118,7 @@ class TestCreateAutoShutdownAlarm:
 
 
 class TestDeleteAutoShutdownAlarm:
-    """Tests for _delete_auto_shutdown_alarm helper function."""
+    """Tests for delete_auto_shutdown_alarm helper function."""
 
     def test_should_delete_alarm_when_exists(self, mocker):
         """Should delete alarm and return True when alarm exists."""
@@ -127,7 +127,7 @@ class TestDeleteAutoShutdownAlarm:
             "MetricAlarms": [{"AlarmName": "remotepy-autoshutdown-i-123"}]
         }
 
-        result = _delete_auto_shutdown_alarm("i-123")
+        result = delete_auto_shutdown_alarm("i-123")
 
         assert result is True
         mock_cloudwatch.return_value.delete_alarms.assert_called_once_with(
@@ -139,7 +139,7 @@ class TestDeleteAutoShutdownAlarm:
         mock_cloudwatch = mocker.patch("remote.autoshutdown.get_cloudwatch_client")
         mock_cloudwatch.return_value.describe_alarms.return_value = {"MetricAlarms": []}
 
-        result = _delete_auto_shutdown_alarm("i-123")
+        result = delete_auto_shutdown_alarm("i-123")
 
         assert result is False
         mock_cloudwatch.return_value.delete_alarms.assert_not_called()
@@ -312,7 +312,7 @@ class TestDisableCommand:
             return_value={"AlarmName": "remotepy-autoshutdown-i-123"},
         )
         mock_delete = mocker.patch(
-            "remote.autoshutdown._delete_auto_shutdown_alarm", return_value=True
+            "remote.autoshutdown.delete_auto_shutdown_alarm", return_value=True
         )
 
         result = runner.invoke(app, ["disable", "--yes"])
@@ -359,7 +359,7 @@ class TestDisableCommand:
             return_value={"AlarmName": "remotepy-autoshutdown-i-0123456789abcdef0"},
         )
         mock_delete = mocker.patch(
-            "remote.autoshutdown._delete_auto_shutdown_alarm", return_value=True
+            "remote.autoshutdown.delete_auto_shutdown_alarm", return_value=True
         )
         mock_resolve = mocker.patch("remote.autoshutdown.resolve_instance_or_exit")
 
