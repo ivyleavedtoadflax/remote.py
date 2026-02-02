@@ -2028,3 +2028,189 @@ class TestGetLaunchTemplateVersionsErrors:
             get_launch_template_versions("my-template")
 
         assert exc_info.value.aws_error_code == "UnauthorizedOperation"
+
+
+# ============================================================================
+# Tests for EventBridge Scheduler and IAM Client Functions
+# ============================================================================
+
+
+class TestSchedulerClientCaching:
+    """Tests for EventBridge Scheduler client caching behavior."""
+
+    def test_get_scheduler_client_caching(self, mocker):
+        """Test that get_scheduler_client returns cached client on subsequent calls."""
+        from remote.utils import clear_scheduler_client_cache, get_scheduler_client
+
+        # Clear the cache before testing
+        clear_scheduler_client_cache()
+
+        mock_boto3_client = mocker.patch("remote.utils.boto3.client")
+        mock_client_instance = mocker.MagicMock()
+        mock_boto3_client.return_value = mock_client_instance
+
+        # First call should create the client
+        client1 = get_scheduler_client()
+
+        # Second call should return the same cached client
+        client2 = get_scheduler_client()
+
+        # Third call should still return the same cached client
+        client3 = get_scheduler_client()
+
+        # boto3.client should only be called once due to caching
+        mock_boto3_client.assert_called_once_with("scheduler")
+
+        # All calls should return the same instance
+        assert client1 is client2
+        assert client2 is client3
+
+        # Clean up cache for other tests
+        clear_scheduler_client_cache()
+
+    def test_get_scheduler_client_cache_clear_creates_new_client(self, mocker):
+        """Test that clearing cache causes a new client to be created."""
+        from remote.utils import clear_scheduler_client_cache, get_scheduler_client
+
+        # Clear the cache before testing
+        clear_scheduler_client_cache()
+
+        mock_boto3_client = mocker.patch("remote.utils.boto3.client")
+        mock_client_1 = mocker.MagicMock()
+        mock_client_2 = mocker.MagicMock()
+        mock_boto3_client.side_effect = [mock_client_1, mock_client_2]
+
+        # First call creates first client
+        client1 = get_scheduler_client()
+        assert client1 is mock_client_1
+
+        # Clear the cache
+        clear_scheduler_client_cache()
+
+        # Next call should create a new client
+        client2 = get_scheduler_client()
+        assert client2 is mock_client_2
+
+        # boto3.client should be called twice
+        assert mock_boto3_client.call_count == 2
+
+        # Clean up
+        clear_scheduler_client_cache()
+
+
+class TestIAMClientCaching:
+    """Tests for IAM client caching behavior."""
+
+    def test_get_iam_client_caching(self, mocker):
+        """Test that get_iam_client returns cached client on subsequent calls."""
+        from remote.utils import clear_iam_client_cache, get_iam_client
+
+        # Clear the cache before testing
+        clear_iam_client_cache()
+
+        mock_boto3_client = mocker.patch("remote.utils.boto3.client")
+        mock_client_instance = mocker.MagicMock()
+        mock_boto3_client.return_value = mock_client_instance
+
+        # First call should create the client
+        client1 = get_iam_client()
+
+        # Second call should return the same cached client
+        client2 = get_iam_client()
+
+        # Third call should still return the same cached client
+        client3 = get_iam_client()
+
+        # boto3.client should only be called once due to caching
+        mock_boto3_client.assert_called_once_with("iam")
+
+        # All calls should return the same instance
+        assert client1 is client2
+        assert client2 is client3
+
+        # Clean up cache for other tests
+        clear_iam_client_cache()
+
+    def test_get_iam_client_cache_clear_creates_new_client(self, mocker):
+        """Test that clearing cache causes a new client to be created."""
+        from remote.utils import clear_iam_client_cache, get_iam_client
+
+        # Clear the cache before testing
+        clear_iam_client_cache()
+
+        mock_boto3_client = mocker.patch("remote.utils.boto3.client")
+        mock_client_1 = mocker.MagicMock()
+        mock_client_2 = mocker.MagicMock()
+        mock_boto3_client.side_effect = [mock_client_1, mock_client_2]
+
+        # First call creates first client
+        client1 = get_iam_client()
+        assert client1 is mock_client_1
+
+        # Clear the cache
+        clear_iam_client_cache()
+
+        # Next call should create a new client
+        client2 = get_iam_client()
+        assert client2 is mock_client_2
+
+        # boto3.client should be called twice
+        assert mock_boto3_client.call_count == 2
+
+        # Clean up
+        clear_iam_client_cache()
+
+
+class TestClearAWSClientCaches:
+    """Tests for the clear_aws_client_caches convenience function."""
+
+    def test_clear_aws_client_caches_clears_all_clients(self, mocker):
+        """Test that clear_aws_client_caches clears all AWS client caches."""
+        from remote.utils import (
+            clear_aws_client_caches,
+            get_cloudwatch_client,
+            get_ec2_client,
+            get_iam_client,
+            get_scheduler_client,
+            get_sts_client,
+        )
+
+        # Clear all caches first
+        clear_aws_client_caches()
+
+        mock_boto3_client = mocker.patch("remote.utils.boto3.client")
+        mock_clients = [mocker.MagicMock() for _ in range(10)]
+        mock_boto3_client.side_effect = mock_clients
+
+        # Create all clients
+        ec2_1 = get_ec2_client()
+        sts_1 = get_sts_client()
+        cloudwatch_1 = get_cloudwatch_client()
+        scheduler_1 = get_scheduler_client()
+        iam_1 = get_iam_client()
+
+        # Should have called boto3.client 5 times
+        assert mock_boto3_client.call_count == 5
+
+        # Clear all caches
+        clear_aws_client_caches()
+
+        # Creating clients again should call boto3.client again
+        ec2_2 = get_ec2_client()
+        sts_2 = get_sts_client()
+        cloudwatch_2 = get_cloudwatch_client()
+        scheduler_2 = get_scheduler_client()
+        iam_2 = get_iam_client()
+
+        # Should have called boto3.client 10 times total
+        assert mock_boto3_client.call_count == 10
+
+        # Clients should be different instances
+        assert ec2_1 is not ec2_2
+        assert sts_1 is not sts_2
+        assert cloudwatch_1 is not cloudwatch_2
+        assert scheduler_1 is not scheduler_2
+        assert iam_1 is not iam_2
+
+        # Clean up
+        clear_aws_client_caches()

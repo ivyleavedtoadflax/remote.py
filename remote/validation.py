@@ -5,6 +5,7 @@ identifiers to prevent errors and improve security.
 """
 
 import re
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -448,6 +449,13 @@ def validate_ssh_username(username: str) -> str:
     Raises:
         typer.BadParameter: If the username contains invalid characters
     """
+    # Check for non-ASCII characters first (before sanitization strips them)
+    # This prevents Unicode whitespace characters from being silently stripped
+    if not username.isascii():
+        raise typer.BadParameter(
+            f"Invalid username: must contain only ASCII characters"
+        )
+
     sanitized = sanitize_input(username)
     if sanitized is None:
         raise typer.BadParameter("Username cannot be empty")
@@ -463,3 +471,302 @@ def validate_ssh_username(username: str) -> str:
         )
 
     return sanitized
+
+
+# ============================================================================
+# Schedule time/day validation for EventBridge Scheduler
+# ============================================================================
+
+# Day name constants for schedule parsing
+DAY_NAMES = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+DAY_NAME_MAP = {
+    "MON": 0,
+    "TUE": 1,
+    "WED": 2,
+    "THU": 3,
+    "FRI": 4,
+    "SAT": 5,
+    "SUN": 6,
+}
+
+
+def parse_schedule_time(time_str: str) -> tuple[int, int]:
+    """Parse a time string in HH:MM or H:MM format.
+
+    Args:
+        time_str: Time string like "09:00", "9:00", "14:30"
+
+    Returns:
+        Tuple of (hour, minute) as integers
+
+    Raises:
+        ValidationError: If time format is invalid or values out of range
+    """
+    sanitized = sanitize_input(time_str)
+    if not sanitized:
+        raise ValidationError("Time cannot be empty")
+
+    # Match HH:MM or H:MM format
+    match = re.match(r"^(\d{1,2}):(\d{2})$", sanitized)
+    if not match:
+        raise ValidationError(
+            f"Invalid time format '{time_str}': "
+            "expected HH:MM or H:MM (e.g., '09:00', '9:00', '14:30')"
+        )
+
+    hour = int(match.group(1))
+    minute = int(match.group(2))
+
+    if hour < 0 or hour > 23:
+        raise ValidationError(f"Invalid hour {hour}: must be between 0 and 23")
+
+    if minute < 0 or minute > 59:
+        raise ValidationError(f"Invalid minute {minute}: must be between 0 and 59")
+
+    return (hour, minute)
+
+
+def parse_schedule_days(days_str: str) -> list[str]:
+    """Parse a days string to a list of uppercase day abbreviations.
+
+    Supports:
+    - Single day: "mon"
+    - Comma-separated: "mon,wed,fri"
+    - Range: "mon-fri"
+    - Wrap-around range: "fri-mon"
+
+    Args:
+        days_str: Days string like "mon-fri", "mon,wed,fri", or "sat"
+
+    Returns:
+        List of uppercase day abbreviations (e.g., ["MON", "TUE", "WED"])
+
+    Raises:
+        ValidationError: If day format is invalid
+    """
+    sanitized = sanitize_input(days_str)
+    if not sanitized:
+        raise ValidationError("Days cannot be empty")
+
+    sanitized = sanitized.upper()
+
+    # Check for range format (e.g., "MON-FRI")
+    if "-" in sanitized and "," not in sanitized:
+        parts = sanitized.split("-")
+        if len(parts) != 2:
+            raise ValidationError(
+                f"Invalid day range format '{days_str}': expected format like 'mon-fri'"
+            )
+
+        start_day = parts[0].strip()
+        end_day = parts[1].strip()
+
+        if not start_day or not end_day:
+            raise ValidationError(f"Invalid day range '{days_str}': missing start or end day")
+
+        if start_day not in DAY_NAME_MAP:
+            raise ValidationError(
+                f"Invalid day name '{start_day}': expected one of {', '.join(DAY_NAMES)}"
+            )
+
+        if end_day not in DAY_NAME_MAP:
+            raise ValidationError(
+                f"Invalid day name '{end_day}': expected one of {', '.join(DAY_NAMES)}"
+            )
+
+        start_idx = DAY_NAME_MAP[start_day]
+        end_idx = DAY_NAME_MAP[end_day]
+
+        # Handle wrap-around (e.g., FRI-MON means FRI, SAT, SUN, MON)
+        if start_idx <= end_idx:
+            days = DAY_NAMES[start_idx : end_idx + 1]
+        else:
+            # Wrap around: from start to end of week, then beginning to end
+            days = DAY_NAMES[start_idx:] + DAY_NAMES[: end_idx + 1]
+
+        return days
+
+    # Check for comma-separated format (e.g., "MON,WED,FRI")
+    if "," in sanitized:
+        parts = [p.strip() for p in sanitized.split(",")]
+        days = []
+        seen = set()
+
+        for part in parts:
+            if not part:  # Skip empty parts
+                continue
+
+            if part not in DAY_NAME_MAP:
+                raise ValidationError(
+                    f"Invalid day name '{part}': expected one of {', '.join(DAY_NAMES)}"
+                )
+
+            if part not in seen:
+                days.append(part)
+                seen.add(part)
+
+        if not days:
+            raise ValidationError(f"No valid days found in '{days_str}'")
+
+        return days
+
+    # Single day
+    if sanitized not in DAY_NAME_MAP:
+        raise ValidationError(
+            f"Invalid day name '{sanitized}': expected one of {', '.join(DAY_NAMES)}"
+        )
+
+    return [sanitized]
+
+
+def build_schedule_cron_expression(hour: int, minute: int, days: list[str]) -> str:
+    """Build an EventBridge Scheduler cron expression.
+
+    EventBridge cron format: cron(minutes hours day-of-month month day-of-week year)
+
+    Args:
+        hour: Hour (0-23)
+        minute: Minute (0-59)
+        days: List of uppercase day abbreviations (e.g., ["MON", "TUE"])
+
+    Returns:
+        EventBridge cron expression string
+    """
+    days_str = ",".join(days)
+    # ? for day-of-month since we're specifying day-of-week
+    # * for month and year
+    return f"cron({minute} {hour} ? * {days_str} *)"
+
+
+def validate_schedule_time_string(time_str: str) -> str:
+    """Validate a schedule time string (CLI callback).
+
+    Args:
+        time_str: Time string to validate
+
+    Returns:
+        The original time string if valid
+
+    Raises:
+        ValidationError: If time format is invalid
+    """
+    parse_schedule_time(time_str)  # Raises ValidationError if invalid
+    return time_str
+
+
+def validate_schedule_days_string(days_str: str) -> str:
+    """Validate a schedule days string (CLI callback).
+
+    Args:
+        days_str: Days string to validate
+
+    Returns:
+        The original days string if valid
+
+    Raises:
+        ValidationError: If days format is invalid
+    """
+    parse_schedule_days(days_str)  # Raises ValidationError if invalid
+    return days_str
+
+
+# Full day name mapping for date parsing
+FULL_DAY_NAMES = {
+    "MONDAY": 0,
+    "TUESDAY": 1,
+    "WEDNESDAY": 2,
+    "THURSDAY": 3,
+    "FRIDAY": 4,
+    "SATURDAY": 5,
+    "SUNDAY": 6,
+}
+
+
+def parse_schedule_date(date_str: str) -> date:
+    """Parse a date string for one-time schedules.
+
+    Supports:
+    - "tomorrow" - the next day
+    - Day names (full or short): "monday", "tue" - next occurrence
+    - ISO format: "2026-02-15"
+
+    Args:
+        date_str: Date string like "tomorrow", "tuesday", or "2026-02-15"
+
+    Returns:
+        date object representing the target date
+
+    Raises:
+        ValidationError: If date format is invalid or date is in the past
+    """
+    sanitized = sanitize_input(date_str)
+    if not sanitized:
+        raise ValidationError("Date cannot be empty")
+
+    upper = sanitized.upper()
+    today = date.today()
+
+    # Handle "tomorrow"
+    if upper == "TOMORROW":
+        return today + timedelta(days=1)
+
+    # Handle day names (short: MON, TUE, etc.)
+    if upper in DAY_NAME_MAP:
+        target_weekday = DAY_NAME_MAP[upper]
+        current_weekday = today.weekday()
+
+        # Calculate days until target (if same day, go to next week)
+        days_ahead = target_weekday - current_weekday
+        if days_ahead <= 0:  # Target day is today or earlier this week
+            days_ahead += 7
+
+        return today + timedelta(days=days_ahead)
+
+    # Handle full day names (MONDAY, TUESDAY, etc.)
+    if upper in FULL_DAY_NAMES:
+        target_weekday = FULL_DAY_NAMES[upper]
+        current_weekday = today.weekday()
+
+        days_ahead = target_weekday - current_weekday
+        if days_ahead <= 0:
+            days_ahead += 7
+
+        return today + timedelta(days=days_ahead)
+
+    # Try ISO format (YYYY-MM-DD)
+    iso_match = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", sanitized)
+    if iso_match:
+        try:
+            year = int(iso_match.group(1))
+            month = int(iso_match.group(2))
+            day = int(iso_match.group(3))
+            target_date = date(year, month, day)
+
+            if target_date <= today:
+                raise ValidationError(
+                    f"Date '{date_str}' is in the past. Please specify a future date."
+                )
+
+            return target_date
+        except ValueError as e:
+            raise ValidationError(f"Invalid date '{date_str}': {e}")
+
+    raise ValidationError(
+        f"Invalid date format '{date_str}': "
+        "expected 'tomorrow', a day name (e.g., 'tuesday', 'tue'), "
+        "or ISO format (YYYY-MM-DD)"
+    )
+
+
+def build_schedule_at_expression(target_date: date, hour: int, minute: int) -> str:
+    """Build an EventBridge Scheduler at() expression for one-time schedules.
+
+    Args:
+        target_date: The date for the one-time schedule
+        hour: Hour (0-23)
+        minute: Minute (0-59)
+
+    Returns:
+        EventBridge at() expression string like "at(2026-02-15T09:30:00)"
+    """
+    return f"at({target_date.isoformat()}T{hour:02d}:{minute:02d}:00)"

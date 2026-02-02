@@ -8,6 +8,7 @@ from remote.config import app as config_app
 from remote.ecs import app as ecs_app
 from remote.instance import app as instance_app
 from remote.logo import print_logo
+from remote.schedule import app as schedule_app
 from remote.sg import app as sg_app
 from remote.snapshot import app as snapshot_app
 from remote.utils import handle_cli_errors
@@ -56,6 +57,7 @@ app.add_typer(snapshot_app, name="snapshot", help="Manage EBS snapshots")
 app.add_typer(volume_app, name="volume", help="Manage EBS volumes")
 app.add_typer(ecs_app, name="ecs", help="Manage ECS clusters and services")
 app.add_typer(sg_app, name="sg", help="Manage security group IP rules")
+app.add_typer(schedule_app, name="schedule", help="Manage scheduled wake/sleep")
 
 
 def main() -> None:

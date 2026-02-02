@@ -700,6 +700,30 @@ wheels = [
 ]
 
 [[package]]
+name = "mypy-boto3-iam"
+version = "1.42.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions", marker = "python_full_version < '3.12'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3e/e9/60bf8a3179aaf415cb436bf9b4a909bc02bf129f8ba22acfdc131c52da82/mypy_boto3_iam-1.42.4.tar.gz", hash = "sha256:41b17d55f44d31ca5ef0389579505e65f6e79fae0423b98ff2581e83f6284bc5", size = 89298 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e4/dc/f45a58170587527a501ce9e9bda0d042aebb0dbfacb40bca4cd80b24b764/mypy_boto3_iam-1.42.4-py3-none-any.whl", hash = "sha256:670ffeff6dee7eaa7f6f77ddfee1eeec2ab968b381efeddd3ccfe6f9971ac198", size = 94986 },
+]
+
+[[package]]
+name = "mypy-boto3-scheduler"
+version = "1.42.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions", marker = "python_full_version < '3.12'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/72/60/23af8437c015c8b5d08eafdcb3490ead122e963225fbeede9d9546a273c6/mypy_boto3_scheduler-1.42.3.tar.gz", hash = "sha256:9f25661f95de78f43bd5011573a199dd4609e25ffaa08fc25152264ffb6146be", size = 18502 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b6/70/1ff1916e3bbc668a3979e314477e6ae656eb03818c6c6a5533b70e6fcb0d/mypy_boto3_scheduler-1.42.3-py3-none-any.whl", hash = "sha256:e2a6844cf728210a5a98023b43a1262eba533926fce94e7eb90e239140d4e5e5", size = 24801 },
+]
+
+[[package]]
 name = "mypy-boto3-sts"
 version = "1.42.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1161,6 +1185,8 @@ dev = [
     { name = "boto3-stubs", extra = ["cloudwatch", "ec2", "ecs", "sts"] },
     { name = "hypothesis" },
     { name = "mypy" },
+    { name = "mypy-boto3-iam" },
+    { name = "mypy-boto3-scheduler" },
     { name = "pip-audit" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -1189,6 +1215,8 @@ dev = [
     { name = "boto3-stubs", extras = ["cloudwatch", "ec2", "ecs", "sts"], specifier = ">=1.42.0" },
     { name = "hypothesis", specifier = ">=6.135.14" },
     { name = "mypy", specifier = ">=1.14.0" },
+    { name = "mypy-boto3-iam", specifier = ">=1.42.4" },
+    { name = "mypy-boto3-scheduler", specifier = ">=1.42.3" },
     { name = "pip-audit", specifier = ">=2.10.0" },
     { name = "pre-commit", specifier = ">=4.0.0" },
     { name = "pytest", specifier = ">=8.4.1" },
