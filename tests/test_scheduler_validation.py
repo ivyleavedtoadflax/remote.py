@@ -340,6 +340,19 @@ class TestValidateScheduleDaysString:
 class TestParseScheduleDate:
     """Tests for parse_schedule_date function (one-time schedules)."""
 
+    def test_should_parse_today(self, mocker):
+        """Should parse 'today' as today's date."""
+        from datetime import date
+
+        from remote.validation import parse_schedule_date
+
+        mock_date = mocker.patch("remote.validation.date")
+        mock_date.today.return_value = date(2026, 2, 2)
+        mock_date.side_effect = lambda *args, **kwargs: date(*args, **kwargs)
+
+        result = parse_schedule_date("today")
+        assert result == date(2026, 2, 2)
+
     def test_should_parse_tomorrow(self, mocker):
         """Should parse 'tomorrow' as the next day."""
         from datetime import date

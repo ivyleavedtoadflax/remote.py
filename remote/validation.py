@@ -452,9 +452,7 @@ def validate_ssh_username(username: str) -> str:
     # Check for non-ASCII characters first (before sanitization strips them)
     # This prevents Unicode whitespace characters from being silently stripped
     if not username.isascii():
-        raise typer.BadParameter(
-            f"Invalid username: must contain only ASCII characters"
-        )
+        raise typer.BadParameter("Invalid username: must contain only ASCII characters")
 
     sanitized = sanitize_input(username)
     if sanitized is None:
@@ -706,7 +704,10 @@ def parse_schedule_date(date_str: str) -> date:
     upper = sanitized.upper()
     today = date.today()
 
-    # Handle "tomorrow"
+    # Handle "today" and "tomorrow"
+    if upper == "TODAY":
+        return today
+
     if upper == "TOMORROW":
         return today + timedelta(days=1)
 
@@ -742,9 +743,9 @@ def parse_schedule_date(date_str: str) -> date:
             day = int(iso_match.group(3))
             target_date = date(year, month, day)
 
-            if target_date <= today:
+            if target_date < today:
                 raise ValidationError(
-                    f"Date '{date_str}' is in the past. Please specify a future date."
+                    f"Date '{date_str}' is in the past. Please specify today or a future date."
                 )
 
             return target_date
@@ -753,7 +754,7 @@ def parse_schedule_date(date_str: str) -> date:
 
     raise ValidationError(
         f"Invalid date format '{date_str}': "
-        "expected 'tomorrow', a day name (e.g., 'tuesday', 'tue'), "
+        "expected 'today', 'tomorrow', a day name (e.g., 'tuesday', 'tue'), "
         "or ISO format (YYYY-MM-DD)"
     )
 
