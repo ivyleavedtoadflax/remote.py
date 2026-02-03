@@ -37,6 +37,8 @@ if TYPE_CHECKING:
 
     from mypy_boto3_cloudwatch.client import CloudWatchClient
     from mypy_boto3_ec2.client import EC2Client
+    from mypy_boto3_iam.client import IAMClient
+    from mypy_boto3_scheduler.client import EventBridgeSchedulerClient
     from mypy_boto3_sts.client import STSClient
 
 # Type variables for the decorator
@@ -355,6 +357,30 @@ def get_cloudwatch_client() -> "CloudWatchClient":
     return boto3.client("cloudwatch")
 
 
+@lru_cache(maxsize=1)
+def get_scheduler_client() -> "EventBridgeSchedulerClient":
+    """Get or create the EventBridge Scheduler client.
+
+    Uses lazy initialization and caches the client for reuse.
+
+    Returns:
+        boto3 EventBridge Scheduler client instance
+    """
+    return boto3.client("scheduler")
+
+
+@lru_cache(maxsize=1)
+def get_iam_client() -> "IAMClient":
+    """Get or create the IAM client.
+
+    Uses lazy initialization and caches the client for reuse.
+
+    Returns:
+        boto3 IAM client instance
+    """
+    return boto3.client("iam")
+
+
 def clear_ec2_client_cache() -> None:
     """Clear the EC2 client cache.
 
@@ -379,15 +405,33 @@ def clear_cloudwatch_client_cache() -> None:
     get_cloudwatch_client.cache_clear()
 
 
+def clear_scheduler_client_cache() -> None:
+    """Clear the EventBridge Scheduler client cache.
+
+    Useful for testing or when you need to reset the client state.
+    """
+    get_scheduler_client.cache_clear()
+
+
+def clear_iam_client_cache() -> None:
+    """Clear the IAM client cache.
+
+    Useful for testing or when you need to reset the client state.
+    """
+    get_iam_client.cache_clear()
+
+
 def clear_aws_client_caches() -> None:
     """Clear all AWS client caches in utils.py.
 
-    Convenience function that clears EC2, STS, and CloudWatch client caches.
+    Convenience function that clears EC2, STS, CloudWatch, Scheduler, and IAM client caches.
     Useful for test isolation and resetting state between tests.
     """
     clear_ec2_client_cache()
     clear_sts_client_cache()
     clear_cloudwatch_client_cache()
+    clear_scheduler_client_cache()
+    clear_iam_client_cache()
 
 
 @contextmanager
@@ -1190,3 +1234,13 @@ def format_duration(
         parts.append(f"{mins}m")
 
     return " ".join(parts)
+
+
+def get_current_region() -> str:
+    """Get the current AWS region from the session.
+
+    Returns:
+        The current AWS region code, defaults to us-east-1 if not configured
+    """
+    session = boto3.session.Session()
+    return session.region_name or "us-east-1"

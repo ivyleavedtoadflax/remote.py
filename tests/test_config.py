@@ -1419,3 +1419,163 @@ class TestConfigValidateCommandOutputStyles:
         assert result.exit_code == 0
         assert "Configuration has warnings" in result.stdout
         assert "Unknown config key" in result.stdout
+
+
+# ============================================================================
+# Tests for scheduler_timezone validator (EventBridge Scheduler support)
+# ============================================================================
+
+
+class TestSchedulerTimezoneValidation:
+    """Tests for the scheduler_timezone field validator in RemoteConfig."""
+
+    def test_should_accept_iana_timezone_with_region_and_city(self):
+        """Should accept standard IANA timezone format (Region/City)."""
+        from remote.config import RemoteConfig
+
+        cfg = RemoteConfig(scheduler_timezone="America/New_York")
+        assert cfg.scheduler_timezone == "America/New_York"
+
+        cfg = RemoteConfig(scheduler_timezone="Europe/London")
+        assert cfg.scheduler_timezone == "Europe/London"
+
+        cfg = RemoteConfig(scheduler_timezone="Australia/Sydney")
+        assert cfg.scheduler_timezone == "Australia/Sydney"
+
+        cfg = RemoteConfig(scheduler_timezone="Asia/Tokyo")
+        assert cfg.scheduler_timezone == "Asia/Tokyo"
+
+    def test_should_accept_utc(self):
+        """Should accept UTC timezone."""
+        from remote.config import RemoteConfig
+
+        cfg = RemoteConfig(scheduler_timezone="UTC")
+        assert cfg.scheduler_timezone == "UTC"
+
+    def test_should_accept_etc_gmt_format(self):
+        """Should accept Etc/GMT offset format."""
+        from remote.config import RemoteConfig
+
+        cfg = RemoteConfig(scheduler_timezone="Etc/GMT+5")
+        assert cfg.scheduler_timezone == "Etc/GMT+5"
+
+        cfg = RemoteConfig(scheduler_timezone="Etc/GMT-10")
+        assert cfg.scheduler_timezone == "Etc/GMT-10"
+
+    def test_should_accept_underscored_city_names(self):
+        """Should accept city names with underscores (e.g., New_York)."""
+        from remote.config import RemoteConfig
+
+        cfg = RemoteConfig(scheduler_timezone="America/Los_Angeles")
+        assert cfg.scheduler_timezone == "America/Los_Angeles"
+
+        cfg = RemoteConfig(scheduler_timezone="Pacific/Port_Moresby")
+        assert cfg.scheduler_timezone == "Pacific/Port_Moresby"
+
+    def test_should_treat_empty_string_as_none(self):
+        """Should treat empty string as None (unset)."""
+        from remote.config import RemoteConfig
+
+        cfg = RemoteConfig(scheduler_timezone="")
+        assert cfg.scheduler_timezone is None
+
+    def test_should_treat_none_as_none(self):
+        """Should accept None as valid (means use default UTC)."""
+        from remote.config import RemoteConfig
+
+        cfg = RemoteConfig(scheduler_timezone=None)
+        assert cfg.scheduler_timezone is None
+
+    def test_should_reject_invalid_format(self):
+        """Should reject timezone formats that don't match IANA pattern."""
+        from pydantic import ValidationError
+
+        from remote.config import RemoteConfig
+
+        # The regex pattern is: ^[A-Za-z_]+(/[A-Za-z_]+)?([+-]\d+)?$
+        # This rejects:
+        # - Strings with spaces
+        # - Strings starting with digits or special chars
+        # - Strings with colons
+        invalid_timezones = [
+            "12:00",  # Time format (starts with digit)
+            "+05:00",  # Offset format (starts with +)
+            "America/New York",  # Space in city name
+            "US/Eastern/Sub",  # Too many slashes
+            "America@NYC",  # Invalid character @
+        ]
+
+        for tz in invalid_timezones:
+            with pytest.raises(ValidationError) as exc_info:
+                RemoteConfig(scheduler_timezone=tz)
+            assert "Invalid timezone" in str(exc_info.value), f"Expected error for: {tz}"
+
+    def test_should_load_from_ini_file(self, tmpdir):
+        """Should load scheduler_timezone from INI file."""
+        from remote.config import RemoteConfig
+
+        config_path = str(tmpdir / "config.ini")
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"scheduler_timezone": "America/Chicago"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = RemoteConfig.from_ini_file(config_path)
+        assert result.scheduler_timezone == "America/Chicago"
+
+    def test_should_override_ini_with_environment_variable(self, tmpdir, monkeypatch):
+        """Should override INI value with REMOTE_SCHEDULER_TIMEZONE env var."""
+        from remote.config import RemoteConfig
+
+        config_path = str(tmpdir / "config.ini")
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"scheduler_timezone": "America/Chicago"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        monkeypatch.setenv("REMOTE_SCHEDULER_TIMEZONE", "Europe/Paris")
+
+        result = RemoteConfig.from_ini_file(config_path)
+        assert result.scheduler_timezone == "Europe/Paris"
+
+    def test_should_show_in_config_keys_list(self):
+        """Should include scheduler_timezone in valid config keys."""
+        from remote.config import VALID_KEYS
+
+        assert "scheduler_timezone" in VALID_KEYS
+        assert "Timezone" in VALID_KEYS["scheduler_timezone"]
+
+
+class TestSchedulerTimezoneConfigSetCommand:
+    """Test setting scheduler_timezone via CLI."""
+
+    def test_should_set_scheduler_timezone(self, tmpdir):
+        """Should set scheduler_timezone via config set command."""
+        config_path = str(tmpdir / "config.ini")
+
+        result = runner.invoke(
+            config.app, ["set", "scheduler_timezone", "America/Denver", "-c", config_path]
+        )
+
+        assert result.exit_code == 0
+        assert "Set scheduler_timezone = America/Denver" in result.stdout
+
+        # Verify value was written
+        cfg = configparser.ConfigParser()
+        cfg.read(config_path)
+        assert cfg["DEFAULT"]["scheduler_timezone"] == "America/Denver"
+
+    def test_should_get_scheduler_timezone(self, tmpdir):
+        """Should get scheduler_timezone via config get command."""
+        config_path = str(tmpdir / "config.ini")
+
+        # Create config with scheduler_timezone
+        cfg = configparser.ConfigParser()
+        cfg["DEFAULT"] = {"scheduler_timezone": "Pacific/Auckland"}
+        with open(config_path, "w") as f:
+            cfg.write(f)
+
+        result = runner.invoke(config.app, ["get", "scheduler_timezone", "-c", config_path])
+
+        assert result.exit_code == 0
+        assert "Pacific/Auckland" in result.stdout

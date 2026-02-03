@@ -875,13 +875,26 @@ class TestValidateSshUsername:
 
     @given(
         st.text(min_size=1, max_size=20).filter(
-            lambda s: any(
-                c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
-                for c in s
+            lambda s: (
+                # Non-ASCII characters are always rejected
+                not s.isascii()
+                or (
+                    # After stripping, string must be non-empty with invalid chars
+                    s.strip()
+                    and any(
+                        c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
+                        for c in s.strip()
+                    )
+                )
             )
         )
     )
     def test_should_reject_invalid_characters(self, username: str):
-        """Property-based test: usernames with invalid characters should be rejected."""
+        """Property-based test: usernames with invalid characters should be rejected.
+
+        Note: Leading/trailing whitespace is stripped before validation, so strings
+        where the only invalid characters are leading/trailing ASCII whitespace
+        will not be rejected (they become valid after stripping).
+        """
         with pytest.raises(typer.BadParameter):
             validate_ssh_username(username)

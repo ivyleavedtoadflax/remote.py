@@ -32,6 +32,7 @@ from remote.pricing import (
     format_price,
     get_instance_price_with_fallback,
 )
+from remote.scheduler import delete_all_schedules_for_instance
 from remote.settings import (
     CONNECTION_RETRY_SLEEP_SECONDS,
     DEFAULT_EXEC_TIMEOUT_SECONDS,
@@ -1699,6 +1700,9 @@ def terminate(
 
     # Clean up any auto-shutdown alarm before terminating
     delete_auto_shutdown_alarm(instance_id)
+
+    # Clean up any EventBridge schedules before terminating
+    delete_all_schedules_for_instance(instance_id)
 
     with handle_aws_errors("EC2", "terminate_instances"):
         get_ec2_client().terminate_instances(InstanceIds=[instance_id])

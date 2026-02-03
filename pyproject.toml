@@ -26,6 +26,7 @@ dependencies = [
     "boto3>=1.42.0",
     "rich>=13.0.0",
     "pydantic-settings>=2.12.0",
+    "tzlocal>=5.3.1",
 ]
 
 [project.optional-dependencies]
@@ -96,6 +97,8 @@ dev = [
     "boto3-stubs[cloudwatch,ec2,ecs,sts]>=1.42.0",
     "hypothesis>=6.135.14",
     "mypy>=1.14.0",
+    "mypy-boto3-iam>=1.42.4",
+    "mypy-boto3-scheduler>=1.42.3",
     "pip-audit>=2.10.0",
     "pre-commit>=4.0.0",
     "pytest>=8.4.1",

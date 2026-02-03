@@ -35,6 +35,7 @@ VALID_KEYS: dict[str, str] = {
     "default_launch_template": "Default launch template name",
     "connection_method": "Default connection method (ssh or ssm)",
     "ssm_profile": "AWS profile for SSM connections",
+    "scheduler_timezone": "Timezone for scheduled wake/stop (e.g., America/New_York)",
 }
 
 
@@ -81,6 +82,9 @@ class RemoteConfig(BaseSettings):
         default=None, description="Default connection method (ssh or ssm)"
     )
     ssm_profile: str | None = Field(default=None, description="AWS profile for SSM connections")
+    scheduler_timezone: str | None = Field(
+        default=None, description="Timezone for scheduled wake/stop (e.g., America/New_York)"
+    )
 
     @field_validator("instance_name", mode="before")
     @classmethod
@@ -154,6 +158,25 @@ class RemoteConfig(BaseSettings):
             raise ValueError(
                 f"Invalid SSM profile '{v}': "
                 "must contain only alphanumeric characters, hyphens, and underscores"
+            )
+        return v
+
+    @field_validator("scheduler_timezone", mode="before")
+    @classmethod
+    def validate_scheduler_timezone(cls, v: str | None) -> str | None:
+        """Validate timezone identifier format.
+
+        Accepts IANA timezone identifiers like 'America/New_York', 'Europe/London',
+        'Australia/Sydney', 'UTC', etc.
+        """
+        if v is None or v == "":
+            return None
+        # IANA timezone format: Region/City or UTC or single word like EST
+        # Examples: America/New_York, Europe/London, Australia/Sydney, UTC, Etc/GMT+5
+        if not re.match(r"^[A-Za-z_]+(/[A-Za-z_]+)?([+-]\d+)?$", v):
+            raise ValueError(
+                f"Invalid timezone '{v}': "
+                "must be an IANA timezone identifier (e.g., 'America/New_York', 'UTC')"
             )
         return v
 
