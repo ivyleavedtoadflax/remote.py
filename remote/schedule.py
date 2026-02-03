@@ -393,21 +393,70 @@ def clear(
         print_warning("No schedules were deleted")
 
 
+def _parse_schedule_name(name: str) -> tuple[str, str] | None:
+    """Parse schedule name to extract action and instance ID.
+
+    Args:
+        name: Schedule name like "remotepy-wake-i-0123456789abcdef0"
+
+    Returns:
+        Tuple of (action, instance_id) or None if not parseable
+    """
+    if not name.startswith("remotepy-"):
+        return None
+
+    # Remove prefix
+    remainder = name[9:]  # len("remotepy-")
+
+    # Find action (wake or sleep)
+    if remainder.startswith("wake-"):
+        return ("wake", remainder[5:])
+    elif remainder.startswith("sleep-"):
+        return ("sleep", remainder[6:])
+
+    return None
+
+
 @app.command("list")
 @handle_cli_errors
 def list_cmd() -> None:
     """List all remotepy schedules."""
+    from .scheduler import get_schedule
+
     schedules = list_schedules()
 
     if not schedules:
         print_warning("No schedules found")
         return
 
-    print_info(f"Found {len(schedules)} schedule(s):")
+    print_info(f"Found {len(schedules)} schedule(s):\n")
+
+    # Header
+    typer.echo(f"  {'Instance ID':<25} {'Action':<7} {'Schedule':<30} {'Timezone':<20} {'State':<10}")
+    typer.echo(f"  {'-' * 25} {'-' * 7} {'-' * 30} {'-' * 20} {'-' * 10}")
+
     for sched in schedules:
-        name = sched.get("Name", "unknown")
+        name = sched.get("Name", "")
         state = sched.get("State", "UNKNOWN")
-        typer.echo(f"  {name} [{state}]")
+
+        # Parse instance ID and action from name
+        parsed = _parse_schedule_name(name)
+        if not parsed:
+            continue
+
+        action, instance_id = parsed
+
+        # Get full schedule details for expression and timezone
+        full_sched = get_schedule(instance_id, action)  # type: ignore[arg-type]
+        if full_sched:
+            expr = full_sched.get("ScheduleExpression", "")
+            tz = full_sched.get("ScheduleExpressionTimezone", "UTC")
+            display_expr = _format_cron_for_display(expr) if expr.startswith("cron(") else expr
+        else:
+            display_expr = "?"
+            tz = "?"
+
+        typer.echo(f"  {instance_id:<25} {action:<7} {display_expr:<30} {tz:<20} {state:<10}")
 
 
 @app.command("cleanup-role")
