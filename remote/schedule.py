@@ -18,6 +18,8 @@ from .scheduler import (
 )
 from .utils import (
     confirm_action,
+    console,
+    create_table,
     handle_cli_errors,
     print_error,
     print_info,
@@ -429,14 +431,15 @@ def list_cmd() -> None:
         print_warning("No schedules found")
         return
 
-    print_info(f"Found {len(schedules)} schedule(s):\n")
+    columns = [
+        {"name": "Instance ID", "style": "cyan"},
+        {"name": "Action", "style": "green"},
+        {"name": "Schedule"},
+        {"name": "Timezone"},
+        {"name": "State"},
+    ]
 
-    # Header
-    typer.echo(
-        f"  {'Instance ID':<25} {'Action':<7} {'Schedule':<30} {'Timezone':<20} {'State':<10}"
-    )
-    typer.echo(f"  {'-' * 25} {'-' * 7} {'-' * 30} {'-' * 20} {'-' * 10}")
-
+    rows: list[list[str]] = []
     for sched in schedules:
         name = sched.get("Name", "")
         state = sched.get("State", "UNKNOWN")
@@ -458,7 +461,9 @@ def list_cmd() -> None:
             display_expr = "?"
             tz = "?"
 
-        typer.echo(f"  {instance_id:<25} {action:<7} {display_expr:<30} {tz:<20} {state:<10}")
+        rows.append([instance_id, action, display_expr, tz, state])
+
+    console.print(create_table("Schedules", columns, rows))
 
 
 @app.command("cleanup-role")
