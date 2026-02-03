@@ -828,6 +828,7 @@ def test_terminate_instance_confirmed(mocker):
         return_value=("test-instance", "i-0123456789abcdef0"),
     )
     mocker.patch("remote.instance.delete_auto_shutdown_alarm", return_value=False)
+    mocker.patch("remote.instance.delete_all_schedules_for_instance")
 
     mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [{"Instances": [{"Tags": []}]}]
@@ -849,6 +850,7 @@ def test_terminate_terraform_managed_instance(mocker):
         return_value=("test-instance", "i-0123456789abcdef0"),
     )
     mocker.patch("remote.instance.delete_auto_shutdown_alarm", return_value=False)
+    mocker.patch("remote.instance.delete_all_schedules_for_instance")
 
     mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [
@@ -872,6 +874,7 @@ def test_terminate_should_cleanup_autoshutdown_alarm(mocker):
     mock_delete_alarm = mocker.patch(
         "remote.instance.delete_auto_shutdown_alarm", return_value=True
     )
+    mocker.patch("remote.instance.delete_all_schedules_for_instance")
 
     mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [{"Instances": [{"Tags": []}]}]
@@ -893,6 +896,7 @@ def test_terminate_should_succeed_even_if_no_autoshutdown_alarm(mocker):
     mock_delete_alarm = mocker.patch(
         "remote.instance.delete_auto_shutdown_alarm", return_value=False
     )
+    mocker.patch("remote.instance.delete_all_schedules_for_instance")
 
     mock_ec2_client.return_value.describe_instances.return_value = {
         "Reservations": [{"Instances": [{"Tags": []}]}]

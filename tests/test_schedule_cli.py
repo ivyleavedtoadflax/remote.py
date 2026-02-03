@@ -470,6 +470,13 @@ class TestListCommand:
                 {"Name": "remotepy-wake-i-222", "State": "DISABLED"},
             ],
         )
+        mocker.patch(
+            "remote.schedule.get_schedule",
+            return_value={
+                "ScheduleExpression": "cron(0 9 ? * MON-FRI *)",
+                "ScheduleExpressionTimezone": "UTC",
+            },
+        )
 
         result = runner.invoke(app, ["list"])
 
