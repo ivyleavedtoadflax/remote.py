@@ -43,10 +43,28 @@ DEFAULT_DAYS = "mon-fri"
 
 
 def _get_timezone(timezone_arg: str | None) -> str:
-    """Get timezone from argument or config, defaulting to UTC."""
+    """Get timezone from argument, config, or auto-detect from system.
+
+    Priority:
+    1. Explicit --timezone argument
+    2. scheduler_timezone in config
+    3. Auto-detect from system (via tzlocal)
+    4. Fall back to UTC
+    """
     if timezone_arg:
         return timezone_arg
-    return config_manager.get_value("scheduler_timezone") or "UTC"
+
+    config_tz = config_manager.get_value("scheduler_timezone")
+    if config_tz:
+        return config_tz
+
+    # Auto-detect from system
+    try:
+        from tzlocal import get_localzone_name
+
+        return get_localzone_name()
+    except Exception:
+        return "UTC"
 
 
 def _format_cron_for_display(cron_expr: str) -> str:
