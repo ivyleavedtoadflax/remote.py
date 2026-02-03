@@ -471,7 +471,7 @@ class TestListCommand:
             ],
         )
         mocker.patch(
-            "remote.schedule.get_schedule",
+            "remote.scheduler.get_schedule",
             return_value={
                 "ScheduleExpression": "cron(0 9 ? * MON-FRI *)",
                 "ScheduleExpressionTimezone": "UTC",
