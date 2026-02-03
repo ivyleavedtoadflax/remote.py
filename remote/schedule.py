@@ -432,7 +432,9 @@ def list_cmd() -> None:
     print_info(f"Found {len(schedules)} schedule(s):\n")
 
     # Header
-    typer.echo(f"  {'Instance ID':<25} {'Action':<7} {'Schedule':<30} {'Timezone':<20} {'State':<10}")
+    typer.echo(
+        f"  {'Instance ID':<25} {'Action':<7} {'Schedule':<30} {'Timezone':<20} {'State':<10}"
+    )
     typer.echo(f"  {'-' * 25} {'-' * 7} {'-' * 30} {'-' * 20} {'-' * 10}")
 
     for sched in schedules:
