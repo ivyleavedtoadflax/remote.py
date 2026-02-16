@@ -1141,6 +1141,7 @@ def connect(
             try:
                 ip, modified_groups = whitelist_ip_for_instance(
                     instance_id,
+                    instance_name,
                     ip_address=None,
                     exclusive=exclusive,
                     ports=resolved_ports,

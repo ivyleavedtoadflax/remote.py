@@ -312,6 +312,7 @@ clear_ssh_rules = clear_port_rules
 
 def whitelist_ip_for_instance(
     instance_id: str,
+    instance_name: str,
     ip_address: str | None = None,
     exclusive: bool = False,
     port: int = SSH_PORT,
@@ -319,8 +320,12 @@ def whitelist_ip_for_instance(
 ) -> tuple[str, list[str]]:
     """Whitelist an IP address for access to an instance on one or more ports.
 
+    Targets only the remotepy-managed security group (auto-created if needed).
+    Pre-checks all SGs for existing rules to avoid duplicates.
+
     Args:
         instance_id: The EC2 instance ID
+        instance_name: The instance name (used for managed SG naming)
         ip_address: The IP to whitelist (defaults to current public IP)
         exclusive: If True, remove all other IPs before adding
         port: The port to whitelist (default: 22 for SSH). Used when ports is None.
@@ -330,7 +335,7 @@ def whitelist_ip_for_instance(
         Tuple of (whitelisted IP, list of security group IDs modified)
 
     Raises:
-        ValidationError: If no security groups found or IP retrieval fails
+        ValidationError: If IP retrieval fails
         AWSServiceError: If AWS API call fails
     """
     # Get the IP to whitelist
@@ -340,43 +345,30 @@ def whitelist_ip_for_instance(
     # Determine the port list
     port_list = ports if ports else [port]
 
-    # Get the instance's security groups
-    security_groups = get_instance_security_groups(instance_id)
-    if not security_groups:
-        raise ValidationError(f"No security groups found for instance {instance_id}")
+    # Target the remotepy-managed SG
+    sg_id = find_or_create_remotepy_sg(instance_name, instance_id)
+    modified = False
 
-    modified_groups: list[str] = []
+    for p in port_list:
+        # Pre-check: does the rule already exist in ANY SG?
+        existing = check_existing_rule(instance_id, ip_address, p)
+        if existing:
+            continue  # Already whitelisted somewhere
 
-    for sg in security_groups:
-        sg_id = sg["GroupId"]
-        sg_modified = False
+        # If exclusive, clear existing rules in the target SG first
+        if exclusive:
+            clear_port_rules(sg_id, p, exclude_ip=ip_address)
 
-        for p in port_list:
-            # If exclusive, clear existing rules first
-            if exclusive:
-                clear_port_rules(sg_id, p, exclude_ip=ip_address)
+        # Add the IP
+        try:
+            add_ip_to_security_group(sg_id, ip_address, p)
+            modified = True
+        except AWSServiceError as e:
+            if "InvalidPermission.Duplicate" in str(e):
+                continue
+            raise
 
-            # Check if the IP is already whitelisted
-            existing_ips = get_ip_rules_for_port(sg_id, p)
-            # Use CIDR as-is if provided, otherwise append /32
-            ip_cidr = ip_address if "/" in ip_address else f"{ip_address}/32"
-
-            if ip_cidr in existing_ips:
-                continue  # Already whitelisted
-
-            # Add the IP
-            try:
-                add_ip_to_security_group(sg_id, ip_address, p)
-                sg_modified = True
-            except AWSServiceError as e:
-                # Check if it's a duplicate rule error
-                if "InvalidPermission.Duplicate" in str(e):
-                    continue
-                raise
-
-        if sg_modified and sg_id not in modified_groups:
-            modified_groups.append(sg_id)
-
+    modified_groups = [sg_id] if modified else []
     return ip_address, modified_groups
 
 
@@ -540,6 +532,80 @@ def detach_security_group_from_instance(instance_id: str, sg_id: str) -> None:
         )
 
 
+def find_or_create_remotepy_sg(instance_name: str, instance_id: str) -> str:
+    """Find the remotepy-managed SG for an instance, or create and attach one.
+
+    Args:
+        instance_name: The instance name
+        instance_id: The EC2 instance ID
+
+    Returns:
+        The security group ID of the remotepy-managed SG
+    """
+    sg_name = f"remotepy-{instance_name}"
+
+    # Check if it already exists among attached SGs
+    attached_sgs = get_instance_security_groups(instance_id)
+    for sg in attached_sgs:
+        if sg["GroupName"] == sg_name:
+            return sg["GroupId"]
+
+    # Not found — create, attach, and return
+    vpc_id = get_instance_vpc_id(instance_id)
+    sg_id = create_instance_security_group(instance_name, vpc_id)
+    attach_security_group_to_instance(instance_id, sg_id)
+    print_info(f"Created managed security group {sg_name} ({sg_id})")
+    return sg_id
+
+
+def check_existing_rule(instance_id: str, ip_address: str, port: int) -> dict[str, str] | None:
+    """Check all SGs on an instance for an existing matching rule (same IP+port).
+
+    Args:
+        instance_id: The EC2 instance ID
+        ip_address: The IP address or CIDR to check
+        port: The port to check
+
+    Returns:
+        Dict with 'GroupId' and 'GroupName' of the SG where the rule exists,
+        or None if not found in any SG.
+    """
+    cidr = ip_address if "/" in ip_address else f"{ip_address}/32"
+    security_groups = get_instance_security_groups(instance_id)
+
+    for sg in security_groups:
+        existing_ips = get_ip_rules_for_port(sg["GroupId"], port)
+        if cidr in existing_ips:
+            return {"GroupId": sg["GroupId"], "GroupName": sg["GroupName"]}
+
+    return None
+
+
+def validate_sg_for_instance(sg_id: str, instance_id: str) -> dict[str, str]:
+    """Validate that a security group is attached to an instance.
+
+    Args:
+        sg_id: The security group ID to validate
+        instance_id: The EC2 instance ID
+
+    Returns:
+        The SG dict with GroupId and GroupName
+
+    Raises:
+        ValidationError: If not attached
+    """
+    security_groups = get_instance_security_groups(instance_id)
+    for sg in security_groups:
+        if sg["GroupId"] == sg_id:
+            return {"GroupId": sg["GroupId"], "GroupName": sg["GroupName"]}
+
+    attached_ids = [sg["GroupId"] for sg in security_groups]
+    raise ValidationError(
+        f"Security group {sg_id} is not attached to instance {instance_id}. "
+        f"Attached SGs: {', '.join(attached_ids)}"
+    )
+
+
 # ============================================================================
 # CLI Commands
 # ============================================================================
@@ -565,7 +631,13 @@ def add_ip(
         False,
         "--exclusive",
         "-e",
-        help="Remove all other IPs before adding (makes this IP the only one allowed)",
+        help="Remove all other IPs on the target SG before adding",
+    ),
+    sg: str | None = typer.Option(
+        None,
+        "--sg",
+        "-s",
+        help="Target a specific security group ID instead of the remotepy-managed SG",
     ),
     yes: bool = typer.Option(
         False,
@@ -580,9 +652,15 @@ def add_ip(
     Adds an inbound rule allowing the specified IP to access the instance
     on the given port(s) (default: SSH port 22).
 
+    By default, rules are added to the remotepy-managed security group
+    (remotepy-{instance}), which is auto-created if needed. Use --sg to
+    target a specific security group instead.
+
+    Before adding, all security groups are checked for existing matching
+    rules to avoid duplicates.
+
     If no IP is specified, your current public IP address is used.
-    Use --exclusive to remove all other IPs first, making this the only
-    allowed IP address.
+    Use --exclusive to remove all other IPs from the target SG first.
 
     Examples:
         remote sg add-ip my-instance                              # Add your current IP for SSH
@@ -590,6 +668,7 @@ def add_ip(
         remote sg add-ip --exclusive                              # Add your IP, remove others
         remote sg add-ip --port 443 --ip 1.2.3.4                 # Allow HTTPS from specific IP
         remote sg add-ip --port ssh --port syncthing              # Multiple ports
+        remote sg add-ip --sg sg-12345                            # Target specific SG
     """
     instance_name, instance_id = resolve_instance_or_exit(instance_name)
 
@@ -619,51 +698,56 @@ def add_ip(
             print_warning("Operation cancelled")
             return
 
-    # Get security groups
-    security_groups = get_instance_security_groups(instance_id)
-    if not security_groups:
-        print_error(f"No security groups found for instance {instance_name}")
-        raise typer.Exit(1)
-
-    sg_names = [f"{sg['GroupName']} ({sg['GroupId']})" for sg in security_groups]
-    print_info(f"Security groups: {', '.join(sg_names)}")
-
-    modified_count = 0
-    for sg in security_groups:
-        sg_id = sg["GroupId"]
-        sg_name = sg["GroupName"]
-
-        for port in resolved_ports:
-            if exclusive:
-                removed = clear_port_rules(sg_id, port, exclude_ip=ip_address)
-                if removed > 0:
-                    print_warning(
-                        f"Removed {removed} existing IP rule(s) from {sg_name} on port {port}"
-                    )
-
-            # Check if already whitelisted
-            existing_ips = get_ip_rules_for_port(sg_id, port)
-            # Use CIDR as-is if provided, otherwise append /32
-            ip_cidr = ip_address if "/" in ip_address else f"{ip_address}/32"
-
-            if ip_cidr in existing_ips:
-                print_info(f"IP {ip_address} already whitelisted in {sg_name} on port {port}")
-                continue
-
-            try:
-                add_ip_to_security_group(sg_id, ip_address, port, "Added by remote.py")
-                print_success(f"Added {ip_address} to {sg_name} on port {port}")
-                modified_count += 1
-            except AWSServiceError as e:
-                if "InvalidPermission.Duplicate" in str(e):
-                    print_info(f"IP {ip_address} already whitelisted in {sg_name}")
-                else:
-                    raise
-
-    if modified_count == 0:
-        print_info("No changes made - IP already whitelisted in all security groups")
+    # Determine the target SG
+    if sg:
+        target_sg = validate_sg_for_instance(sg, instance_id)
+        target_sg_id = target_sg["GroupId"]
+        target_sg_name = target_sg["GroupName"]
     else:
-        print_success(f"IP {ip_address} whitelisted for instance '{instance_name}'")
+        target_sg_id = find_or_create_remotepy_sg(instance_name, instance_id)
+        target_sg_name = f"remotepy-{instance_name}"
+
+    added_count = 0
+    for port in resolved_ports:
+        # Pre-check: does this rule already exist in ANY SG?
+        existing = check_existing_rule(instance_id, ip_address, port)
+        if existing:
+            print_info(
+                f"{ip_address} already has access to port {port} (via '{existing['GroupName']}')"
+            )
+            continue
+
+        if exclusive:
+            removed = clear_port_rules(target_sg_id, port, exclude_ip=ip_address)
+            if removed > 0:
+                print_warning(
+                    f"Removed {removed} existing IP rule(s) from {target_sg_name} on port {port}"
+                )
+
+        try:
+            add_ip_to_security_group(target_sg_id, ip_address, port, "Added by remote.py")
+            print_success(f"Allowed {ip_address} on port {port}")
+            added_count += 1
+        except AWSServiceError as e:
+            if "InvalidPermission.Duplicate" in str(e):
+                print_info(
+                    f"{ip_address} already has access to port {port} (via '{target_sg_name}')"
+                )
+            else:
+                raise
+
+        # Stale rule nudge: check if other IPs exist on this port in the target SG
+        other_ips = get_ip_rules_for_port(target_sg_id, port)
+        ip_cidr = ip_address if "/" in ip_address else f"{ip_address}/32"
+        other_count = sum(1 for ip in other_ips if ip != ip_cidr)
+        if other_count > 0 and not exclusive:
+            print_info(
+                f"Note: {other_count} other IP(s) have access on port {port}. "
+                f"Use --exclusive to keep only yours."
+            )
+
+    if added_count == 0:
+        print_info("No changes needed")
 
 
 @app.command("remove-ip")
@@ -682,6 +766,12 @@ def remove_ip(
         "-p",
         help="Port(s) or service name(s) (ssh, syncthing, etc). Repeatable. Default: ssh.",
     ),
+    sg: str | None = typer.Option(
+        None,
+        "--sg",
+        "-s",
+        help="Only remove from a specific security group ID",
+    ),
     yes: bool = typer.Option(
         False,
         "--yes",
@@ -690,10 +780,11 @@ def remove_ip(
     ),
 ) -> None:
     """
-    Remove an IP address from an instance's security group.
+    Remove an IP address from an instance's security groups.
 
-    Removes the inbound rule allowing the specified IP to access the instance
-    on the given port(s) (default: SSH port 22).
+    Searches all security groups attached to the instance for matching rules
+    and removes them, reporting which SGs were affected. Use --sg to only
+    remove from a specific security group.
 
     If no IP is specified, your current public IP address is used.
 
@@ -702,6 +793,7 @@ def remove_ip(
         remote sg remove-ip my-instance --ip 1.2.3.4  # Remove specific IP
         remote sg remove-ip --port 443 --ip 1.2.3.4    # Remove HTTPS access
         remote sg remove-ip --port ssh --port syncthing # Remove from multiple ports
+        remote sg remove-ip --sg sg-12345               # Only remove from specific SG
     """
     instance_name, instance_id = resolve_instance_or_exit(instance_name)
 
@@ -730,21 +822,24 @@ def remove_ip(
             print_warning("Operation cancelled")
             return
 
-    # Get security groups
-    security_groups = get_instance_security_groups(instance_id)
-    if not security_groups:
-        print_error(f"No security groups found for instance {instance_name}")
-        raise typer.Exit(1)
+    # Determine which SGs to search
+    if sg:
+        target_sg = validate_sg_for_instance(sg, instance_id)
+        security_groups = [target_sg]
+    else:
+        security_groups = get_instance_security_groups(instance_id)
+        if not security_groups:
+            print_error(f"No security groups found for instance {instance_name}")
+            raise typer.Exit(1)
 
-    removed_count = 0
-    for sg in security_groups:
-        sg_id = sg["GroupId"]
-        sg_name = sg["GroupName"]
+    affected_sgs: list[str] = []
+    for sg_info in security_groups:
+        sg_id = sg_info["GroupId"]
+        sg_name = sg_info["GroupName"]
 
         for port in resolved_ports:
             # Check if the IP exists in this security group
             existing_ips = get_ip_rules_for_port(sg_id, port)
-            # Use CIDR as-is if provided, otherwise append /32
             ip_cidr = ip_address if "/" in ip_address else f"{ip_address}/32"
 
             if ip_cidr not in existing_ips:
@@ -752,17 +847,19 @@ def remove_ip(
 
             try:
                 remove_ip_from_security_group(sg_id, ip_address, port)
-                print_success(f"Removed {ip_address} from {sg_name} on port {port}")
-                removed_count += 1
+                if sg_name not in affected_sgs:
+                    affected_sgs.append(sg_name)
             except AWSServiceError as e:
                 if "InvalidPermission.NotFound" in str(e):
                     continue
                 raise
 
-    if removed_count == 0:
+    if not affected_sgs:
         print_warning(f"IP {ip_address} was not found in any security group")
     else:
-        print_success(f"Removed {ip_address} from {removed_count} rule(s)")
+        sg_list = " and ".join(f"'{s}'" for s in affected_sgs)
+        port_desc = ", ".join(str(p) for p in resolved_ports)
+        print_success(f"Removed {ip_address} from port {port_desc} in {sg_list}")
 
 
 @app.command("list-ips")
@@ -773,65 +870,60 @@ def list_ips(
         None,
         "--port",
         "-p",
-        help="Port(s) or service name(s) to filter by. Repeatable. Default: ssh.",
+        help="Port(s) or service name(s) to filter by. Repeatable.",
     ),
-    all_rules: bool = typer.Option(
-        False,
-        "--all",
-        "-a",
-        help="Show all inbound rules (skip port filtering)",
+    sg: str | None = typer.Option(
+        None,
+        "--sg",
+        "-s",
+        help="Filter by a specific security group ID",
     ),
 ) -> None:
     """
     List IP addresses allowed to access an instance.
 
-    Shows all IP addresses that have inbound access to the instance
-    on the specified port(s) (default: SSH port 22).
-
-    Use --all to show all inbound rules regardless of port.
+    Shows all inbound IP rules across all security groups attached to the
+    instance, with attribution showing which SG each rule belongs to.
+    Use --port to filter by specific port(s). Use --sg to filter by a
+    specific security group.
 
     Examples:
-        remote sg list-ips my-instance                  # List SSH-allowed IPs
-        remote sg list-ips --port 443                   # List HTTPS-allowed IPs
-        remote sg list-ips --port ssh --port syncthing  # List rules for multiple ports
-        remote sg list-ips --all                        # List all inbound rules
+        remote sg list-ips my-instance                  # List all inbound rules
+        remote sg list-ips --port 22                    # Filter by SSH port
+        remote sg list-ips --port ssh --port syncthing  # Filter by multiple ports
+        remote sg list-ips --sg sg-12345                # Filter by specific SG
     """
     instance_name, instance_id = resolve_instance_or_exit(instance_name)
 
-    # Get security groups
-    security_groups = get_instance_security_groups(instance_id)
-    if not security_groups:
-        print_error(f"No security groups found for instance {instance_name}")
-        raise typer.Exit(1)
+    # Determine which SGs to show
+    if sg:
+        target_sg = validate_sg_for_instance(sg, instance_id)
+        security_groups = [target_sg]
+    else:
+        security_groups = get_instance_security_groups(instance_id)
+        if not security_groups:
+            print_error(f"No security groups found for instance {instance_name}")
+            raise typer.Exit(1)
 
-    # Resolve ports (default to SSH) unless --all
-    resolved_ports = None
-    if not all_rules:
-        resolved_ports = [resolve_port(p) for p in ports] if ports else [SSH_PORT]
+    # Resolve port filter (None = show all)
+    resolved_ports = [resolve_port(p) for p in ports] if ports else None
 
-    # Build table columns - include Port and Protocol columns when showing all or multiple ports
-    show_port_columns = all_rules or (resolved_ports is not None and len(resolved_ports) > 1)
+    # Always show port/protocol columns (default is now all rules)
     columns = [
         styled_column("Security Group", "name"),
         styled_column("Group ID", "id"),
+        styled_column("Port", "numeric"),
+        styled_column("Protocol"),
+        styled_column("CIDR Block"),
+        styled_column("Description"),
     ]
-    if show_port_columns:
-        columns.append(styled_column("Port", "numeric"))
-        columns.append(styled_column("Protocol"))
-    columns.extend(
-        [
-            styled_column("CIDR Block"),
-            styled_column("Description"),
-        ]
-    )
 
     rows: list[list[str]] = []
 
-    for sg in security_groups:
-        sg_id = sg["GroupId"]
-        sg_name = sg["GroupName"]
+    for sg_info in security_groups:
+        sg_id = sg_info["GroupId"]
+        sg_name = sg_info["GroupName"]
 
-        # Get detailed rules to include descriptions
         rules = get_security_group_rules(sg_id)
 
         for rule in rules:
@@ -839,7 +931,7 @@ def list_ips(
             to_port = rule.get("ToPort", 0)
             protocol = rule.get("IpProtocol", "tcp")
 
-            # Filter by port unless --all
+            # Filter by port if specified
             if resolved_ports is not None:
                 match = False
                 for p in resolved_ports:
@@ -853,34 +945,29 @@ def list_ips(
                 cidr = ip_range.get("CidrIp", "")
                 description = ip_range.get("Description", "-")
                 if cidr:
-                    # Format port display
                     if from_port == to_port:
                         port_display = str(from_port)
                     else:
                         port_display = f"{from_port}-{to_port}"
 
-                    row = [sg_name, sg_id]
-                    if show_port_columns:
-                        row.extend([port_display, protocol])
-                    row.extend([cidr, description])
-                    rows.append(row)
+                    rows.append([sg_name, sg_id, port_display, protocol, cidr, description])
 
     if not rows:
-        if all_rules:
-            print_warning(f"No inbound IP rules found on instance '{instance_name}'")
-        else:
-            port_desc = ", ".join(str(p) for p in (resolved_ports or []))
+        if resolved_ports:
+            port_desc = ", ".join(str(p) for p in resolved_ports)
             print_warning(
                 f"No IP rules found for port(s) {port_desc} on instance '{instance_name}'"
             )
+        else:
+            print_warning(f"No inbound IP rules found on instance '{instance_name}'")
         return
 
-    if all_rules:
-        title = "All Inbound IP Rules"
-    elif resolved_ports and len(resolved_ports) == 1:
+    if resolved_ports and len(resolved_ports) == 1:
         title = f"IP Rules for Port {resolved_ports[0]}"
+    elif resolved_ports:
+        title = f"IP Rules for Ports {', '.join(str(p) for p in resolved_ports)}"
     else:
-        title = f"IP Rules for Ports {', '.join(str(p) for p in (resolved_ports or []))}"
+        title = "All Inbound IP Rules"
     console.print(create_table(title, columns, rows))
 
 
@@ -966,10 +1053,23 @@ def create_sg(
     VPC and attaches it to the instance. This allows managing IP rules independently
     from the instance's existing security groups.
 
+    If the security group already exists and is attached, this is a no-op.
+
     Examples:
         remote sg create my-instance
     """
     instance_name, instance_id = resolve_instance_or_exit(instance_name)
+
+    sg_name = f"remotepy-{instance_name}"
+
+    # Check if already exists
+    attached_sgs = get_instance_security_groups(instance_id)
+    for existing_sg in attached_sgs:
+        if existing_sg["GroupName"] == sg_name:
+            print_info(
+                f"Security group {sg_name} ({existing_sg['GroupId']}) already exists and is attached"
+            )
+            return
 
     print_info(f"Creating security group for instance '{instance_name}'...")
 
@@ -977,7 +1077,7 @@ def create_sg(
     sg_id = create_instance_security_group(instance_name, vpc_id)
     attach_security_group_to_instance(instance_id, sg_id)
 
-    print_success(f"Created and attached security group remotepy-{instance_name} ({sg_id})")
+    print_success(f"Created and attached security group {sg_name} ({sg_id})")
 
 
 @app.command("delete")
