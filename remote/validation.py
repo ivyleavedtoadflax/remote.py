@@ -61,6 +61,23 @@ class _Unset:
 _UNSET = _Unset()
 
 
+def validate_port(port: int) -> int:
+    """Validate that a port number is in the valid range (1-65535).
+
+    Args:
+        port: The port number to validate
+
+    Returns:
+        The validated port number
+
+    Raises:
+        ValidationError: If port is outside the valid range
+    """
+    if not isinstance(port, int) or port < 1 or port > 65535:
+        raise ValidationError(f"Invalid port number: {port}. Must be between 1 and 65535.")
+    return port
+
+
 def validate_instance_type(instance_type: str) -> str:
     """Validate EC2 instance type format.
 

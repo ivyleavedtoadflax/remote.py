@@ -46,6 +46,21 @@ SSM_MAX_POLL_ATTEMPTS = 30  # Max polling attempts (2s * 30 = 60s timeout)
 SSM_DEFAULT_SHELL_USER = "ubuntu"  # Default user for interactive shell
 
 
+# Common port presets for security group management
+PORT_PRESETS: dict[str, int] = {
+    "ssh": 22,
+    "http": 80,
+    "https": 443,
+    "syncthing-gui": 8384,
+    "syncthing": 22000,
+    "jupyter": 8888,
+    "rdp": 3389,
+    "postgres": 5432,
+    "mysql": 3306,
+    "redis": 6379,
+}
+
+
 @dataclass
 class Settings:
     """Application settings for testing and development."""

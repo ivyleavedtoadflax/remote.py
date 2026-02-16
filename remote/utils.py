@@ -1236,6 +1236,36 @@ def format_duration(
     return " ".join(parts)
 
 
+def get_instance_names_by_ids(instance_ids: list[str]) -> dict[str, str]:
+    """Look up instance names by their IDs in a single API call.
+
+    Args:
+        instance_ids: List of EC2 instance IDs to look up
+
+    Returns:
+        Dictionary mapping instance_id -> Name tag value.
+        Missing or terminated instances are omitted from the result.
+    """
+    if not instance_ids:
+        return {}
+
+    try:
+        with handle_aws_errors("EC2", "describe_instances"):
+            response = get_ec2_client().describe_instances(InstanceIds=instance_ids)
+    except AWSServiceError:
+        return {}
+
+    names: dict[str, str] = {}
+    for reservation in response.get("Reservations", []):
+        for instance in reservation.get("Instances", []):
+            instance_id = instance.get("InstanceId", "")
+            tags = extract_tags_dict(instance.get("Tags"))
+            if instance_id and "Name" in tags:
+                names[instance_id] = tags["Name"]
+
+    return names
+
+
 def get_current_region() -> str:
     """Get the current AWS region from the session.
 

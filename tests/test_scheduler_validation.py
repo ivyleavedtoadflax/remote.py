@@ -401,11 +401,16 @@ class TestParseScheduleDate:
         result = parse_schedule_date("monday")
         assert result == date(2026, 2, 9)
 
-    def test_should_parse_iso_date_format(self):
+    def test_should_parse_iso_date_format(self, mocker):
         """Should parse ISO date format YYYY-MM-DD."""
         from datetime import date
 
         from remote.validation import parse_schedule_date
+
+        # Mock today so the date is always in the future
+        mock_date = mocker.patch("remote.validation.date")
+        mock_date.today.return_value = date(2026, 2, 1)
+        mock_date.side_effect = lambda *args, **kwargs: date(*args, **kwargs)
 
         result = parse_schedule_date("2026-02-15")
         assert result == date(2026, 2, 15)

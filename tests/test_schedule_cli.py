@@ -471,11 +471,15 @@ class TestListCommand:
             ],
         )
         mocker.patch(
-            "remote.scheduler.get_schedule",
+            "remote.schedule.get_schedule",
             return_value={
                 "ScheduleExpression": "cron(0 9 ? * MON-FRI *)",
                 "ScheduleExpressionTimezone": "UTC",
             },
+        )
+        mocker.patch(
+            "remote.utils.get_instance_names_by_ids",
+            return_value={},
         )
 
         result = runner.invoke(app, ["list"])
@@ -494,6 +498,61 @@ class TestListCommand:
 
         assert result.exit_code == 0
         assert "No schedules" in result.stdout or "none" in result.stdout.lower()
+
+    def test_should_show_instance_names_when_available(self, mocker):
+        """Should display instance names instead of IDs when names are available."""
+        from remote.schedule import app
+
+        mocker.patch(
+            "remote.schedule.list_schedules",
+            return_value=[
+                {"Name": "remotepy-wake-i-111", "State": "ENABLED"},
+                {"Name": "remotepy-sleep-i-111", "State": "ENABLED"},
+            ],
+        )
+        mocker.patch(
+            "remote.schedule.get_schedule",
+            return_value={
+                "ScheduleExpression": "cron(0 9 ? * MON-FRI *)",
+                "ScheduleExpressionTimezone": "UTC",
+            },
+        )
+        mocker.patch(
+            "remote.utils.get_instance_names_by_ids",
+            return_value={"i-111": "my-dev-server"},
+        )
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 0
+        assert "my-dev-server" in result.stdout
+
+    def test_should_fall_back_to_instance_id_when_name_not_available(self, mocker):
+        """Should fall back to instance ID when name lookup returns empty."""
+        from remote.schedule import app
+
+        mocker.patch(
+            "remote.schedule.list_schedules",
+            return_value=[
+                {"Name": "remotepy-wake-i-terminated", "State": "ENABLED"},
+            ],
+        )
+        mocker.patch(
+            "remote.schedule.get_schedule",
+            return_value={
+                "ScheduleExpression": "cron(0 9 ? * MON-FRI *)",
+                "ScheduleExpressionTimezone": "UTC",
+            },
+        )
+        mocker.patch(
+            "remote.utils.get_instance_names_by_ids",
+            return_value={},  # No names found (e.g., terminated instance)
+        )
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 0
+        assert "i-terminated" in result.stdout
 
 
 # ============================================================================

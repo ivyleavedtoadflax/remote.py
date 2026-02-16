@@ -3158,6 +3158,98 @@ class TestLaunchCommand:
         assert result.exit_code == 0
         assert "No instance information returned" in result.stdout
 
+    def test_launch_with_create_sg_flag(self, mocker):
+        """Should create and attach a security group when --create-sg is used."""
+        mock_config = mocker.patch("remote.instance_resolver.config_manager")
+        mock_config.get_value.return_value = None
+        mocker.patch(
+            "remote.instance_resolver.get_launch_template_id",
+            return_value="lt-0123456789abcdef0",
+        )
+        mock_ec2 = mocker.patch("remote.instance_resolver.get_ec2_client")
+        mock_ec2.return_value.run_instances.return_value = {
+            "Instances": [
+                {
+                    "InstanceId": "i-new123",
+                    "InstanceType": "t3.micro",
+                }
+            ]
+        }
+
+        # Mock sg functions (imported locally from remote.sg inside launch_instance_from_template)
+        mock_get_vpc = mocker.patch(
+            "remote.sg.get_instance_vpc_id",
+            return_value="vpc-12345",
+        )
+        mock_create_sg = mocker.patch(
+            "remote.sg.create_instance_security_group",
+            return_value="sg-new456",
+        )
+        mock_attach_sg = mocker.patch(
+            "remote.sg.attach_security_group_to_instance",
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "launch",
+                "--name",
+                "test-instance",
+                "--launch-template",
+                "my-template",
+                "--create-sg",
+                "--yes",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert "Instance Launched" in result.stdout
+        mock_get_vpc.assert_called_once_with("i-new123")
+        mock_create_sg.assert_called_once_with("test-instance", "vpc-12345")
+        mock_attach_sg.assert_called_once_with("i-new123", "sg-new456")
+
+    def test_launch_with_create_sg_failure_continues(self, mocker):
+        """Should warn but not fail if SG creation fails during launch."""
+        mock_config = mocker.patch("remote.instance_resolver.config_manager")
+        mock_config.get_value.return_value = None
+        mocker.patch(
+            "remote.instance_resolver.get_launch_template_id",
+            return_value="lt-001",
+        )
+        mock_ec2 = mocker.patch("remote.instance_resolver.get_ec2_client")
+        mock_ec2.return_value.run_instances.return_value = {
+            "Instances": [
+                {
+                    "InstanceId": "i-new123",
+                    "InstanceType": "t3.micro",
+                }
+            ]
+        }
+
+        # Mock sg functions to fail (imported locally from remote.sg)
+        mocker.patch(
+            "remote.sg.get_instance_vpc_id",
+            side_effect=Exception("VPC lookup failed"),
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "launch",
+                "--name",
+                "test-instance",
+                "--launch-template",
+                "my-template",
+                "--create-sg",
+                "--yes",
+            ],
+        )
+
+        # Should succeed (launch still worked) but show warning
+        assert result.exit_code == 0
+        assert "Instance Launched" in result.stdout
+        assert "Failed to create security group" in result.stdout
+
 
 class TestResolveInstanceWithoutName:
     """Test resolve_instance when instance_name is None (line 80)."""

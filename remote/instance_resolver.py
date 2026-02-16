@@ -116,6 +116,7 @@ def launch_instance_from_template(
     launch_template: str | None = None,
     version: str = "$Latest",
     yes: bool = False,
+    create_sg: bool = False,
 ) -> None:
     """Launch a new EC2 instance from a launch template.
 
@@ -129,6 +130,7 @@ def launch_instance_from_template(
         launch_template: Launch template name. If None, uses default or interactive selection.
         version: Launch template version. Defaults to "$Latest".
         yes: If True, skip interactive prompts and require all parameters.
+        create_sg: If True, create and attach a per-instance security group after launch.
 
     Raises:
         typer.Exit: If no templates found or user cancels selection.
@@ -263,6 +265,25 @@ def launch_instance_from_template(
             expand=False,
         )
         console.print(panel)
+
+        # Create and attach per-instance security group if requested
+        if create_sg and name:
+            from remote.sg import (
+                attach_security_group_to_instance,
+                create_instance_security_group,
+                get_instance_vpc_id,
+            )
+            from remote.utils import print_info, print_success
+
+            print_info(f"Creating security group remotepy-{name}...")
+            try:
+                vpc_id = get_instance_vpc_id(instance_id)
+                sg_id = create_instance_security_group(name, vpc_id)
+                attach_security_group_to_instance(instance_id, sg_id)
+                print_success(f"Created and attached security group remotepy-{name} ({sg_id})")
+            except Exception as e:
+                print_warning(f"Warning: Failed to create security group: {e}")
+
     except ValidationError as e:
         print_error(f"Error accessing launch result: {e}")
         raise typer.Exit(1)

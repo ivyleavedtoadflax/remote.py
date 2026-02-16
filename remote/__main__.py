@@ -56,7 +56,7 @@ app.add_typer(config_app, name="config", help="Manage configuration")
 app.add_typer(snapshot_app, name="snapshot", help="Manage EBS snapshots")
 app.add_typer(volume_app, name="volume", help="Manage EBS volumes")
 app.add_typer(ecs_app, name="ecs", help="Manage ECS clusters and services")
-app.add_typer(sg_app, name="sg", help="Manage security group IP rules")
+app.add_typer(sg_app, name="sg", help="Manage security groups and IP rules")
 app.add_typer(schedule_app, name="schedule", help="Manage scheduled wake/sleep")
 
 
