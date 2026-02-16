@@ -19,6 +19,7 @@ from remote.sg import (
     get_instance_vpc_id,
     get_ip_rules_for_port,
     get_public_ip,
+    get_security_group_details,
     get_security_group_rules,
     get_ssh_ip_rules,
     remove_ip_from_security_group,
@@ -1006,3 +1007,145 @@ class TestMyIpCommand:
 
         assert result.exit_code == 0
         assert "203.0.113.1" in result.stdout
+
+
+class TestGetSecurityGroupDetails:
+    """Tests for get_security_group_details function."""
+
+    def test_returns_full_details(self, mocker):
+        """Test that full SG details are returned."""
+        mock_ec2 = mocker.patch("remote.sg.get_ec2_client")
+        mock_ec2.return_value.describe_security_groups.return_value = {
+            "SecurityGroups": [
+                {
+                    "GroupId": "sg-12345",
+                    "GroupName": "my-sg",
+                    "Description": "My security group",
+                    "IpPermissions": [{"FromPort": 22, "ToPort": 22}],
+                    "Tags": [{"Key": "ManagedBy", "Value": "remotepy"}],
+                },
+                {
+                    "GroupId": "sg-67890",
+                    "GroupName": "other-sg",
+                    "Description": "Other group",
+                    "IpPermissions": [],
+                    "Tags": [],
+                },
+            ]
+        }
+
+        result = get_security_group_details(["sg-12345", "sg-67890"])
+
+        assert len(result) == 2
+        assert result[0]["GroupId"] == "sg-12345"
+        assert result[0]["Description"] == "My security group"
+        assert result[1]["GroupId"] == "sg-67890"
+        mock_ec2.return_value.describe_security_groups.assert_called_once_with(
+            GroupIds=["sg-12345", "sg-67890"]
+        )
+
+    def test_returns_empty_list_for_empty_input(self):
+        """Test that empty input returns empty list without API call."""
+        result = get_security_group_details([])
+        assert result == []
+
+
+class TestListSgsCommand:
+    """Tests for the sg list CLI command."""
+
+    def test_list_sgs_shows_table(self, mocker, test_config):
+        """Test that list command shows a table with SG details."""
+        mocker.patch(
+            "remote.sg.resolve_instance_or_exit",
+            return_value=("test-instance", "i-12345"),
+        )
+        mocker.patch(
+            "remote.sg.get_instance_security_groups",
+            return_value=[
+                {"GroupId": "sg-12345", "GroupName": "my-sg"},
+                {"GroupId": "sg-67890", "GroupName": "remotepy-test-instance"},
+            ],
+        )
+        mocker.patch(
+            "remote.sg.get_security_group_details",
+            return_value=[
+                {
+                    "GroupId": "sg-12345",
+                    "GroupName": "my-sg",
+                    "Description": "Default SG",
+                    "IpPermissions": [
+                        {"FromPort": 22, "ToPort": 22, "IpProtocol": "tcp"},
+                        {"FromPort": 443, "ToPort": 443, "IpProtocol": "tcp"},
+                    ],
+                    "Tags": [],
+                },
+                {
+                    "GroupId": "sg-67890",
+                    "GroupName": "remotepy-test-instance",
+                    "Description": "Managed by remotepy for instance test-instance",
+                    "IpPermissions": [
+                        {"FromPort": 22, "ToPort": 22, "IpProtocol": "tcp"},
+                    ],
+                    "Tags": [
+                        {"Key": "Name", "Value": "remotepy-test-instance"},
+                        {"Key": "ManagedBy", "Value": "remotepy"},
+                    ],
+                },
+            ],
+        )
+
+        result = runner.invoke(app, ["list", "test-instance"])
+
+        assert result.exit_code == 0
+        assert "my-sg" in result.stdout
+        assert "sg-12345" in result.stdout
+        assert "remotepy-test-instance" in result.stdout
+        assert "sg-67890" in result.stdout
+        assert "Yes" in result.stdout  # Managed column for remotepy SG
+        assert "Security Groups for 'test-instance'" in result.stdout
+
+    def test_list_sgs_no_security_groups(self, mocker, test_config):
+        """Test that error is shown when instance has no security groups."""
+        mocker.patch(
+            "remote.sg.resolve_instance_or_exit",
+            return_value=("test-instance", "i-12345"),
+        )
+        mocker.patch(
+            "remote.sg.get_instance_security_groups",
+            return_value=[],
+        )
+
+        result = runner.invoke(app, ["list", "test-instance"])
+
+        assert result.exit_code == 1
+        assert "No security groups found" in result.stdout
+
+    def test_list_sgs_single_sg(self, mocker, test_config):
+        """Test that list command works with a single security group."""
+        mocker.patch(
+            "remote.sg.resolve_instance_or_exit",
+            return_value=("test-instance", "i-12345"),
+        )
+        mocker.patch(
+            "remote.sg.get_instance_security_groups",
+            return_value=[{"GroupId": "sg-12345", "GroupName": "my-sg"}],
+        )
+        mocker.patch(
+            "remote.sg.get_security_group_details",
+            return_value=[
+                {
+                    "GroupId": "sg-12345",
+                    "GroupName": "my-sg",
+                    "Description": "My only SG",
+                    "IpPermissions": [],
+                    "Tags": [],
+                },
+            ],
+        )
+
+        result = runner.invoke(app, ["list", "test-instance"])
+
+        assert result.exit_code == 0
+        assert "my-sg" in result.stdout
+        assert "sg-12345" in result.stdout
+        assert "0" in result.stdout  # Zero inbound rules

@@ -123,6 +123,27 @@ def get_instance_security_groups(instance_id: str) -> list[dict[str, Any]]:
     return [dict(sg) for sg in security_groups]
 
 
+def get_security_group_details(security_group_ids: list[str]) -> list[dict[str, Any]]:
+    """Get full details for one or more security groups.
+
+    Args:
+        security_group_ids: List of security group IDs
+
+    Returns:
+        List of full security group dictionaries from the AWS API
+
+    Raises:
+        AWSServiceError: If AWS API call fails
+    """
+    if not security_group_ids:
+        return []
+
+    with handle_aws_errors("EC2", "describe_security_groups"):
+        response = get_ec2_client().describe_security_groups(GroupIds=security_group_ids)
+
+    return [dict(sg) for sg in response.get("SecurityGroups", [])]
+
+
 def get_security_group_rules(security_group_id: str) -> list[dict[str, Any]]:
     """Get the inbound rules for a security group.
 
@@ -861,6 +882,59 @@ def list_ips(
     else:
         title = f"IP Rules for Ports {', '.join(str(p) for p in (resolved_ports or []))}"
     console.print(create_table(title, columns, rows))
+
+
+@app.command("list")
+@handle_cli_errors
+def list_sgs(
+    instance_name: str | None = typer.Argument(None, help="Instance name"),
+) -> None:
+    """
+    List security groups attached to an instance.
+
+    Shows all security groups associated with the instance, including
+    their inbound rule count and whether they are managed by remotepy.
+
+    Examples:
+        remote sg list my-instance
+        remote sg list
+    """
+    instance_name, instance_id = resolve_instance_or_exit(instance_name)
+
+    # Get basic SG list from the instance
+    security_groups = get_instance_security_groups(instance_id)
+    if not security_groups:
+        print_error(f"No security groups found for instance '{instance_name}'")
+        raise typer.Exit(1)
+
+    # Get full details for all SGs in a single call
+    sg_ids = [sg["GroupId"] for sg in security_groups]
+    sg_details = get_security_group_details(sg_ids)
+
+    columns = [
+        styled_column("Name", "name"),
+        styled_column("Group ID", "id"),
+        styled_column("Inbound Rules", "numeric"),
+        styled_column("Managed"),
+        styled_column("Description"),
+    ]
+
+    rows: list[list[str]] = []
+    for sg in sg_details:
+        tags = {t["Key"]: t["Value"] for t in sg.get("Tags", [])}
+        managed = "Yes" if tags.get("ManagedBy") == "remotepy" else "-"
+        inbound_count = str(len(sg.get("IpPermissions", [])))
+        rows.append(
+            [
+                sg.get("GroupName", "-"),
+                sg.get("GroupId", "-"),
+                inbound_count,
+                managed,
+                sg.get("Description", "-"),
+            ]
+        )
+
+    console.print(create_table(f"Security Groups for '{instance_name}'", columns, rows))
 
 
 @app.command("my-ip")
