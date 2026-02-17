@@ -28,7 +28,36 @@ from remote.utils import (
 )
 from remote.validation import sanitize_input, validate_port
 
-app = typer.Typer()
+app = typer.Typer(
+    help="Manage security groups and IP access rules",
+    epilog="""Typical workflows:
+
+  Allow your IP to SSH into an instance:
+    remote sg add my-instance
+
+  Allow your IP on multiple ports (SSH + Syncthing):
+    remote sg add my-instance --port ssh --port syncthing
+
+  See who has access to your instance:
+    remote sg list my-instance
+
+  Revoke your IP access:
+    remote sg remove my-instance
+
+  Replace stale IPs with just yours:
+    remote sg add my-instance --exclusive
+
+  Detach a security group (deletes if empty):
+    remote sg detach my-instance --sg sg-12345
+
+How it works:
+
+  remotepy manages a dedicated security group per instance (remotepy-{name}).
+  'add' auto-creates this SG if needed and only writes rules there,
+  keeping your other SGs (Terraform, AWS console, etc.) untouched.
+  'remove' and 'list' read from ALL attached SGs by default.
+  Use --sg to target a specific security group for any command.""",
+)
 
 # URL to retrieve public IP address
 PUBLIC_IP_SERVICE_URL = "https://checkip.amazonaws.com"
@@ -611,7 +640,7 @@ def validate_sg_for_instance(sg_id: str, instance_id: str) -> dict[str, str]:
 # ============================================================================
 
 
-@app.command("add-ip")
+@app.command("add")
 @handle_cli_errors
 def add_ip(
     instance_name: str | None = typer.Argument(None, help="Instance name"),
@@ -663,12 +692,12 @@ def add_ip(
     Use --exclusive to remove all other IPs from the target SG first.
 
     Examples:
-        remote sg add-ip my-instance                              # Add your current IP for SSH
-        remote sg add-ip my-instance --ip 1.2.3.4                # Add specific IP
-        remote sg add-ip --exclusive                              # Add your IP, remove others
-        remote sg add-ip --port 443 --ip 1.2.3.4                 # Allow HTTPS from specific IP
-        remote sg add-ip --port ssh --port syncthing              # Multiple ports
-        remote sg add-ip --sg sg-12345                            # Target specific SG
+        remote sg add my-instance                              # Add your current IP for SSH
+        remote sg add my-instance --ip 1.2.3.4                # Add specific IP
+        remote sg add --exclusive                              # Add your IP, remove others
+        remote sg add --port 443 --ip 1.2.3.4                 # Allow HTTPS from specific IP
+        remote sg add --port ssh --port syncthing              # Multiple ports
+        remote sg add --sg sg-12345                            # Target specific SG
     """
     instance_name, instance_id = resolve_instance_or_exit(instance_name)
 
@@ -750,7 +779,7 @@ def add_ip(
         print_info("No changes needed")
 
 
-@app.command("remove-ip")
+@app.command("remove")
 @handle_cli_errors
 def remove_ip(
     instance_name: str | None = typer.Argument(None, help="Instance name"),
@@ -789,11 +818,11 @@ def remove_ip(
     If no IP is specified, your current public IP address is used.
 
     Examples:
-        remote sg remove-ip my-instance                 # Remove your current IP from SSH
-        remote sg remove-ip my-instance --ip 1.2.3.4  # Remove specific IP
-        remote sg remove-ip --port 443 --ip 1.2.3.4    # Remove HTTPS access
-        remote sg remove-ip --port ssh --port syncthing # Remove from multiple ports
-        remote sg remove-ip --sg sg-12345               # Only remove from specific SG
+        remote sg remove my-instance                 # Remove your current IP from SSH
+        remote sg remove my-instance --ip 1.2.3.4  # Remove specific IP
+        remote sg remove --port 443 --ip 1.2.3.4    # Remove HTTPS access
+        remote sg remove --port ssh --port syncthing # Remove from multiple ports
+        remote sg remove --sg sg-12345               # Only remove from specific SG
     """
     instance_name, instance_id = resolve_instance_or_exit(instance_name)
 
@@ -862,7 +891,7 @@ def remove_ip(
         print_success(f"Removed {ip_address} from port {port_desc} in {sg_list}")
 
 
-@app.command("list-ips")
+@app.command("list")
 @handle_cli_errors
 def list_ips(
     instance_name: str | None = typer.Argument(None, help="Instance name"),
@@ -888,10 +917,10 @@ def list_ips(
     specific security group.
 
     Examples:
-        remote sg list-ips my-instance                  # List all inbound rules
-        remote sg list-ips --port 22                    # Filter by SSH port
-        remote sg list-ips --port ssh --port syncthing  # Filter by multiple ports
-        remote sg list-ips --sg sg-12345                # Filter by specific SG
+        remote sg list my-instance                  # List all inbound rules
+        remote sg list --port 22                    # Filter by SSH port
+        remote sg list --port ssh --port syncthing  # Filter by multiple ports
+        remote sg list --sg sg-12345                # Filter by specific SG
     """
     instance_name, instance_id = resolve_instance_or_exit(instance_name)
 
@@ -971,7 +1000,7 @@ def list_ips(
     console.print(create_table(title, columns, rows))
 
 
-@app.command("list")
+@app.command("groups")
 @handle_cli_errors
 def list_sgs(
     instance_name: str | None = typer.Argument(None, help="Instance name"),
@@ -983,8 +1012,8 @@ def list_sgs(
     their inbound rule count and whether they are managed by remotepy.
 
     Examples:
-        remote sg list my-instance
-        remote sg list
+        remote sg groups my-instance
+        remote sg groups
     """
     instance_name, instance_id = resolve_instance_or_exit(instance_name)
 
@@ -1041,49 +1070,21 @@ def my_ip() -> None:
     print_success(f"Your public IP: {ip}")
 
 
-@app.command("create")
+@app.command("detach")
 @handle_cli_errors
-def create_sg(
+def detach_sg(
     instance_name: str | None = typer.Argument(None, help="Instance name"),
-) -> None:
-    """
-    Create a per-instance security group and attach it.
-
-    Creates a security group named 'remotepy-{instance_name}' in the instance's
-    VPC and attaches it to the instance. This allows managing IP rules independently
-    from the instance's existing security groups.
-
-    If the security group already exists and is attached, this is a no-op.
-
-    Examples:
-        remote sg create my-instance
-    """
-    instance_name, instance_id = resolve_instance_or_exit(instance_name)
-
-    sg_name = f"remotepy-{instance_name}"
-
-    # Check if already exists
-    attached_sgs = get_instance_security_groups(instance_id)
-    for existing_sg in attached_sgs:
-        if existing_sg["GroupName"] == sg_name:
-            print_info(
-                f"Security group {sg_name} ({existing_sg['GroupId']}) already exists and is attached"
-            )
-            return
-
-    print_info(f"Creating security group for instance '{instance_name}'...")
-
-    vpc_id = get_instance_vpc_id(instance_id)
-    sg_id = create_instance_security_group(instance_name, vpc_id)
-    attach_security_group_to_instance(instance_id, sg_id)
-
-    print_success(f"Created and attached security group {sg_name} ({sg_id})")
-
-
-@app.command("delete")
-@handle_cli_errors
-def delete_sg(
-    instance_name: str | None = typer.Argument(None, help="Instance name"),
+    sg: str | None = typer.Option(
+        None,
+        "--sg",
+        "-s",
+        help="Security group ID to detach. Defaults to the remotepy-managed SG.",
+    ),
+    cleanup: bool = typer.Option(
+        True,
+        "--cleanup/--no-cleanup",
+        help="Delete the SG if it has no rules and no other instances (default: on)",
+    ),
     yes: bool = typer.Option(
         False,
         "--yes",
@@ -1092,47 +1093,82 @@ def delete_sg(
     ),
 ) -> None:
     """
-    Delete a per-instance security group.
+    Detach a security group from an instance.
 
-    Detaches and deletes the 'remotepy-{instance_name}' security group.
+    By default, detaches the remotepy-managed SG (remotepy-{instance}).
+    Use --sg to detach a specific security group instead.
+
+    If the SG is empty (no inbound rules) and not attached to any other
+    instances, it is also deleted unless --no-cleanup is specified.
 
     Examples:
-        remote sg delete my-instance
-        remote sg delete my-instance --yes
+        remote sg detach my-instance                    # Detach remotepy SG
+        remote sg detach my-instance --sg sg-12345      # Detach specific SG
+        remote sg detach my-instance --no-cleanup       # Detach but keep the SG
+        remote sg detach --yes                          # Skip confirmation
     """
     instance_name, instance_id = resolve_instance_or_exit(instance_name)
 
-    sg_name = f"remotepy-{instance_name}"
+    if sg:
+        # Detach a specific SG
+        target_sg = validate_sg_for_instance(sg, instance_id)
+        target_sg_id = target_sg["GroupId"]
+        sg_name = target_sg["GroupName"]
+    else:
+        # Default: detach the remotepy-managed SG
+        sg_name = f"remotepy-{instance_name}"
+        attached_sgs = get_instance_security_groups(instance_id)
+        found = None
+        for attached_sg in attached_sgs:
+            if attached_sg["GroupName"] == sg_name:
+                found = attached_sg
+                break
+        if not found:
+            print_warning(f"Security group '{sg_name}' not found on instance '{instance_name}'")
+            return
+        target_sg_id = found["GroupId"]
 
     if not yes:
-        if not confirm_action("delete", "security group", sg_name):
+        if not confirm_action("detach", "security group", f"{sg_name} ({target_sg_id})"):
             print_warning("Operation cancelled")
             return
 
-    vpc_id = get_instance_vpc_id(instance_id)
+    detach_security_group_from_instance(instance_id, target_sg_id)
+    print_success(f"Detached {sg_name} ({target_sg_id}) from '{instance_name}'")
 
-    # Find the SG first to get its ID for detaching
-    with handle_aws_errors("EC2", "describe_security_groups"):
-        response = get_ec2_client().describe_security_groups(
-            Filters=[
-                {"Name": "group-name", "Values": [sg_name]},
-                {"Name": "vpc-id", "Values": [vpc_id]},
-            ]
-        )
-
-    security_groups = response.get("SecurityGroups", [])
-    if not security_groups:
-        print_warning(f"Security group '{sg_name}' not found")
+    if not cleanup:
         return
 
-    sg_id = security_groups[0]["GroupId"]
+    # Check if the SG is worth cleaning up: no rules and no other instances using it
+    details = get_security_group_details([target_sg_id])
+    if not details:
+        return
 
-    # Detach from instance first
-    detach_security_group_from_instance(instance_id, sg_id)
+    sg_detail = details[0]
+    has_rules = bool(sg_detail.get("IpPermissions"))
+    if has_rules:
+        rule_count = len(sg_detail["IpPermissions"])
+        print_info(f"{sg_name} still has {rule_count} inbound rule(s), keeping it")
+        return
 
-    # Then delete
-    deleted_id = delete_instance_security_group(instance_name, vpc_id)
-    if deleted_id:
-        print_success(f"Deleted security group {sg_name} ({deleted_id})")
-    else:
-        print_warning(f"Security group '{sg_name}' not found")
+    # Check if any other instances are using this SG
+    with handle_aws_errors("EC2", "describe_instances"):
+        response = get_ec2_client().describe_instances(
+            Filters=[{"Name": "instance.group-id", "Values": [target_sg_id]}]
+        )
+    other_instances = []
+    for reservation in response.get("Reservations", []):
+        for inst in reservation.get("Instances", []):
+            if inst["InstanceId"] != instance_id:
+                other_instances.append(inst["InstanceId"])
+
+    if other_instances:
+        print_info(
+            f"{sg_name} is still attached to {len(other_instances)} other instance(s), keeping it"
+        )
+        return
+
+    # Empty and unused — delete it
+    with handle_aws_errors("EC2", "delete_security_group"):
+        get_ec2_client().delete_security_group(GroupId=target_sg_id)
+    print_success(f"Deleted empty security group {sg_name} ({target_sg_id})")

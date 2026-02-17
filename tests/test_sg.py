@@ -787,7 +787,7 @@ class TestDetachSecurityGroup:
 
 
 class TestAddIpCommand:
-    """Tests for the add-ip CLI command."""
+    """Tests for the sg add CLI command."""
 
     def test_adds_ip_to_remotepy_sg(self, mocker, test_config):
         """Test that add-ip targets the remotepy-managed SG."""
@@ -801,7 +801,7 @@ class TestAddIpCommand:
         mock_add = mocker.patch("remote.sg.add_ip_to_security_group")
         mocker.patch("remote.sg.get_ip_rules_for_port", return_value=["203.0.113.1/32"])
 
-        result = runner.invoke(app, ["add-ip", "test-instance"])
+        result = runner.invoke(app, ["add", "test-instance"])
 
         assert result.exit_code == 0
         assert "Allowed 203.0.113.1 on port 22" in result.stdout
@@ -818,7 +818,7 @@ class TestAddIpCommand:
         mock_add = mocker.patch("remote.sg.add_ip_to_security_group")
         mocker.patch("remote.sg.get_ip_rules_for_port", return_value=["10.0.0.1/32"])
 
-        result = runner.invoke(app, ["add-ip", "test-instance", "--ip", "10.0.0.1"])
+        result = runner.invoke(app, ["add", "test-instance", "--ip", "10.0.0.1"])
 
         assert result.exit_code == 0
         assert "Allowed 10.0.0.1 on port 22" in result.stdout
@@ -835,7 +835,7 @@ class TestAddIpCommand:
         mock_add = mocker.patch("remote.sg.add_ip_to_security_group")
         mocker.patch("remote.sg.get_ip_rules_for_port", return_value=["10.0.0.0/16"])
 
-        result = runner.invoke(app, ["add-ip", "test-instance", "--ip", "10.0.0.0/16"])
+        result = runner.invoke(app, ["add", "test-instance", "--ip", "10.0.0.0/16"])
 
         assert result.exit_code == 0
         assert "Allowed 10.0.0.0/16 on port 22" in result.stdout
@@ -852,9 +852,7 @@ class TestAddIpCommand:
         mock_add = mocker.patch("remote.sg.add_ip_to_security_group")
         mocker.patch("remote.sg.get_ip_rules_for_port", return_value=["10.0.0.1/32"])
 
-        result = runner.invoke(
-            app, ["add-ip", "test-instance", "--ip", "10.0.0.1", "--port", "https"]
-        )
+        result = runner.invoke(app, ["add", "test-instance", "--ip", "10.0.0.1", "--port", "https"])
 
         assert result.exit_code == 0
         mock_add.assert_called_once_with("sg-rpy", "10.0.0.1", 443, "Added by remote.py")
@@ -872,7 +870,7 @@ class TestAddIpCommand:
 
         result = runner.invoke(
             app,
-            ["add-ip", "test-instance", "--ip", "10.0.0.1", "--port", "ssh", "--port", "syncthing"],
+            ["add", "test-instance", "--ip", "10.0.0.1", "--port", "ssh", "--port", "syncthing"],
         )
 
         assert result.exit_code == 0
@@ -891,7 +889,7 @@ class TestAddIpCommand:
         )
         mock_add = mocker.patch("remote.sg.add_ip_to_security_group")
 
-        result = runner.invoke(app, ["add-ip", "test-instance", "--ip", "203.0.113.1"])
+        result = runner.invoke(app, ["add", "test-instance", "--ip", "203.0.113.1"])
 
         assert result.exit_code == 0
         assert "already has access to port 22" in result.stdout
@@ -913,7 +911,7 @@ class TestAddIpCommand:
         mocker.patch("remote.sg.get_ip_rules_for_port", return_value=["10.0.0.1/32"])
 
         result = runner.invoke(
-            app, ["add-ip", "test-instance", "--ip", "10.0.0.1", "--sg", "sg-custom"]
+            app, ["add", "test-instance", "--ip", "10.0.0.1", "--sg", "sg-custom"]
         )
 
         assert result.exit_code == 0
@@ -933,7 +931,7 @@ class TestAddIpCommand:
             return_value=["10.0.0.1/32", "10.0.0.2/32", "10.0.0.3/32"],
         )
 
-        result = runner.invoke(app, ["add-ip", "test-instance", "--ip", "10.0.0.1"])
+        result = runner.invoke(app, ["add", "test-instance", "--ip", "10.0.0.1"])
 
         assert result.exit_code == 0
         assert "2 other IP(s) have access on port 22" in result.stdout
@@ -955,7 +953,7 @@ class TestAddIpCommand:
         )
 
         result = runner.invoke(
-            app, ["add-ip", "test-instance", "--ip", "10.0.0.1", "--exclusive", "--yes"]
+            app, ["add", "test-instance", "--ip", "10.0.0.1", "--exclusive", "--yes"]
         )
 
         assert result.exit_code == 0
@@ -963,7 +961,7 @@ class TestAddIpCommand:
 
 
 class TestRemoveIpCommand:
-    """Tests for the remove-ip CLI command."""
+    """Tests for the sg remove CLI command."""
 
     def test_removes_ip_from_all_sgs(self, mocker, test_config):
         """Test that remove-ip searches all SGs and reports affected ones."""
@@ -985,7 +983,7 @@ class TestRemoveIpCommand:
         )
         mocker.patch("remote.sg.remove_ip_from_security_group")
 
-        result = runner.invoke(app, ["remove-ip", "test-instance", "--yes"])
+        result = runner.invoke(app, ["remove", "test-instance", "--yes"])
 
         assert result.exit_code == 0
         assert "Removed" in result.stdout
@@ -1005,7 +1003,7 @@ class TestRemoveIpCommand:
         mocker.patch("remote.sg.get_ip_rules_for_port", return_value=["0.0.0.0/0"])
         mock_remove = mocker.patch("remote.sg.remove_ip_from_security_group")
 
-        result = runner.invoke(app, ["remove-ip", "test-instance", "--ip", "0.0.0.0/0", "--yes"])
+        result = runner.invoke(app, ["remove", "test-instance", "--ip", "0.0.0.0/0", "--yes"])
 
         assert result.exit_code == 0
         assert "Removed" in result.stdout
@@ -1026,7 +1024,7 @@ class TestRemoveIpCommand:
 
         result = runner.invoke(
             app,
-            ["remove-ip", "test-instance", "--ip", "203.0.113.1", "--sg", "sg-specific", "--yes"],
+            ["remove", "test-instance", "--ip", "203.0.113.1", "--sg", "sg-specific", "--yes"],
         )
 
         assert result.exit_code == 0
@@ -1044,14 +1042,14 @@ class TestRemoveIpCommand:
         )
         mocker.patch("remote.sg.get_ip_rules_for_port", return_value=[])
 
-        result = runner.invoke(app, ["remove-ip", "test-instance", "--ip", "203.0.113.1", "--yes"])
+        result = runner.invoke(app, ["remove", "test-instance", "--ip", "203.0.113.1", "--yes"])
 
         assert result.exit_code == 0
         assert "was not found" in result.stdout
 
 
 class TestListIpsCommand:
-    """Tests for the list-ips CLI command."""
+    """Tests for the sg list CLI command."""
 
     def test_lists_all_rules_by_default(self, mocker, test_config):
         """Test that list-ips shows all inbound rules by default."""
@@ -1081,7 +1079,7 @@ class TestListIpsCommand:
             ],
         )
 
-        result = runner.invoke(app, ["list-ips", "test-instance"])
+        result = runner.invoke(app, ["list", "test-instance"])
 
         assert result.exit_code == 0
         assert "10.0.0.1/32" in result.stdout
@@ -1116,7 +1114,7 @@ class TestListIpsCommand:
             ],
         )
 
-        result = runner.invoke(app, ["list-ips", "test-instance", "--port", "22"])
+        result = runner.invoke(app, ["list", "test-instance", "--port", "22"])
 
         assert result.exit_code == 0
         assert "10.0.0.1/32" in result.stdout
@@ -1136,7 +1134,7 @@ class TestListIpsCommand:
         )
         mocker.patch("remote.sg.get_security_group_rules", return_value=[])
 
-        result = runner.invoke(app, ["list-ips", "test-instance"])
+        result = runner.invoke(app, ["list", "test-instance"])
 
         assert result.exit_code == 0
         assert "No inbound IP rules found" in result.stdout
@@ -1163,7 +1161,7 @@ class TestListIpsCommand:
             ],
         )
 
-        result = runner.invoke(app, ["list-ips", "test-instance", "--port", "https"])
+        result = runner.invoke(app, ["list", "test-instance", "--port", "https"])
 
         assert result.exit_code == 0
         assert "0.0.0.0/0" in result.stdout
@@ -1190,7 +1188,7 @@ class TestListIpsCommand:
             ],
         )
 
-        result = runner.invoke(app, ["list-ips", "test-instance", "--sg", "sg-specific"])
+        result = runner.invoke(app, ["list", "test-instance", "--sg", "sg-specific"])
 
         assert result.exit_code == 0
         assert "specific-sg" in result.stdout
@@ -1224,7 +1222,7 @@ class TestListIpsCommand:
             ],
         )
 
-        result = runner.invoke(app, ["list-ips", "test-instance"])
+        result = runner.invoke(app, ["list", "test-instance"])
 
         assert result.exit_code == 0
         assert "10.0.0.1/32" in result.stdout
@@ -1232,36 +1230,11 @@ class TestListIpsCommand:
         assert "All Inbound IP Rules" in result.stdout
 
 
-class TestCreateSgCommand:
-    """Tests for the sg create CLI command."""
+class TestDetachSgCommand:
+    """Tests for the sg detach CLI command."""
 
-    def test_creates_and_attaches_sg(self, mocker, test_config):
-        """Test that sg create command creates and attaches a security group."""
-        mocker.patch(
-            "remote.sg.resolve_instance_or_exit",
-            return_value=("test-instance", "i-12345"),
-        )
-        mocker.patch(
-            "remote.sg.get_instance_security_groups",
-            return_value=[{"GroupId": "sg-existing", "GroupName": "default"}],
-        )
-        mock_vpc = mocker.patch("remote.sg.get_instance_vpc_id", return_value="vpc-12345")
-        mock_create = mocker.patch(
-            "remote.sg.create_instance_security_group", return_value="sg-new123"
-        )
-        mock_attach = mocker.patch("remote.sg.attach_security_group_to_instance")
-
-        result = runner.invoke(app, ["create", "test-instance"])
-
-        assert result.exit_code == 0
-        assert "Created and attached" in result.stdout
-        assert "remotepy-test-instance" in result.stdout
-        mock_vpc.assert_called_once_with("i-12345")
-        mock_create.assert_called_once_with("test-instance", "vpc-12345")
-        mock_attach.assert_called_once_with("i-12345", "sg-new123")
-
-    def test_create_sg_idempotent(self, mocker, test_config):
-        """Test that sg create is idempotent when SG already exists."""
+    def test_detach_defaults_to_remotepy_sg(self, mocker, test_config):
+        """Test that detach targets the remotepy-managed SG by default."""
         mocker.patch(
             "remote.sg.resolve_instance_or_exit",
             return_value=("test-instance", "i-12345"),
@@ -1269,59 +1242,166 @@ class TestCreateSgCommand:
         mocker.patch(
             "remote.sg.get_instance_security_groups",
             return_value=[
-                {"GroupId": "sg-existing", "GroupName": "default"},
+                {"GroupId": "sg-default", "GroupName": "default"},
                 {"GroupId": "sg-rpy", "GroupName": "remotepy-test-instance"},
             ],
         )
-        mock_create = mocker.patch("remote.sg.create_instance_security_group")
-
-        result = runner.invoke(app, ["create", "test-instance"])
-
-        assert result.exit_code == 0
-        assert "already exists" in result.stdout
-        mock_create.assert_not_called()
-
-
-class TestDeleteSgCommand:
-    """Tests for the sg delete CLI command."""
-
-    def test_deletes_sg(self, mocker, test_config):
-        """Test that sg delete command detaches and deletes a security group."""
-        mocker.patch(
-            "remote.sg.resolve_instance_or_exit",
-            return_value=("test-instance", "i-12345"),
-        )
-        mocker.patch("remote.sg.get_instance_vpc_id", return_value="vpc-12345")
-        mock_ec2 = mocker.patch("remote.sg.get_ec2_client")
-        mock_ec2.return_value.describe_security_groups.return_value = {
-            "SecurityGroups": [{"GroupId": "sg-12345"}]
-        }
         mock_detach = mocker.patch("remote.sg.detach_security_group_from_instance")
-        mock_delete = mocker.patch(
-            "remote.sg.delete_instance_security_group", return_value="sg-12345"
+        mocker.patch(
+            "remote.sg.get_security_group_details",
+            return_value=[
+                {"GroupId": "sg-rpy", "GroupName": "remotepy-test-instance", "IpPermissions": []}
+            ],
         )
+        mock_ec2 = mocker.patch("remote.sg.get_ec2_client")
+        mock_ec2.return_value.describe_instances.return_value = {"Reservations": []}
 
-        result = runner.invoke(app, ["delete", "test-instance", "--yes"])
+        result = runner.invoke(app, ["detach", "test-instance", "--yes"])
 
         assert result.exit_code == 0
-        assert "Deleted" in result.stdout
-        mock_detach.assert_called_once_with("i-12345", "sg-12345")
-        mock_delete.assert_called_once_with("test-instance", "vpc-12345")
+        mock_detach.assert_called_once_with("i-12345", "sg-rpy")
+        assert "Detached remotepy-test-instance" in result.stdout
 
-    def test_delete_sg_not_found(self, mocker, test_config):
-        """Test that sg delete handles missing SG gracefully."""
+    def test_detach_remotepy_sg_not_found(self, mocker, test_config):
+        """Test that detach warns when remotepy SG is not found."""
         mocker.patch(
             "remote.sg.resolve_instance_or_exit",
             return_value=("test-instance", "i-12345"),
         )
-        mocker.patch("remote.sg.get_instance_vpc_id", return_value="vpc-12345")
-        mock_ec2 = mocker.patch("remote.sg.get_ec2_client")
-        mock_ec2.return_value.describe_security_groups.return_value = {"SecurityGroups": []}
+        mocker.patch(
+            "remote.sg.get_instance_security_groups",
+            return_value=[{"GroupId": "sg-default", "GroupName": "default"}],
+        )
 
-        result = runner.invoke(app, ["delete", "test-instance", "--yes"])
+        result = runner.invoke(app, ["detach", "test-instance", "--yes"])
 
         assert result.exit_code == 0
         assert "not found" in result.stdout
+
+    def test_detach_specific_sg_with_flag(self, mocker, test_config):
+        """Test that --sg detaches a specific SG."""
+        mocker.patch(
+            "remote.sg.resolve_instance_or_exit",
+            return_value=("test-instance", "i-12345"),
+        )
+        mocker.patch(
+            "remote.sg.validate_sg_for_instance",
+            return_value={"GroupId": "sg-99999", "GroupName": "temp-sg"},
+        )
+        mock_detach = mocker.patch("remote.sg.detach_security_group_from_instance")
+        mocker.patch(
+            "remote.sg.get_security_group_details",
+            return_value=[{"GroupId": "sg-99999", "GroupName": "temp-sg", "IpPermissions": []}],
+        )
+        mock_ec2 = mocker.patch("remote.sg.get_ec2_client")
+        mock_ec2.return_value.describe_instances.return_value = {"Reservations": []}
+
+        result = runner.invoke(app, ["detach", "test-instance", "--sg", "sg-99999", "--yes"])
+
+        assert result.exit_code == 0
+        mock_detach.assert_called_once_with("i-12345", "sg-99999")
+        assert "Detached" in result.stdout
+        assert "Deleted empty" in result.stdout
+        mock_ec2.return_value.delete_security_group.assert_called_once_with(GroupId="sg-99999")
+
+    def test_detach_keeps_sg_with_rules(self, mocker, test_config):
+        """Test that detach keeps the SG when it still has inbound rules."""
+        mocker.patch(
+            "remote.sg.resolve_instance_or_exit",
+            return_value=("test-instance", "i-12345"),
+        )
+        mocker.patch(
+            "remote.sg.validate_sg_for_instance",
+            return_value={"GroupId": "sg-99999", "GroupName": "shared-sg"},
+        )
+        mocker.patch("remote.sg.detach_security_group_from_instance")
+        mocker.patch(
+            "remote.sg.get_security_group_details",
+            return_value=[
+                {
+                    "GroupId": "sg-99999",
+                    "GroupName": "shared-sg",
+                    "IpPermissions": [{"FromPort": 22, "ToPort": 22}],
+                }
+            ],
+        )
+
+        result = runner.invoke(app, ["detach", "test-instance", "--sg", "sg-99999", "--yes"])
+
+        assert result.exit_code == 0
+        assert "Detached" in result.stdout
+        assert "still has 1 inbound rule(s)" in result.stdout
+
+    def test_detach_keeps_sg_used_by_other_instances(self, mocker, test_config):
+        """Test that detach keeps the SG when other instances use it."""
+        mocker.patch(
+            "remote.sg.resolve_instance_or_exit",
+            return_value=("test-instance", "i-12345"),
+        )
+        mocker.patch(
+            "remote.sg.validate_sg_for_instance",
+            return_value={"GroupId": "sg-99999", "GroupName": "shared-sg"},
+        )
+        mocker.patch("remote.sg.detach_security_group_from_instance")
+        mocker.patch(
+            "remote.sg.get_security_group_details",
+            return_value=[
+                {
+                    "GroupId": "sg-99999",
+                    "GroupName": "shared-sg",
+                    "IpPermissions": [],
+                }
+            ],
+        )
+        mock_ec2 = mocker.patch("remote.sg.get_ec2_client")
+        mock_ec2.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {"Instances": [{"InstanceId": "i-other"}]},
+            ]
+        }
+
+        result = runner.invoke(app, ["detach", "test-instance", "--sg", "sg-99999", "--yes"])
+
+        assert result.exit_code == 0
+        assert "Detached" in result.stdout
+        assert "still attached to 1 other instance(s)" in result.stdout
+
+    def test_detach_no_cleanup(self, mocker, test_config):
+        """Test that --no-cleanup skips deletion even when SG is empty."""
+        mocker.patch(
+            "remote.sg.resolve_instance_or_exit",
+            return_value=("test-instance", "i-12345"),
+        )
+        mocker.patch(
+            "remote.sg.validate_sg_for_instance",
+            return_value={"GroupId": "sg-99999", "GroupName": "keep-sg"},
+        )
+        mock_detach = mocker.patch("remote.sg.detach_security_group_from_instance")
+
+        result = runner.invoke(
+            app, ["detach", "test-instance", "--sg", "sg-99999", "--no-cleanup", "--yes"]
+        )
+
+        assert result.exit_code == 0
+        mock_detach.assert_called_once_with("i-12345", "sg-99999")
+        assert "Detached" in result.stdout
+        assert "Deleted" not in result.stdout
+
+    def test_detach_sg_not_attached(self, mocker, test_config):
+        """Test that detach fails when --sg specifies unattached SG."""
+        mocker.patch(
+            "remote.sg.resolve_instance_or_exit",
+            return_value=("test-instance", "i-12345"),
+        )
+        mocker.patch(
+            "remote.sg.validate_sg_for_instance",
+            side_effect=ValidationError("Security group sg-99999 is not attached"),
+        )
+
+        result = runner.invoke(app, ["detach", "test-instance", "--sg", "sg-99999", "--yes"])
+
+        assert result.exit_code == 1
+        assert "not attached" in result.stdout
 
 
 class TestMyIpCommand:
@@ -1379,10 +1459,10 @@ class TestGetSecurityGroupDetails:
 
 
 class TestListSgsCommand:
-    """Tests for the sg list CLI command."""
+    """Tests for the sg groups CLI command."""
 
     def test_list_sgs_shows_table(self, mocker, test_config):
-        """Test that list command shows a table with SG details."""
+        """Test that groups command shows a table with SG details."""
         mocker.patch(
             "remote.sg.resolve_instance_or_exit",
             return_value=("test-instance", "i-12345"),
@@ -1422,7 +1502,7 @@ class TestListSgsCommand:
             ],
         )
 
-        result = runner.invoke(app, ["list", "test-instance"])
+        result = runner.invoke(app, ["groups", "test-instance"])
 
         assert result.exit_code == 0
         assert "my-sg" in result.stdout
@@ -1443,13 +1523,13 @@ class TestListSgsCommand:
             return_value=[],
         )
 
-        result = runner.invoke(app, ["list", "test-instance"])
+        result = runner.invoke(app, ["groups", "test-instance"])
 
         assert result.exit_code == 1
         assert "No security groups found" in result.stdout
 
     def test_list_sgs_single_sg(self, mocker, test_config):
-        """Test that list command works with a single security group."""
+        """Test that groups command works with a single security group."""
         mocker.patch(
             "remote.sg.resolve_instance_or_exit",
             return_value=("test-instance", "i-12345"),
@@ -1471,7 +1551,7 @@ class TestListSgsCommand:
             ],
         )
 
-        result = runner.invoke(app, ["list", "test-instance"])
+        result = runner.invoke(app, ["groups", "test-instance"])
 
         assert result.exit_code == 0
         assert "my-sg" in result.stdout
