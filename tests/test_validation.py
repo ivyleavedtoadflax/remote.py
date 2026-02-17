@@ -17,11 +17,67 @@ from remote.validation import (
     validate_instance_id,
     validate_instance_name,
     validate_instance_type,
+    validate_port,
     validate_positive_integer,
     validate_ssh_key_path,
     validate_ssh_username,
     validate_volume_id,
 )
+
+
+class TestValidatePort:
+    """Test port validation function."""
+
+    def test_valid_ports(self):
+        """Should accept valid port numbers."""
+        assert validate_port(1) == 1
+        assert validate_port(22) == 22
+        assert validate_port(80) == 80
+        assert validate_port(443) == 443
+        assert validate_port(8080) == 8080
+        assert validate_port(65535) == 65535
+
+    def test_zero_port(self):
+        """Should reject port 0."""
+        with pytest.raises(ValidationError) as exc_info:
+            validate_port(0)
+        assert "Invalid port number" in str(exc_info.value)
+
+    def test_negative_port(self):
+        """Should reject negative ports."""
+        with pytest.raises(ValidationError) as exc_info:
+            validate_port(-1)
+        assert "Invalid port number" in str(exc_info.value)
+
+    def test_port_too_large(self):
+        """Should reject ports above 65535."""
+        with pytest.raises(ValidationError) as exc_info:
+            validate_port(65536)
+        assert "Invalid port number" in str(exc_info.value)
+
+    def test_non_integer_type(self):
+        """Should reject non-integer types."""
+        with pytest.raises(ValidationError):
+            validate_port("22")  # type: ignore[arg-type]
+        with pytest.raises(ValidationError):
+            validate_port(22.5)  # type: ignore[arg-type]
+
+    @given(st.integers(min_value=1, max_value=65535))
+    def test_should_accept_all_valid_ports(self, port: int):
+        """Property-based test: all ports 1-65535 should be accepted."""
+        assert validate_port(port) == port
+
+    @given(st.integers(max_value=0))
+    def test_should_reject_non_positive_ports(self, port: int):
+        """Property-based test: ports <= 0 should be rejected."""
+        with pytest.raises(ValidationError):
+            validate_port(port)
+
+    @given(st.integers(min_value=65536))
+    def test_should_reject_ports_above_max(self, port: int):
+        """Property-based test: ports > 65535 should be rejected."""
+        with pytest.raises(ValidationError):
+            validate_port(port)
 
 
 class TestSanitizeInput:

@@ -2214,3 +2214,123 @@ class TestClearAWSClientCaches:
 
         # Clean up
         clear_aws_client_caches()
+
+
+# ============================================================================
+# Tests for get_instance_names_by_ids (Issue #80)
+# ============================================================================
+
+
+class TestGetInstanceNamesByIds:
+    """Tests for batch instance name lookup function."""
+
+    def test_returns_names_for_valid_instances(self, mocker):
+        """Should return name mapping for instances with Name tags."""
+        from remote.utils import get_instance_names_by_ids
+
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+        mock_ec2_client.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-111",
+                            "Tags": [{"Key": "Name", "Value": "web-server"}],
+                        },
+                        {
+                            "InstanceId": "i-222",
+                            "Tags": [{"Key": "Name", "Value": "db-server"}],
+                        },
+                    ]
+                }
+            ]
+        }
+
+        result = get_instance_names_by_ids(["i-111", "i-222"])
+
+        assert result == {"i-111": "web-server", "i-222": "db-server"}
+        mock_ec2_client.return_value.describe_instances.assert_called_once_with(
+            InstanceIds=["i-111", "i-222"]
+        )
+
+    def test_returns_empty_dict_for_empty_input(self):
+        """Should return empty dict when no instance IDs provided."""
+        from remote.utils import get_instance_names_by_ids
+
+        result = get_instance_names_by_ids([])
+
+        assert result == {}
+
+    def test_omits_instances_without_name_tag(self, mocker):
+        """Should omit instances that don't have a Name tag."""
+        from remote.utils import get_instance_names_by_ids
+
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+        mock_ec2_client.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-111",
+                            "Tags": [{"Key": "Name", "Value": "web-server"}],
+                        },
+                        {
+                            "InstanceId": "i-222",
+                            "Tags": [{"Key": "Environment", "Value": "prod"}],
+                        },
+                        {
+                            "InstanceId": "i-333",
+                            # No Tags at all
+                        },
+                    ]
+                }
+            ]
+        }
+
+        result = get_instance_names_by_ids(["i-111", "i-222", "i-333"])
+
+        assert result == {"i-111": "web-server"}
+
+    def test_returns_empty_dict_on_aws_error(self, mocker):
+        """Should return empty dict when AWS API call fails."""
+        from remote.utils import get_instance_names_by_ids
+
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+        mock_ec2_client.return_value.describe_instances.side_effect = ClientError(
+            {"Error": {"Code": "InvalidInstanceID.NotFound", "Message": "Not found"}},
+            "describe_instances",
+        )
+
+        result = get_instance_names_by_ids(["i-terminated"])
+
+        assert result == {}
+
+    def test_handles_multiple_reservations(self, mocker):
+        """Should handle instances spread across multiple reservations."""
+        from remote.utils import get_instance_names_by_ids
+
+        mock_ec2_client = mocker.patch("remote.utils.get_ec2_client")
+        mock_ec2_client.return_value.describe_instances.return_value = {
+            "Reservations": [
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-111",
+                            "Tags": [{"Key": "Name", "Value": "server-a"}],
+                        }
+                    ]
+                },
+                {
+                    "Instances": [
+                        {
+                            "InstanceId": "i-222",
+                            "Tags": [{"Key": "Name", "Value": "server-b"}],
+                        }
+                    ]
+                },
+            ]
+        }
+
+        result = get_instance_names_by_ids(["i-111", "i-222"])
+
+        assert result == {"i-111": "server-a", "i-222": "server-b"}

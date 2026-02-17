@@ -424,6 +424,7 @@ def _parse_schedule_name(name: str) -> tuple[str, str] | None:
 def list_cmd() -> None:
     """List all remotepy schedules."""
     from .scheduler import get_schedule
+    from .utils import get_instance_names_by_ids
 
     schedules = list_schedules()
 
@@ -431,8 +432,27 @@ def list_cmd() -> None:
         print_warning("No schedules found")
         return
 
+    # First pass: collect all instance IDs
+    parsed_schedules: list[tuple[str, str, str]] = []  # (action, instance_id, state)
+    all_instance_ids: set[str] = set()
+
+    for sched in schedules:
+        name = sched.get("Name", "")
+        state = sched.get("State", "UNKNOWN")
+
+        parsed = _parse_schedule_name(name)
+        if not parsed:
+            continue
+
+        action, instance_id = parsed
+        parsed_schedules.append((action, instance_id, state))
+        all_instance_ids.add(instance_id)
+
+    # Batch lookup instance names
+    instance_names = get_instance_names_by_ids(list(all_instance_ids)) if all_instance_ids else {}
+
     columns = [
-        {"name": "Instance ID", "style": "cyan"},
+        {"name": "Instance", "style": "cyan"},
         {"name": "Action", "style": "green"},
         {"name": "Schedule"},
         {"name": "Timezone"},
@@ -440,17 +460,7 @@ def list_cmd() -> None:
     ]
 
     rows: list[list[str]] = []
-    for sched in schedules:
-        name = sched.get("Name", "")
-        state = sched.get("State", "UNKNOWN")
-
-        # Parse instance ID and action from name
-        parsed = _parse_schedule_name(name)
-        if not parsed:
-            continue
-
-        action, instance_id = parsed
-
+    for action, instance_id, state in parsed_schedules:
         # Get full schedule details for expression and timezone
         full_sched = get_schedule(instance_id, action)  # type: ignore[arg-type]
         if full_sched:
@@ -461,7 +471,10 @@ def list_cmd() -> None:
             display_expr = "?"
             tz = "?"
 
-        rows.append([instance_id, action, display_expr, tz, state])
+        # Show instance name if available, fall back to ID
+        instance_display = instance_names.get(instance_id, instance_id)
+
+        rows.append([instance_display, action, display_expr, tz, state])
 
     console.print(create_table("Schedules", columns, rows))
 

@@ -222,6 +222,96 @@ class TestSyncCommandWithSSM:
         assert "Use --connection ssh" in result.stdout
 
 
+class TestWhitelistPortsOption:
+    """Test the --whitelist-ports option for the connect command."""
+
+    def test_should_reject_whitelist_ports_without_whitelist_ip(self, mocker):
+        """Should error when --whitelist-ports is used without --whitelist-ip."""
+        mocker.patch(
+            "remote.instance.resolve_instance_or_exit",
+            return_value=("test-instance", "i-123"),
+        )
+
+        result = runner.invoke(app, ["connect", "test-instance", "--whitelist-ports", "ssh"])
+
+        assert result.exit_code == 1
+        assert "--whitelist-ports can only be used with --whitelist-ip" in result.stdout
+
+    def test_should_whitelist_multiple_ports(self, mocker):
+        """Should whitelist multiple ports when --whitelist-ports is specified."""
+        mocker.patch(
+            "remote.instance.resolve_instance_or_exit",
+            return_value=("test-instance", "i-123"),
+        )
+        mocker.patch("remote.instance._ensure_instance_running")
+        mocker.patch("remote.instance.get_instance_dns", return_value="test.example.com")
+        mocker.patch("remote.instance._ensure_ssh_key", return_value="/path/to/key")
+
+        mock_ssh_provider = mocker.MagicMock()
+        mock_ssh_provider.connect_interactive.return_value = 0
+        mocker.patch(
+            "remote.connection.get_connection_provider",
+            return_value=mock_ssh_provider,
+        )
+
+        mock_whitelist = mocker.patch(
+            "remote.sg.whitelist_ip_for_instance",
+            return_value=("203.0.113.1", ["sg-12345"]),
+        )
+        mocker.patch("remote.sg.resolve_port", side_effect=[22, 22000])
+
+        result = runner.invoke(
+            app,
+            [
+                "connect",
+                "test-instance",
+                "--whitelist-ip",
+                "--whitelist-ports",
+                "ssh",
+                "--whitelist-ports",
+                "syncthing",
+            ],
+        )
+
+        assert result.exit_code == 0
+        mock_whitelist.assert_called_once()
+        call_kwargs = mock_whitelist.call_args
+        assert call_kwargs.kwargs.get("ports") == [22, 22000]
+
+    def test_should_default_to_ssh_without_whitelist_ports(self, mocker):
+        """Should whitelist only SSH port when --whitelist-ports is not specified."""
+        mocker.patch(
+            "remote.instance.resolve_instance_or_exit",
+            return_value=("test-instance", "i-123"),
+        )
+        mocker.patch("remote.instance._ensure_instance_running")
+        mocker.patch("remote.instance.get_instance_dns", return_value="test.example.com")
+        mocker.patch("remote.instance._ensure_ssh_key", return_value="/path/to/key")
+
+        mock_ssh_provider = mocker.MagicMock()
+        mock_ssh_provider.connect_interactive.return_value = 0
+        mocker.patch(
+            "remote.connection.get_connection_provider",
+            return_value=mock_ssh_provider,
+        )
+
+        mock_whitelist = mocker.patch(
+            "remote.sg.whitelist_ip_for_instance",
+            return_value=("203.0.113.1", ["sg-12345"]),
+        )
+
+        result = runner.invoke(
+            app,
+            ["connect", "test-instance", "--whitelist-ip"],
+        )
+
+        assert result.exit_code == 0
+        mock_whitelist.assert_called_once()
+        call_kwargs = mock_whitelist.call_args
+        # Without --whitelist-ports, resolved_ports should be None
+        assert call_kwargs.kwargs.get("ports") is None
+
+
 class TestSSMProfileOption:
     """Test the --ssm-profile option."""
 

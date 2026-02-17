@@ -183,16 +183,16 @@ Manage IP access to your instances:
 remote sg my-ip
 
 # Add your IP to an instance's security group
-remote sg add-ip my-instance
+remote sg add my-instance
 
 # Add a specific IP/CIDR
-remote sg add-ip my-instance --ip 203.0.113.0/24
+remote sg add my-instance --ip 203.0.113.0/24
 
 # List allowed IPs
-remote sg list-ips my-instance
+remote sg list my-instance
 
 # Remove an IP
-remote sg remove-ip my-instance --ip 203.0.113.50/32
+remote sg remove my-instance --ip 203.0.113.50/32
 ```
 
 ### Auto-Shutdown

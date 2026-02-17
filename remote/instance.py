@@ -1069,6 +1069,11 @@ def connect(
         "-e",
         help="Used with --whitelist-ip: remove all other IPs from the security group first",
     ),
+    whitelist_ports: list[str] | None = typer.Option(
+        None,
+        "--whitelist-ports",
+        help="Port number(s) to whitelist when using --whitelist-ip. Repeatable. Default: 22.",
+    ),
     connection: str | None = typer.Option(
         None,
         "--connection",
@@ -1110,6 +1115,11 @@ def connect(
         print_error("--exclusive can only be used with --whitelist-ip")
         raise typer.Exit(1)
 
+    # Validate --whitelist-ports requires --whitelist-ip
+    if whitelist_ports and not whitelist_ip:
+        print_error("--whitelist-ports can only be used with --whitelist-ip")
+        raise typer.Exit(1)
+
     # Ensure instance is running (may start it if needed)
     _ensure_instance_running(
         instance_name, instance_id, auto_start, no_start, allow_interactive=True
@@ -1120,12 +1130,21 @@ def connect(
         if conn_method == ConnectionMethod.SSM:
             print_warning("--whitelist-ip is ignored with SSM connection (no inbound ports needed)")
         else:
-            from remote.sg import whitelist_ip_for_instance
+            from remote.sg import resolve_port, whitelist_ip_for_instance
+
+            # Resolve ports if specified
+            resolved_ports: list[int] | None = None
+            if whitelist_ports:
+                resolved_ports = [resolve_port(p) for p in whitelist_ports]
 
             print_warning("Adding your IP to security group...")
             try:
                 ip, modified_groups = whitelist_ip_for_instance(
-                    instance_id, ip_address=None, exclusive=exclusive
+                    instance_id,
+                    instance_name,
+                    ip_address=None,
+                    exclusive=exclusive,
+                    ports=resolved_ports,
                 )
                 if modified_groups:
                     print_success(
@@ -1605,6 +1624,11 @@ def launch(
     name: str | None = typer.Option(None, help="Name of the instance to be launched"),
     launch_template: str | None = typer.Option(None, help="Launch template name"),
     version: str = typer.Option("$Latest", help="Launch template version"),
+    create_sg: bool = typer.Option(
+        False,
+        "--create-sg",
+        help="Create and attach a per-instance security group (remotepy-{name})",
+    ),
     yes: bool = typer.Option(
         False,
         "--yes",
@@ -1623,10 +1647,14 @@ def launch(
         remote instance launch                                    # Use default or interactive
         remote instance launch --launch-template my-template      # Use specific template
         remote instance launch --name my-server --launch-template my-template
-        remote instance launch --name my-server --launch-template my-template --yes
+        remote instance launch --create-sg --name my-server       # Create per-instance SG
     """
     launch_instance_from_template(
-        name=name, launch_template=launch_template, version=version, yes=yes
+        name=name,
+        launch_template=launch_template,
+        version=version,
+        yes=yes,
+        create_sg=create_sg,
     )
 
 
