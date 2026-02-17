@@ -776,6 +776,37 @@ def parse_schedule_date(date_str: str) -> date:
     )
 
 
+def validate_schedule_name(name: str) -> str:
+    """Validate schedule name: lowercase alphanumeric + hyphens, 1-20 chars.
+
+    Args:
+        name: The schedule name to validate
+
+    Returns:
+        The validated schedule name
+
+    Raises:
+        ValidationError: If name format is invalid
+    """
+    sanitized = sanitize_input(name)
+    if not sanitized:
+        raise ValidationError("Schedule name cannot be empty")
+
+    if len(sanitized) > 20:
+        raise ValidationError(
+            f"Schedule name exceeds maximum length of 20 characters (got {len(sanitized)})"
+        )
+
+    if not re.match(r"^[a-z0-9][a-z0-9-]*$", sanitized):
+        raise ValidationError(
+            f"Invalid schedule name '{sanitized}': "
+            "must contain only lowercase letters, numbers, and hyphens, "
+            "and must start with a letter or number"
+        )
+
+    return sanitized
+
+
 def build_schedule_at_expression(target_date: date, hour: int, minute: int) -> str:
     """Build an EventBridge Scheduler at() expression for one-time schedules.
 

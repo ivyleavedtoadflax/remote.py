@@ -34,6 +34,7 @@ class TestWakeCommand:
         assert call_kwargs["instance_id"] == "i-0123456789abcdef0"
         assert call_kwargs["action"] == "wake"
         assert "9" in call_kwargs["schedule_expression"]
+        assert call_kwargs["name"] is None
         assert "Created wake schedule" in result.stdout
 
     def test_should_create_wake_schedule_with_custom_days(self, mocker):
@@ -138,6 +139,37 @@ class TestWakeCommand:
         mock_confirm.assert_called_once()
         assert "Cancelled" in result.stdout
 
+    def test_should_create_named_wake_schedule(self, mocker):
+        """Should create a named wake schedule with --name."""
+        from remote.schedule import app
+
+        mocker.patch(
+            "remote.schedule.resolve_instance_or_exit",
+            return_value=("test-instance", "i-0123456789abcdef0"),
+        )
+        mock_create = mocker.patch("remote.schedule.create_schedule")
+
+        result = runner.invoke(app, ["wake", "--time", "08:00", "--name", "morning", "--yes"])
+
+        assert result.exit_code == 0
+        mock_create.assert_called_once()
+        call_kwargs = mock_create.call_args[1]
+        assert call_kwargs["name"] == "morning"
+        assert "[morning]" in result.stdout
+
+    def test_should_reject_invalid_schedule_name(self, mocker):
+        """Should reject invalid schedule names."""
+        from remote.schedule import app
+
+        mocker.patch(
+            "remote.schedule.resolve_instance_or_exit",
+            return_value=("test-instance", "i-123"),
+        )
+
+        result = runner.invoke(app, ["wake", "--time", "09:00", "--name", "INVALID_NAME!", "--yes"])
+
+        assert result.exit_code == 1
+
 
 # ============================================================================
 # Sleep Command Tests
@@ -163,6 +195,7 @@ class TestSleepCommand:
         mock_create.assert_called_once()
         call_kwargs = mock_create.call_args[1]
         assert call_kwargs["action"] == "sleep"
+        assert call_kwargs["name"] is None
         assert "Created sleep schedule" in result.stdout
 
     def test_should_create_sleep_schedule_with_weekend_days(self, mocker):
@@ -181,6 +214,24 @@ class TestSleepCommand:
         call_kwargs = mock_create.call_args[1]
         assert "SAT" in call_kwargs["schedule_expression"]
         assert "SUN" in call_kwargs["schedule_expression"]
+
+    def test_should_create_named_sleep_schedule(self, mocker):
+        """Should create a named sleep schedule with --name."""
+        from remote.schedule import app
+
+        mocker.patch(
+            "remote.schedule.resolve_instance_or_exit",
+            return_value=("test-instance", "i-123"),
+        )
+        mock_create = mocker.patch("remote.schedule.create_schedule")
+
+        result = runner.invoke(app, ["sleep", "--time", "23:00", "--name", "evening", "--yes"])
+
+        assert result.exit_code == 0
+        mock_create.assert_called_once()
+        call_kwargs = mock_create.call_args[1]
+        assert call_kwargs["name"] == "evening"
+        assert "[evening]" in result.stdout
 
 
 # ============================================================================
@@ -317,20 +368,26 @@ class TestStatusCommand:
         )
         mocker.patch(
             "remote.schedule.get_schedules_for_instance",
-            return_value={
-                "wake": {
+            return_value=[
+                {
                     "Name": "remotepy-wake-i-0123456789abcdef0",
                     "ScheduleExpression": "cron(0 9 ? * MON,TUE,WED,THU,FRI *)",
                     "ScheduleExpressionTimezone": "UTC",
                     "State": "ENABLED",
+                    "action": "wake",
+                    "parsed_name": None,
+                    "schedule_name": "remotepy-wake-i-0123456789abcdef0",
                 },
-                "sleep": {
+                {
                     "Name": "remotepy-sleep-i-0123456789abcdef0",
                     "ScheduleExpression": "cron(0 18 ? * MON,TUE,WED,THU,FRI *)",
                     "ScheduleExpressionTimezone": "UTC",
                     "State": "ENABLED",
+                    "action": "sleep",
+                    "parsed_name": None,
+                    "schedule_name": "remotepy-sleep-i-0123456789abcdef0",
                 },
-            },
+            ],
         )
 
         result = runner.invoke(app, ["status"])
@@ -350,13 +407,50 @@ class TestStatusCommand:
         )
         mocker.patch(
             "remote.schedule.get_schedules_for_instance",
-            return_value={"wake": None, "sleep": None},
+            return_value=[],
         )
 
         result = runner.invoke(app, ["status"])
 
         assert result.exit_code == 0
         assert "No schedules" in result.stdout or "not configured" in result.stdout
+
+    def test_should_show_named_schedules(self, mocker):
+        """Should display named schedules with their names."""
+        from remote.schedule import app
+
+        mocker.patch(
+            "remote.schedule.resolve_instance_or_exit",
+            return_value=("test-instance", "i-123"),
+        )
+        mocker.patch(
+            "remote.schedule.get_schedules_for_instance",
+            return_value=[
+                {
+                    "Name": "remotepy-wake-morning-i-123",
+                    "ScheduleExpression": "cron(0 8 ? * MON,TUE,WED,THU,FRI *)",
+                    "ScheduleExpressionTimezone": "UTC",
+                    "State": "ENABLED",
+                    "action": "wake",
+                    "parsed_name": "morning",
+                    "schedule_name": "remotepy-wake-morning-i-123",
+                },
+                {
+                    "Name": "remotepy-sleep-morning-i-123",
+                    "ScheduleExpression": "cron(0 11 ? * MON,TUE,WED,THU,FRI *)",
+                    "ScheduleExpressionTimezone": "UTC",
+                    "State": "ENABLED",
+                    "action": "sleep",
+                    "parsed_name": "morning",
+                    "schedule_name": "remotepy-sleep-morning-i-123",
+                },
+            ],
+        )
+
+        result = runner.invoke(app, ["status"])
+
+        assert result.exit_code == 0
+        assert "morning" in result.stdout
 
 
 # ============================================================================
@@ -368,7 +462,7 @@ class TestClearCommand:
     """Tests for the 'schedule clear' command."""
 
     def test_should_clear_all_schedules(self, mocker):
-        """Should clear both wake and sleep schedules."""
+        """Should clear all schedules."""
         from remote.schedule import app
 
         mocker.patch(
@@ -377,24 +471,32 @@ class TestClearCommand:
         )
         mocker.patch(
             "remote.schedule.get_schedules_for_instance",
-            return_value={
-                "wake": {"Name": "remotepy-wake-i-123"},
-                "sleep": {"Name": "remotepy-sleep-i-123"},
-            },
+            return_value=[
+                {
+                    "Name": "remotepy-wake-i-123",
+                    "action": "wake",
+                    "parsed_name": None,
+                },
+                {
+                    "Name": "remotepy-sleep-i-123",
+                    "action": "sleep",
+                    "parsed_name": None,
+                },
+            ],
         )
         mock_delete = mocker.patch(
             "remote.schedule.delete_all_schedules_for_instance",
-            return_value={"wake": True, "sleep": True},
+            return_value=2,
         )
 
         result = runner.invoke(app, ["clear", "--yes"])
 
         assert result.exit_code == 0
         mock_delete.assert_called_once_with("i-123")
-        assert "Cleared" in result.stdout or "Deleted" in result.stdout
+        assert "Cleared" in result.stdout
 
-    def test_should_clear_only_wake_schedule(self, mocker):
-        """Should clear only wake schedule when --wake specified."""
+    def test_should_clear_only_wake_schedules(self, mocker):
+        """Should clear only wake schedules when --wake specified."""
         from remote.schedule import app
 
         mocker.patch(
@@ -402,18 +504,37 @@ class TestClearCommand:
             return_value=("test-instance", "i-123"),
         )
         mocker.patch(
-            "remote.schedule.get_schedule",
-            return_value={"Name": "remotepy-wake-i-123"},
+            "remote.schedule.get_schedules_for_instance",
+            return_value=[
+                {
+                    "Name": "remotepy-wake-i-123",
+                    "action": "wake",
+                    "parsed_name": None,
+                },
+                {
+                    "Name": "remotepy-wake-morning-i-123",
+                    "action": "wake",
+                    "parsed_name": "morning",
+                },
+                {
+                    "Name": "remotepy-sleep-i-123",
+                    "action": "sleep",
+                    "parsed_name": None,
+                },
+            ],
         )
         mock_delete = mocker.patch("remote.schedule.delete_schedule", return_value=True)
 
         result = runner.invoke(app, ["clear", "--wake", "--yes"])
 
         assert result.exit_code == 0
-        mock_delete.assert_called_once_with("i-123", "wake")
+        assert mock_delete.call_count == 2
+        # Should delete both wake schedules (unnamed and named morning)
+        mock_delete.assert_any_call("i-123", "wake", name=None)
+        mock_delete.assert_any_call("i-123", "wake", name="morning")
 
-    def test_should_clear_only_sleep_schedule(self, mocker):
-        """Should clear only sleep schedule when --sleep specified."""
+    def test_should_clear_only_sleep_schedules(self, mocker):
+        """Should clear only sleep schedules when --sleep specified."""
         from remote.schedule import app
 
         mocker.patch(
@@ -421,15 +542,21 @@ class TestClearCommand:
             return_value=("test-instance", "i-123"),
         )
         mocker.patch(
-            "remote.schedule.get_schedule",
-            return_value={"Name": "remotepy-sleep-i-123"},
+            "remote.schedule.get_schedules_for_instance",
+            return_value=[
+                {
+                    "Name": "remotepy-sleep-i-123",
+                    "action": "sleep",
+                    "parsed_name": None,
+                },
+            ],
         )
         mock_delete = mocker.patch("remote.schedule.delete_schedule", return_value=True)
 
         result = runner.invoke(app, ["clear", "--sleep", "--yes"])
 
         assert result.exit_code == 0
-        mock_delete.assert_called_once_with("i-123", "sleep")
+        mock_delete.assert_called_once_with("i-123", "sleep", name=None)
 
     def test_should_warn_when_no_schedules_to_clear(self, mocker):
         """Should warn when no schedules exist to clear."""
@@ -441,13 +568,104 @@ class TestClearCommand:
         )
         mocker.patch(
             "remote.schedule.get_schedules_for_instance",
-            return_value={"wake": None, "sleep": None},
+            return_value=[],
         )
 
         result = runner.invoke(app, ["clear", "--yes"])
 
         assert result.exit_code == 0
         assert "No schedules" in result.stdout or "not configured" in result.stdout
+
+    def test_should_clear_named_schedules_only(self, mocker):
+        """Should clear only schedules with matching --name."""
+        from remote.schedule import app
+
+        mocker.patch(
+            "remote.schedule.resolve_instance_or_exit",
+            return_value=("test-instance", "i-123"),
+        )
+        mocker.patch(
+            "remote.schedule.get_schedules_for_instance",
+            return_value=[
+                {
+                    "Name": "remotepy-wake-morning-i-123",
+                    "action": "wake",
+                    "parsed_name": "morning",
+                },
+                {
+                    "Name": "remotepy-sleep-morning-i-123",
+                    "action": "sleep",
+                    "parsed_name": "morning",
+                },
+                {
+                    "Name": "remotepy-wake-i-123",
+                    "action": "wake",
+                    "parsed_name": None,
+                },
+            ],
+        )
+        mock_delete = mocker.patch("remote.schedule.delete_schedule", return_value=True)
+
+        result = runner.invoke(app, ["clear", "--name", "morning", "--yes"])
+
+        assert result.exit_code == 0
+        assert mock_delete.call_count == 2
+        mock_delete.assert_any_call("i-123", "wake", name="morning")
+        mock_delete.assert_any_call("i-123", "sleep", name="morning")
+
+    def test_should_clear_named_wake_only(self, mocker):
+        """Should clear only named wake schedule with --name --wake."""
+        from remote.schedule import app
+
+        mocker.patch(
+            "remote.schedule.resolve_instance_or_exit",
+            return_value=("test-instance", "i-123"),
+        )
+        mocker.patch(
+            "remote.schedule.get_schedules_for_instance",
+            return_value=[
+                {
+                    "Name": "remotepy-wake-morning-i-123",
+                    "action": "wake",
+                    "parsed_name": "morning",
+                },
+                {
+                    "Name": "remotepy-sleep-morning-i-123",
+                    "action": "sleep",
+                    "parsed_name": "morning",
+                },
+            ],
+        )
+        mock_delete = mocker.patch("remote.schedule.delete_schedule", return_value=True)
+
+        result = runner.invoke(app, ["clear", "--name", "morning", "--wake", "--yes"])
+
+        assert result.exit_code == 0
+        mock_delete.assert_called_once_with("i-123", "wake", name="morning")
+
+    def test_should_warn_when_named_schedule_not_found(self, mocker):
+        """Should warn when --name doesn't match any schedules."""
+        from remote.schedule import app
+
+        mocker.patch(
+            "remote.schedule.resolve_instance_or_exit",
+            return_value=("test-instance", "i-123"),
+        )
+        mocker.patch(
+            "remote.schedule.get_schedules_for_instance",
+            return_value=[
+                {
+                    "Name": "remotepy-wake-i-123",
+                    "action": "wake",
+                    "parsed_name": None,
+                },
+            ],
+        )
+
+        result = runner.invoke(app, ["clear", "--name", "nonexistent", "--yes"])
+
+        assert result.exit_code == 0
+        assert "No" in result.stdout
 
 
 # ============================================================================
@@ -471,7 +689,7 @@ class TestListCommand:
             ],
         )
         mocker.patch(
-            "remote.schedule.get_schedule",
+            "remote.scheduler._get_schedule_by_name",
             return_value={
                 "ScheduleExpression": "cron(0 9 ? * MON-FRI *)",
                 "ScheduleExpressionTimezone": "UTC",
@@ -511,7 +729,7 @@ class TestListCommand:
             ],
         )
         mocker.patch(
-            "remote.schedule.get_schedule",
+            "remote.scheduler._get_schedule_by_name",
             return_value={
                 "ScheduleExpression": "cron(0 9 ? * MON-FRI *)",
                 "ScheduleExpressionTimezone": "UTC",
@@ -534,11 +752,11 @@ class TestListCommand:
         mocker.patch(
             "remote.schedule.list_schedules",
             return_value=[
-                {"Name": "remotepy-wake-i-terminated", "State": "ENABLED"},
+                {"Name": "remotepy-wake-i-aabb00112233", "State": "ENABLED"},
             ],
         )
         mocker.patch(
-            "remote.schedule.get_schedule",
+            "remote.scheduler._get_schedule_by_name",
             return_value={
                 "ScheduleExpression": "cron(0 9 ? * MON-FRI *)",
                 "ScheduleExpressionTimezone": "UTC",
@@ -552,7 +770,37 @@ class TestListCommand:
         result = runner.invoke(app, ["list"])
 
         assert result.exit_code == 0
-        assert "i-terminated" in result.stdout
+        assert "i-aabb00112233" in result.stdout
+
+    def test_should_show_name_column_for_named_schedules(self, mocker):
+        """Should show Name column with schedule names."""
+        from remote.schedule import app
+
+        mocker.patch(
+            "remote.schedule.list_schedules",
+            return_value=[
+                {"Name": "remotepy-wake-morning-i-111", "State": "ENABLED"},
+                {"Name": "remotepy-sleep-morning-i-111", "State": "ENABLED"},
+                {"Name": "remotepy-wake-i-111", "State": "ENABLED"},
+            ],
+        )
+        mocker.patch(
+            "remote.scheduler._get_schedule_by_name",
+            return_value={
+                "ScheduleExpression": "cron(0 9 ? * MON-FRI *)",
+                "ScheduleExpressionTimezone": "UTC",
+            },
+        )
+        mocker.patch(
+            "remote.utils.get_instance_names_by_ids",
+            return_value={"i-111": "my-server"},
+        )
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 0
+        assert "morning" in result.stdout
+        assert "Name" in result.stdout
 
 
 # ============================================================================

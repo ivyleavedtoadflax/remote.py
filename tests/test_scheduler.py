@@ -3,6 +3,8 @@
 These tests cover:
 - IAM role creation and management
 - Schedule creation, retrieval, deletion, and listing
+- Schedule name parsing
+- Named schedule support
 """
 
 import json
@@ -281,6 +283,48 @@ class TestCreateSchedule:
 
         mock_scheduler.return_value.update_schedule.assert_called_once()
 
+    def test_should_create_named_wake_schedule(self, mocker):
+        """Should create a named schedule with correct name format."""
+        from remote.scheduler import create_schedule
+
+        mock_scheduler = mocker.patch("remote.scheduler.get_scheduler_client")
+        mocker.patch(
+            "remote.scheduler.ensure_scheduler_role",
+            return_value="arn:aws:iam::123456789012:role/remotepy-scheduler-role",
+        )
+
+        create_schedule(
+            instance_id="i-0123456789abcdef0",
+            action="wake",
+            schedule_expression="cron(0 8 ? * MON,TUE,WED,THU,FRI *)",
+            timezone="UTC",
+            name="morning",
+        )
+
+        call_kwargs = mock_scheduler.return_value.create_schedule.call_args[1]
+        assert call_kwargs["Name"] == "remotepy-wake-morning-i-0123456789abcdef0"
+
+    def test_should_create_named_sleep_schedule(self, mocker):
+        """Should create a named sleep schedule with correct name format."""
+        from remote.scheduler import create_schedule
+
+        mock_scheduler = mocker.patch("remote.scheduler.get_scheduler_client")
+        mocker.patch(
+            "remote.scheduler.ensure_scheduler_role",
+            return_value="arn:aws:iam::123456789012:role/remotepy-scheduler-role",
+        )
+
+        create_schedule(
+            instance_id="i-0123456789abcdef0",
+            action="sleep",
+            schedule_expression="cron(0 23 ? * MON,TUE,WED,THU,FRI *)",
+            timezone="UTC",
+            name="evening",
+        )
+
+        call_kwargs = mock_scheduler.return_value.create_schedule.call_args[1]
+        assert call_kwargs["Name"] == "remotepy-sleep-evening-i-0123456789abcdef0"
+
 
 class TestGetSchedule:
     """Tests for get_schedule function."""
@@ -317,6 +361,24 @@ class TestGetSchedule:
 
         assert result is None
 
+    def test_should_get_named_schedule(self, mocker):
+        """Should get a named schedule with correct name format."""
+        from remote.scheduler import get_schedule
+
+        mock_scheduler = mocker.patch("remote.scheduler.get_scheduler_client")
+        mock_scheduler.return_value.get_schedule.return_value = {
+            "Name": "remotepy-wake-morning-i-123",
+            "ScheduleExpression": "cron(0 8 ? * MON *)",
+            "State": "ENABLED",
+        }
+
+        result = get_schedule("i-123", "wake", name="morning")
+
+        assert result is not None
+        mock_scheduler.return_value.get_schedule.assert_called_once_with(
+            Name="remotepy-wake-morning-i-123"
+        )
+
 
 class TestDeleteSchedule:
     """Tests for delete_schedule function."""
@@ -347,6 +409,19 @@ class TestDeleteSchedule:
         result = delete_schedule("i-123", "wake")
 
         assert result is False
+
+    def test_should_delete_named_schedule(self, mocker):
+        """Should delete a named schedule with correct name format."""
+        from remote.scheduler import delete_schedule
+
+        mock_scheduler = mocker.patch("remote.scheduler.get_scheduler_client")
+
+        result = delete_schedule("i-123", "wake", name="morning")
+
+        assert result is True
+        mock_scheduler.return_value.delete_schedule.assert_called_once_with(
+            Name="remotepy-wake-morning-i-123"
+        )
 
 
 class TestListSchedules:
@@ -385,64 +460,216 @@ class TestListSchedules:
 class TestDeleteAllSchedulesForInstance:
     """Tests for delete_all_schedules_for_instance function."""
 
-    def test_should_delete_both_wake_and_sleep_schedules(self, mocker):
-        """Should delete both wake and sleep schedules for an instance."""
+    def test_should_delete_all_schedules_for_instance(self, mocker):
+        """Should delete all schedules matching the instance ID."""
         from remote.scheduler import delete_all_schedules_for_instance
 
-        mock_delete = mocker.patch("remote.scheduler.delete_schedule", return_value=True)
+        mock_scheduler = mocker.patch("remote.scheduler.get_scheduler_client")
+        mocker.patch(
+            "remote.scheduler.list_schedules",
+            return_value=[
+                {"Name": "remotepy-wake-i-123"},
+                {"Name": "remotepy-sleep-i-123"},
+                {"Name": "remotepy-wake-morning-i-123"},
+                {"Name": "remotepy-wake-i-456"},  # different instance
+            ],
+        )
 
         result = delete_all_schedules_for_instance("i-123")
 
-        assert result == {"wake": True, "sleep": True}
-        assert mock_delete.call_count == 2
-        mock_delete.assert_any_call("i-123", "wake")
-        mock_delete.assert_any_call("i-123", "sleep")
+        assert result == 3
+        assert mock_scheduler.return_value.delete_schedule.call_count == 3
 
-    def test_should_report_deletion_results(self, mocker):
-        """Should report which schedules were deleted."""
+    def test_should_return_zero_when_no_schedules(self, mocker):
+        """Should return 0 when no schedules exist for instance."""
+        mocker.patch("remote.scheduler.get_scheduler_client")
+        mocker.patch("remote.scheduler.list_schedules", return_value=[])
+
         from remote.scheduler import delete_all_schedules_for_instance
-
-        mock_delete = mocker.patch("remote.scheduler.delete_schedule")
-        mock_delete.side_effect = [True, False]  # wake deleted, sleep didn't exist
 
         result = delete_all_schedules_for_instance("i-123")
 
-        assert result == {"wake": True, "sleep": False}
+        assert result == 0
+
+    def test_should_skip_schedules_for_other_instances(self, mocker):
+        """Should not delete schedules belonging to other instances."""
+        from remote.scheduler import delete_all_schedules_for_instance
+
+        mock_scheduler = mocker.patch("remote.scheduler.get_scheduler_client")
+        mocker.patch(
+            "remote.scheduler.list_schedules",
+            return_value=[
+                {"Name": "remotepy-wake-i-456"},
+                {"Name": "remotepy-sleep-i-456"},
+            ],
+        )
+
+        result = delete_all_schedules_for_instance("i-123")
+
+        assert result == 0
+        mock_scheduler.return_value.delete_schedule.assert_not_called()
 
 
 class TestGetSchedulesForInstance:
     """Tests for get_schedules_for_instance function."""
 
-    def test_should_get_both_schedules(self, mocker):
-        """Should get both wake and sleep schedules for an instance."""
+    def test_should_get_all_schedules_for_instance(self, mocker):
+        """Should get all schedules (named and unnamed) for an instance."""
         from remote.scheduler import get_schedules_for_instance
 
-        mock_get = mocker.patch("remote.scheduler.get_schedule")
-        mock_get.side_effect = [
-            {"Name": "remotepy-wake-i-123", "State": "ENABLED"},
-            {"Name": "remotepy-sleep-i-123", "State": "ENABLED"},
-        ]
+        mocker.patch(
+            "remote.scheduler.list_schedules",
+            return_value=[
+                {"Name": "remotepy-wake-i-123"},
+                {"Name": "remotepy-sleep-i-123"},
+                {"Name": "remotepy-wake-morning-i-123"},
+                {"Name": "remotepy-wake-i-456"},  # different instance
+            ],
+        )
+        mocker.patch(
+            "remote.scheduler._get_schedule_by_name",
+            side_effect=lambda name: {
+                "Name": name,
+                "ScheduleExpression": "cron(0 9 ? * MON *)",
+                "State": "ENABLED",
+            },
+        )
 
         result = get_schedules_for_instance("i-123")
 
-        assert "wake" in result
-        assert "sleep" in result
-        assert result["wake"]["Name"] == "remotepy-wake-i-123"
+        assert len(result) == 3
+        actions = [s["action"] for s in result]
+        assert "wake" in actions
+        assert "sleep" in actions
 
-    def test_should_handle_missing_schedules(self, mocker):
-        """Should return None for schedules that don't exist."""
+    def test_should_return_empty_list_when_no_schedules(self, mocker):
+        """Should return empty list when no schedules exist."""
         from remote.scheduler import get_schedules_for_instance
 
-        mock_get = mocker.patch("remote.scheduler.get_schedule")
-        mock_get.side_effect = [
-            {"Name": "remotepy-wake-i-123", "State": "ENABLED"},
-            None,  # No sleep schedule
-        ]
+        mocker.patch("remote.scheduler.list_schedules", return_value=[])
 
         result = get_schedules_for_instance("i-123")
 
-        assert result["wake"] is not None
-        assert result["sleep"] is None
+        assert result == []
+
+    def test_should_include_parsed_name_for_named_schedules(self, mocker):
+        """Should include parsed_name field for named schedules."""
+        from remote.scheduler import get_schedules_for_instance
+
+        mocker.patch(
+            "remote.scheduler.list_schedules",
+            return_value=[
+                {"Name": "remotepy-wake-morning-i-123"},
+                {"Name": "remotepy-wake-i-123"},
+            ],
+        )
+        mocker.patch(
+            "remote.scheduler._get_schedule_by_name",
+            side_effect=lambda name: {
+                "Name": name,
+                "ScheduleExpression": "cron(0 9 ? * MON *)",
+                "State": "ENABLED",
+            },
+        )
+
+        result = get_schedules_for_instance("i-123")
+
+        named = [s for s in result if s["parsed_name"] is not None]
+        unnamed = [s for s in result if s["parsed_name"] is None]
+        assert len(named) == 1
+        assert named[0]["parsed_name"] == "morning"
+        assert len(unnamed) == 1
+
+
+# ============================================================================
+# Schedule Name Parsing Tests
+# ============================================================================
+
+
+class TestParseScheduleName:
+    """Tests for parse_schedule_name function."""
+
+    def test_should_parse_unnamed_wake_schedule(self):
+        """Should parse unnamed wake schedule."""
+        from remote.scheduler import parse_schedule_name
+
+        result = parse_schedule_name("remotepy-wake-i-0123456789abcdef0")
+
+        assert result is not None
+        assert result["action"] == "wake"
+        assert result["name"] is None
+        assert result["instance_id"] == "i-0123456789abcdef0"
+
+    def test_should_parse_unnamed_sleep_schedule(self):
+        """Should parse unnamed sleep schedule."""
+        from remote.scheduler import parse_schedule_name
+
+        result = parse_schedule_name("remotepy-sleep-i-0123456789abcdef0")
+
+        assert result is not None
+        assert result["action"] == "sleep"
+        assert result["name"] is None
+        assert result["instance_id"] == "i-0123456789abcdef0"
+
+    def test_should_parse_named_wake_schedule(self):
+        """Should parse named wake schedule."""
+        from remote.scheduler import parse_schedule_name
+
+        result = parse_schedule_name("remotepy-wake-morning-i-0123456789abcdef0")
+
+        assert result is not None
+        assert result["action"] == "wake"
+        assert result["name"] == "morning"
+        assert result["instance_id"] == "i-0123456789abcdef0"
+
+    def test_should_parse_named_sleep_schedule(self):
+        """Should parse named sleep schedule."""
+        from remote.scheduler import parse_schedule_name
+
+        result = parse_schedule_name("remotepy-sleep-evening-i-0123456789abcdef0")
+
+        assert result is not None
+        assert result["action"] == "sleep"
+        assert result["name"] == "evening"
+        assert result["instance_id"] == "i-0123456789abcdef0"
+
+    def test_should_parse_hyphenated_name(self):
+        """Should parse schedule name with hyphens in the name part."""
+        from remote.scheduler import parse_schedule_name
+
+        result = parse_schedule_name("remotepy-wake-my-sync-i-0123456789abcdef0")
+
+        assert result is not None
+        assert result["action"] == "wake"
+        assert result["name"] == "my-sync"
+        assert result["instance_id"] == "i-0123456789abcdef0"
+
+    def test_should_return_none_for_invalid_prefix(self):
+        """Should return None for non-remotepy schedules."""
+        from remote.scheduler import parse_schedule_name
+
+        assert parse_schedule_name("other-wake-i-123") is None
+
+    def test_should_return_none_for_invalid_action(self):
+        """Should return None for unknown actions."""
+        from remote.scheduler import parse_schedule_name
+
+        assert parse_schedule_name("remotepy-restart-i-123") is None
+
+    def test_should_return_none_for_empty_string(self):
+        """Should return None for empty string."""
+        from remote.scheduler import parse_schedule_name
+
+        assert parse_schedule_name("") is None
+
+    def test_should_parse_short_instance_id(self):
+        """Should parse schedule with short instance ID."""
+        from remote.scheduler import parse_schedule_name
+
+        result = parse_schedule_name("remotepy-wake-i-12345678")
+
+        assert result is not None
+        assert result["instance_id"] == "i-12345678"
 
 
 class TestScheduleNaming:
@@ -469,3 +696,23 @@ class TestScheduleNaming:
         assert call_kwargs["Name"].startswith("remotepy-")
         assert "wake" in call_kwargs["Name"]
         assert "i-0123456789abcdef0" in call_kwargs["Name"]
+
+    def test_named_schedule_name_pattern(self, mocker):
+        """Should follow naming pattern: remotepy-{action}-{name}-{instance_id}."""
+        from remote.scheduler import create_schedule
+
+        mock_scheduler = mocker.patch("remote.scheduler.get_scheduler_client")
+        mocker.patch(
+            "remote.scheduler.ensure_scheduler_role",
+            return_value="arn:aws:iam::123456789012:role/remotepy-scheduler-role",
+        )
+
+        create_schedule(
+            instance_id="i-0123456789abcdef0",
+            action="wake",
+            schedule_expression="cron(0 9 ? * MON *)",
+            name="morning",
+        )
+
+        call_kwargs = mock_scheduler.return_value.create_schedule.call_args[1]
+        assert call_kwargs["Name"] == "remotepy-wake-morning-i-0123456789abcdef0"

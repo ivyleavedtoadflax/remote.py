@@ -12,9 +12,9 @@ from .scheduler import (
     delete_all_schedules_for_instance,
     delete_schedule,
     delete_scheduler_role,
-    get_schedule,
     get_schedules_for_instance,
     list_schedules,
+    parse_schedule_name,
 )
 from .utils import (
     confirm_action,
@@ -32,6 +32,7 @@ from .validation import (
     parse_schedule_date,
     parse_schedule_days,
     parse_schedule_time,
+    validate_schedule_name,
 )
 
 app = typer.Typer(
@@ -100,12 +101,16 @@ def wake(
     timezone: str | None = typer.Option(
         None, "--timezone", "-z", help="IANA timezone (e.g., America/New_York)"
     ),
+    schedule_name: str | None = typer.Option(
+        None, "--name", "-n", help="Schedule name (for multiple schedules per instance)"
+    ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
 ) -> None:
     """Create a wake schedule to start an instance at a specific time.
 
     Use --at for one-time schedules (e.g., --at tomorrow, --at tuesday).
     Use --days for recurring schedules (e.g., --days mon-fri). Defaults to mon-fri if neither specified.
+    Use --name to create multiple wake schedules (e.g., --name morning, --name afternoon).
     """
     instance_name_resolved, instance_id = resolve_instance_or_exit(instance_name)
 
@@ -114,6 +119,14 @@ def wake(
         print_error("Cannot use both --at and --days. Use --at for one-time, --days for recurring.")
         raise typer.Exit(1)
 
+    # Validate schedule name if provided
+    if schedule_name:
+        try:
+            schedule_name = validate_schedule_name(schedule_name)
+        except Exception as e:
+            print_error(str(e))
+            raise typer.Exit(1)
+
     # Validate time
     try:
         hour, minute = parse_schedule_time(time)
@@ -121,6 +134,7 @@ def wake(
         print_error(str(e))
         raise typer.Exit(1)
 
+    name_suffix = f" [{schedule_name}]" if schedule_name else ""
     tz = _get_timezone(timezone)
 
     if at:
@@ -136,7 +150,7 @@ def wake(
         if not yes:
             print_info(
                 f"Will schedule {instance_name_resolved} ({instance_id}) "
-                f"to wake once at {hour:02d}:{minute:02d} on {target_date.isoformat()}"
+                f"to wake once at {hour:02d}:{minute:02d} on {target_date.isoformat()}{name_suffix}"
             )
             if not confirm_action(
                 "Create one-time wake schedule", "instance", instance_name_resolved
@@ -148,10 +162,11 @@ def wake(
             instance_id=instance_id,
             action="wake",
             schedule_expression=schedule_expr,
+            name=schedule_name,
         )
 
         print_success(
-            f"Created one-time wake schedule for {instance_name_resolved}: "
+            f"Created one-time wake schedule{name_suffix} for {instance_name_resolved}: "
             f"{hour:02d}:{minute:02d} on {target_date.isoformat()}"
         )
     else:
@@ -168,7 +183,7 @@ def wake(
         if not yes:
             print_info(
                 f"Will schedule {instance_name_resolved} ({instance_id}) "
-                f"to wake at {hour:02d}:{minute:02d} on {','.join(day_list)} ({tz})"
+                f"to wake at {hour:02d}:{minute:02d} on {','.join(day_list)} ({tz}){name_suffix}"
             )
             if not confirm_action("Create wake schedule", "instance", instance_name_resolved):
                 print_warning("Cancelled")
@@ -179,10 +194,11 @@ def wake(
             action="wake",
             schedule_expression=schedule_expr,
             timezone=tz,
+            name=schedule_name,
         )
 
         print_success(
-            f"Created wake schedule for {instance_name_resolved}: "
+            f"Created wake schedule{name_suffix} for {instance_name_resolved}: "
             f"{hour:02d}:{minute:02d} on {','.join(day_list)} ({tz})"
         )
 
@@ -201,12 +217,16 @@ def sleep(
     timezone: str | None = typer.Option(
         None, "--timezone", "-z", help="IANA timezone (e.g., America/New_York)"
     ),
+    schedule_name: str | None = typer.Option(
+        None, "--name", "-n", help="Schedule name (for multiple schedules per instance)"
+    ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
 ) -> None:
     """Create a sleep schedule to stop an instance at a specific time.
 
     Use --at for one-time schedules (e.g., --at tomorrow, --at tuesday).
     Use --days for recurring schedules (e.g., --days mon-fri). Defaults to mon-fri if neither specified.
+    Use --name to create multiple sleep schedules (e.g., --name morning, --name evening).
     """
     instance_name_resolved, instance_id = resolve_instance_or_exit(instance_name)
 
@@ -215,6 +235,14 @@ def sleep(
         print_error("Cannot use both --at and --days. Use --at for one-time, --days for recurring.")
         raise typer.Exit(1)
 
+    # Validate schedule name if provided
+    if schedule_name:
+        try:
+            schedule_name = validate_schedule_name(schedule_name)
+        except Exception as e:
+            print_error(str(e))
+            raise typer.Exit(1)
+
     # Validate time
     try:
         hour, minute = parse_schedule_time(time)
@@ -222,6 +250,7 @@ def sleep(
         print_error(str(e))
         raise typer.Exit(1)
 
+    name_suffix = f" [{schedule_name}]" if schedule_name else ""
     tz = _get_timezone(timezone)
 
     if at:
@@ -237,7 +266,7 @@ def sleep(
         if not yes:
             print_info(
                 f"Will schedule {instance_name_resolved} ({instance_id}) "
-                f"to sleep once at {hour:02d}:{minute:02d} on {target_date.isoformat()}"
+                f"to sleep once at {hour:02d}:{minute:02d} on {target_date.isoformat()}{name_suffix}"
             )
             if not confirm_action(
                 "Create one-time sleep schedule", "instance", instance_name_resolved
@@ -249,10 +278,11 @@ def sleep(
             instance_id=instance_id,
             action="sleep",
             schedule_expression=schedule_expr,
+            name=schedule_name,
         )
 
         print_success(
-            f"Created one-time sleep schedule for {instance_name_resolved}: "
+            f"Created one-time sleep schedule{name_suffix} for {instance_name_resolved}: "
             f"{hour:02d}:{minute:02d} on {target_date.isoformat()}"
         )
     else:
@@ -269,7 +299,7 @@ def sleep(
         if not yes:
             print_info(
                 f"Will schedule {instance_name_resolved} ({instance_id}) "
-                f"to sleep at {hour:02d}:{minute:02d} on {','.join(day_list)} ({tz})"
+                f"to sleep at {hour:02d}:{minute:02d} on {','.join(day_list)} ({tz}){name_suffix}"
             )
             if not confirm_action("Create sleep schedule", "instance", instance_name_resolved):
                 print_warning("Cancelled")
@@ -280,10 +310,11 @@ def sleep(
             action="sleep",
             schedule_expression=schedule_expr,
             timezone=tz,
+            name=schedule_name,
         )
 
         print_success(
-            f"Created sleep schedule for {instance_name_resolved}: "
+            f"Created sleep schedule{name_suffix} for {instance_name_resolved}: "
             f"{hour:02d}:{minute:02d} on {','.join(day_list)} ({tz})"
         )
 
@@ -300,37 +331,38 @@ def status(
 
     print_info(f"Schedule status for {instance_name_resolved} ({instance_id})")
 
-    has_schedules = False
-
-    if schedules["wake"]:
-        has_schedules = True
-        wake_sched = schedules["wake"]
-        cron_display = _format_cron_for_display(wake_sched.get("ScheduleExpression", ""))
-        tz = wake_sched.get("ScheduleExpressionTimezone", "UTC")
-        state = wake_sched.get("State", "UNKNOWN")
-        typer.echo(f"  Wake:  {cron_display} ({tz}) [{state}]")
-
-    if schedules["sleep"]:
-        has_schedules = True
-        sleep_sched = schedules["sleep"]
-        cron_display = _format_cron_for_display(sleep_sched.get("ScheduleExpression", ""))
-        tz = sleep_sched.get("ScheduleExpressionTimezone", "UTC")
-        state = sleep_sched.get("State", "UNKNOWN")
-        typer.echo(f"  Sleep: {cron_display} ({tz}) [{state}]")
-
-    if not has_schedules:
+    if not schedules:
         print_warning("No schedules configured for this instance")
+        return
+
+    for sched in schedules:
+        action = sched.get("action", "?")
+        parsed_name = sched.get("parsed_name")
+        expr = sched.get("ScheduleExpression", "")
+        cron_display = _format_cron_for_display(expr) if expr.startswith("cron(") else expr
+        tz = sched.get("ScheduleExpressionTimezone", "UTC")
+        state = sched.get("State", "UNKNOWN")
+        name_display = f" [{parsed_name}]" if parsed_name else ""
+        label = f"{action.capitalize()}{name_display}:"
+        typer.echo(f"  {label:20s} {cron_display} ({tz}) [{state}]")
 
 
 @app.command()
 @handle_cli_errors
 def clear(
     instance_name: str | None = typer.Argument(None, help="Instance name"),
-    wake_only: bool = typer.Option(False, "--wake", help="Clear only wake schedule"),
-    sleep_only: bool = typer.Option(False, "--sleep", help="Clear only sleep schedule"),
+    wake_only: bool = typer.Option(False, "--wake", help="Clear only wake schedules"),
+    sleep_only: bool = typer.Option(False, "--sleep", help="Clear only sleep schedules"),
+    schedule_name: str | None = typer.Option(
+        None, "--name", "-n", help="Clear only schedules with this name"
+    ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation"),
 ) -> None:
-    """Clear schedules for an instance."""
+    """Clear schedules for an instance.
+
+    Without --name: clears ALL schedules (or filtered by --wake/--sleep).
+    With --name: clears only the named schedule(s) (wake+sleep, or filtered by --wake/--sleep).
+    """
     instance_name_resolved, instance_id = resolve_instance_or_exit(instance_name)
 
     # Determine what to clear
@@ -338,92 +370,122 @@ def clear(
         print_error("Cannot specify both --wake and --sleep. Use neither to clear both.")
         raise typer.Exit(1)
 
-    if wake_only:
-        existing = get_schedule(instance_id, "wake")
-        if not existing:
-            print_warning(f"No wake schedule configured for {instance_name_resolved}")
+    # Validate schedule name if provided
+    if schedule_name:
+        try:
+            schedule_name = validate_schedule_name(schedule_name)
+        except Exception as e:
+            print_error(str(e))
+            raise typer.Exit(1)
+
+    if schedule_name:
+        # Clear specific named schedules
+        actions: list[str] = []
+        if wake_only:
+            actions = ["wake"]
+        elif sleep_only:
+            actions = ["sleep"]
+        else:
+            actions = ["wake", "sleep"]
+
+        # Check if any matching schedules exist
+        schedules = get_schedules_for_instance(instance_id)
+        matching = [
+            s
+            for s in schedules
+            if s.get("parsed_name") == schedule_name and s.get("action") in actions
+        ]
+
+        if not matching:
+            print_warning(
+                f"No {'/'.join(actions)} schedule named '{schedule_name}' "
+                f"for {instance_name_resolved}"
+            )
             return
 
         if not yes:
-            if not confirm_action("Clear wake schedule", "instance", instance_name_resolved):
+            action_desc = "/".join(actions)
+            if not confirm_action(
+                f"Clear {action_desc} schedule '{schedule_name}'",
+                "instance",
+                instance_name_resolved,
+            ):
                 print_warning("Cancelled")
                 return
 
-        deleted = delete_schedule(instance_id, "wake")
-        if deleted:
-            print_success(f"Cleared wake schedule for {instance_name_resolved}")
+        deleted_count = 0
+        for action in actions:
+            if delete_schedule(instance_id, action, name=schedule_name):  # type: ignore[arg-type]
+                deleted_count += 1
+
+        if deleted_count:
+            print_success(
+                f"Cleared {deleted_count} schedule(s) named '{schedule_name}' "
+                f"for {instance_name_resolved}"
+            )
+        else:
+            print_warning("No schedules were deleted")
         return
 
-    if sleep_only:
-        existing = get_schedule(instance_id, "sleep")
-        if not existing:
-            print_warning(f"No sleep schedule configured for {instance_name_resolved}")
+    if wake_only or sleep_only:
+        # Clear all wake or all sleep schedules (named + unnamed)
+        action_filter = "wake" if wake_only else "sleep"
+        schedules = get_schedules_for_instance(instance_id)
+        matching = [s for s in schedules if s.get("action") == action_filter]
+
+        if not matching:
+            print_warning(f"No {action_filter} schedules for {instance_name_resolved}")
             return
 
         if not yes:
-            if not confirm_action("Clear sleep schedule", "instance", instance_name_resolved):
+            if not confirm_action(
+                f"Clear all {action_filter} schedules ({len(matching)})",
+                "instance",
+                instance_name_resolved,
+            ):
                 print_warning("Cancelled")
                 return
 
-        deleted = delete_schedule(instance_id, "sleep")
-        if deleted:
-            print_success(f"Cleared sleep schedule for {instance_name_resolved}")
+        deleted_count = 0
+        for sched in matching:
+            parsed_name = sched.get("parsed_name")
+            if delete_schedule(instance_id, action_filter, name=parsed_name):  # type: ignore[arg-type]
+                deleted_count += 1
+
+        if deleted_count:
+            print_success(
+                f"Cleared {deleted_count} {action_filter} schedule(s) for {instance_name_resolved}"
+            )
+        else:
+            print_warning("No schedules were deleted")
         return
 
-    # Clear both
+    # Clear all schedules
     schedules = get_schedules_for_instance(instance_id)
-    if not schedules["wake"] and not schedules["sleep"]:
+    if not schedules:
         print_warning(f"No schedules configured for {instance_name_resolved}")
         return
 
     if not yes:
-        if not confirm_action("Clear all schedules", "instance", instance_name_resolved):
+        if not confirm_action(
+            f"Clear all schedules ({len(schedules)})", "instance", instance_name_resolved
+        ):
             print_warning("Cancelled")
             return
 
-    results = delete_all_schedules_for_instance(instance_id)
+    count = delete_all_schedules_for_instance(instance_id)
 
-    cleared = []
-    if results["wake"]:
-        cleared.append("wake")
-    if results["sleep"]:
-        cleared.append("sleep")
-
-    if cleared:
-        print_success(f"Cleared {', '.join(cleared)} schedule(s) for {instance_name_resolved}")
+    if count:
+        print_success(f"Cleared {count} schedule(s) for {instance_name_resolved}")
     else:
         print_warning("No schedules were deleted")
-
-
-def _parse_schedule_name(name: str) -> tuple[str, str] | None:
-    """Parse schedule name to extract action and instance ID.
-
-    Args:
-        name: Schedule name like "remotepy-wake-i-0123456789abcdef0"
-
-    Returns:
-        Tuple of (action, instance_id) or None if not parseable
-    """
-    if not name.startswith("remotepy-"):
-        return None
-
-    # Remove prefix
-    remainder = name[9:]  # len("remotepy-")
-
-    # Find action (wake or sleep)
-    if remainder.startswith("wake-"):
-        return ("wake", remainder[5:])
-    elif remainder.startswith("sleep-"):
-        return ("sleep", remainder[6:])
-
-    return None
 
 
 @app.command("list")
 @handle_cli_errors
 def list_cmd() -> None:
     """List all remotepy schedules."""
-    from .scheduler import get_schedule
+    from .scheduler import _get_schedule_by_name
     from .utils import get_instance_names_by_ids
 
     schedules = list_schedules()
@@ -432,21 +494,25 @@ def list_cmd() -> None:
         print_warning("No schedules found")
         return
 
-    # First pass: collect all instance IDs
-    parsed_schedules: list[tuple[str, str, str]] = []  # (action, instance_id, state)
+    # First pass: collect all instance IDs and parse names
+    parsed_schedules: list[
+        tuple[str, str | None, str, str]
+    ] = []  # (action, name, instance_id, state)
     all_instance_ids: set[str] = set()
 
     for sched in schedules:
-        name = sched.get("Name", "")
+        sched_name = sched.get("Name", "")
         state = sched.get("State", "UNKNOWN")
 
-        parsed = _parse_schedule_name(name)
+        parsed = parse_schedule_name(sched_name)
         if not parsed:
             continue
 
-        action, instance_id = parsed
-        parsed_schedules.append((action, instance_id, state))
-        all_instance_ids.add(instance_id)
+        action = parsed["action"]
+        name = parsed["name"]
+        instance_id = parsed["instance_id"]
+        parsed_schedules.append((action, name, instance_id, state))  # type: ignore[arg-type]
+        all_instance_ids.add(instance_id)  # type: ignore[arg-type]
 
     # Batch lookup instance names
     instance_names = get_instance_names_by_ids(list(all_instance_ids)) if all_instance_ids else {}
@@ -454,15 +520,21 @@ def list_cmd() -> None:
     columns = [
         {"name": "Instance", "style": "cyan"},
         {"name": "Action", "style": "green"},
+        {"name": "Name"},
         {"name": "Schedule"},
         {"name": "Timezone"},
         {"name": "State"},
     ]
 
     rows: list[list[str]] = []
-    for action, instance_id, state in parsed_schedules:
+    for action, name, instance_id, state in parsed_schedules:
         # Get full schedule details for expression and timezone
-        full_sched = get_schedule(instance_id, action)  # type: ignore[arg-type]
+        full_sched_name = (
+            f"remotepy-{action}-{name}-{instance_id}"
+            if name
+            else f"remotepy-{action}-{instance_id}"
+        )
+        full_sched = _get_schedule_by_name(full_sched_name)
         if full_sched:
             expr = full_sched.get("ScheduleExpression", "")
             tz = full_sched.get("ScheduleExpressionTimezone", "UTC")
@@ -474,7 +546,7 @@ def list_cmd() -> None:
         # Show instance name if available, fall back to ID
         instance_display = instance_names.get(instance_id, instance_id)
 
-        rows.append([instance_display, action, display_expr, tz, state])
+        rows.append([instance_display, action, name or "-", display_expr, tz, state])
 
     console.print(create_table("Schedules", columns, rows))
 

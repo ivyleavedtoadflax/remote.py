@@ -481,3 +481,92 @@ class TestBuildScheduleAtExpression:
 
         result = build_schedule_at_expression(date(2026, 2, 15), 23, 59)
         assert result == "at(2026-02-15T23:59:00)"
+
+
+class TestValidateScheduleName:
+    """Tests for validate_schedule_name function."""
+
+    def test_should_accept_simple_name(self):
+        """Should accept simple lowercase names."""
+        from remote.validation import validate_schedule_name
+
+        assert validate_schedule_name("morning") == "morning"
+        assert validate_schedule_name("evening") == "evening"
+        assert validate_schedule_name("sync1") == "sync1"
+
+    def test_should_accept_hyphenated_name(self):
+        """Should accept names with hyphens."""
+        from remote.validation import validate_schedule_name
+
+        assert validate_schedule_name("my-sync") == "my-sync"
+        assert validate_schedule_name("work-hours") == "work-hours"
+
+    def test_should_accept_name_with_numbers(self):
+        """Should accept names with numbers."""
+        from remote.validation import validate_schedule_name
+
+        assert validate_schedule_name("sync2") == "sync2"
+        assert validate_schedule_name("3am") == "3am"
+
+    def test_should_strip_whitespace(self):
+        """Should strip leading/trailing whitespace."""
+        from remote.validation import validate_schedule_name
+
+        assert validate_schedule_name("  morning  ") == "morning"
+
+    def test_should_reject_empty_name(self):
+        """Should reject empty names."""
+        from remote.validation import validate_schedule_name
+
+        with pytest.raises(ValidationError):
+            validate_schedule_name("")
+
+        with pytest.raises(ValidationError):
+            validate_schedule_name("   ")
+
+    def test_should_reject_uppercase(self):
+        """Should reject uppercase characters."""
+        from remote.validation import validate_schedule_name
+
+        with pytest.raises(ValidationError):
+            validate_schedule_name("Morning")
+
+        with pytest.raises(ValidationError):
+            validate_schedule_name("MORNING")
+
+    def test_should_reject_underscores(self):
+        """Should reject underscores."""
+        from remote.validation import validate_schedule_name
+
+        with pytest.raises(ValidationError):
+            validate_schedule_name("my_sync")
+
+    def test_should_reject_special_characters(self):
+        """Should reject special characters."""
+        from remote.validation import validate_schedule_name
+
+        with pytest.raises(ValidationError):
+            validate_schedule_name("morning!")
+
+        with pytest.raises(ValidationError):
+            validate_schedule_name("sync@home")
+
+    def test_should_reject_names_over_20_chars(self):
+        """Should reject names exceeding 20 characters."""
+        from remote.validation import validate_schedule_name
+
+        with pytest.raises(ValidationError, match="maximum length"):
+            validate_schedule_name("a" * 21)
+
+    def test_should_accept_max_length_name(self):
+        """Should accept a name exactly 20 characters long."""
+        from remote.validation import validate_schedule_name
+
+        assert validate_schedule_name("a" * 20) == "a" * 20
+
+    def test_should_reject_name_starting_with_hyphen(self):
+        """Should reject names starting with a hyphen."""
+        from remote.validation import validate_schedule_name
+
+        with pytest.raises(ValidationError):
+            validate_schedule_name("-morning")
