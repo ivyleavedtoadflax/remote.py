@@ -1072,7 +1072,7 @@ def connect(
     whitelist_ports: list[str] | None = typer.Option(
         None,
         "--whitelist-ports",
-        help="Ports to whitelist when using --whitelist-ip (accepts service names). Repeatable. Default: ssh.",
+        help="Port number(s) to whitelist when using --whitelist-ip. Repeatable. Default: 22.",
     ),
     connection: str | None = typer.Option(
         None,
