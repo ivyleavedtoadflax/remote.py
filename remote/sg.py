@@ -12,7 +12,7 @@ import typer
 
 from remote.exceptions import AWSServiceError, ValidationError
 from remote.instance_resolver import resolve_instance_or_exit
-from remote.settings import PORT_PRESETS, SSH_PORT
+from remote.settings import SSH_PORT
 from remote.utils import (
     confirm_action,
     console,
@@ -36,7 +36,7 @@ app = typer.Typer(
     remote sg add my-instance
 
   Allow your IP on multiple ports (SSH + Syncthing):
-    remote sg add my-instance --port ssh --port syncthing
+    remote sg add my-instance --port 22 --port 22000
 
   See who has access to your instance:
     remote sg list my-instance
@@ -67,34 +67,20 @@ PUBLIC_IP_TIMEOUT_SECONDS = 10
 def resolve_port(port_str: str) -> int:
     """Resolve a port string to an integer port number.
 
-    Accepts either a numeric string or a service name from PORT_PRESETS.
-
     Args:
-        port_str: A numeric port string (e.g., "22") or service name (e.g., "ssh")
+        port_str: A numeric port string (e.g., "22", "443")
 
     Returns:
         The resolved port number
 
     Raises:
-        ValidationError: If the port string is not a valid port or known service name
+        ValidationError: If the port string is not a valid port number
     """
-    # Try numeric port first
     try:
         port = int(port_str)
         return validate_port(port)
     except (ValueError, TypeError):
-        pass
-
-    # Try service name lookup (case-insensitive)
-    service = port_str.lower().strip()
-    if service in PORT_PRESETS:
-        return PORT_PRESETS[service]
-
-    available = ", ".join(sorted(PORT_PRESETS.keys()))
-    raise ValidationError(
-        f"Unknown port or service: '{port_str}'. "
-        f"Use a port number (1-65535) or a service name: {available}"
-    )
+        raise ValidationError(f"Invalid port: '{port_str}'. Use a port number (1-65535).")
 
 
 def get_public_ip() -> str:
@@ -654,7 +640,7 @@ def add_ip(
         None,
         "--port",
         "-p",
-        help="Port(s) or service name(s) (ssh, syncthing, etc). Repeatable. Default: ssh.",
+        help="Port number(s). Repeatable. Default: 22.",
     ),
     exclusive: bool = typer.Option(
         False,
@@ -696,7 +682,7 @@ def add_ip(
         remote sg add my-instance --ip 1.2.3.4                # Add specific IP
         remote sg add --exclusive                              # Add your IP, remove others
         remote sg add --port 443 --ip 1.2.3.4                 # Allow HTTPS from specific IP
-        remote sg add --port ssh --port syncthing              # Multiple ports
+        remote sg add --port 22 --port 22000                   # Multiple ports
         remote sg add --sg sg-12345                            # Target specific SG
     """
     instance_name, instance_id = resolve_instance_or_exit(instance_name)
@@ -793,7 +779,7 @@ def remove_ip(
         None,
         "--port",
         "-p",
-        help="Port(s) or service name(s) (ssh, syncthing, etc). Repeatable. Default: ssh.",
+        help="Port number(s). Repeatable. Default: 22.",
     ),
     sg: str | None = typer.Option(
         None,
@@ -821,7 +807,7 @@ def remove_ip(
         remote sg remove my-instance                 # Remove your current IP from SSH
         remote sg remove my-instance --ip 1.2.3.4  # Remove specific IP
         remote sg remove --port 443 --ip 1.2.3.4    # Remove HTTPS access
-        remote sg remove --port ssh --port syncthing # Remove from multiple ports
+        remote sg remove --port 22 --port 22000       # Remove from multiple ports
         remote sg remove --sg sg-12345               # Only remove from specific SG
     """
     instance_name, instance_id = resolve_instance_or_exit(instance_name)
@@ -899,7 +885,7 @@ def list_ips(
         None,
         "--port",
         "-p",
-        help="Port(s) or service name(s) to filter by. Repeatable.",
+        help="Port number(s) to filter by. Repeatable.",
     ),
     sg: str | None = typer.Option(
         None,
@@ -919,7 +905,7 @@ def list_ips(
     Examples:
         remote sg list my-instance                  # List all inbound rules
         remote sg list --port 22                    # Filter by SSH port
-        remote sg list --port ssh --port syncthing  # Filter by multiple ports
+        remote sg list --port 22 --port 22000        # Filter by multiple ports
         remote sg list --sg sg-12345                # Filter by specific SG
     """
     instance_name, instance_id = resolve_instance_or_exit(instance_name)

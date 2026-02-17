@@ -43,28 +43,6 @@ class TestResolvePort:
         assert resolve_port("443") == 443
         assert resolve_port("8080") == 8080
 
-    def test_resolves_service_names(self):
-        """Test that service names are resolved to port numbers."""
-        assert resolve_port("ssh") == 22
-        assert resolve_port("http") == 80
-        assert resolve_port("https") == 443
-        assert resolve_port("syncthing") == 22000
-        assert resolve_port("syncthing-gui") == 8384
-        assert resolve_port("jupyter") == 8888
-        assert resolve_port("rdp") == 3389
-        assert resolve_port("postgres") == 5432
-        assert resolve_port("mysql") == 3306
-        assert resolve_port("redis") == 6379
-
-    def test_case_insensitive(self):
-        """Test that service name lookup is case-insensitive."""
-        assert resolve_port("SSH") == 22
-        assert resolve_port("Http") == 80
-
-    def test_strips_whitespace(self):
-        """Test that whitespace is stripped from service names."""
-        assert resolve_port(" ssh ") == 22
-
     def test_raises_on_invalid_port_number(self):
         """Test that invalid port numbers raise ValidationError."""
         with pytest.raises(ValidationError):
@@ -74,11 +52,11 @@ class TestResolvePort:
         with pytest.raises(ValidationError):
             resolve_port("-1")
 
-    def test_raises_on_unknown_service(self):
-        """Test that unknown service names raise ValidationError."""
+    def test_raises_on_non_numeric(self):
+        """Test that non-numeric strings raise ValidationError."""
         with pytest.raises(ValidationError) as exc_info:
-            resolve_port("unknown-service")
-        assert "Unknown port or service" in str(exc_info.value)
+            resolve_port("ssh")
+        assert "Invalid port" in str(exc_info.value)
 
     def test_valid_boundary_ports(self):
         """Test port number boundaries."""
@@ -841,8 +819,8 @@ class TestAddIpCommand:
         assert "Allowed 10.0.0.0/16 on port 22" in result.stdout
         mock_add.assert_called_once_with("sg-rpy", "10.0.0.0/16", 22, "Added by remote.py")
 
-    def test_adds_ip_with_service_name_port(self, mocker, test_config):
-        """Test that add-ip command works with service name ports."""
+    def test_adds_ip_with_specific_port(self, mocker, test_config):
+        """Test that add command works with a specific port number."""
         mocker.patch(
             "remote.sg.resolve_instance_or_exit",
             return_value=("test-instance", "i-12345"),
@@ -852,13 +830,13 @@ class TestAddIpCommand:
         mock_add = mocker.patch("remote.sg.add_ip_to_security_group")
         mocker.patch("remote.sg.get_ip_rules_for_port", return_value=["10.0.0.1/32"])
 
-        result = runner.invoke(app, ["add", "test-instance", "--ip", "10.0.0.1", "--port", "https"])
+        result = runner.invoke(app, ["add", "test-instance", "--ip", "10.0.0.1", "--port", "443"])
 
         assert result.exit_code == 0
         mock_add.assert_called_once_with("sg-rpy", "10.0.0.1", 443, "Added by remote.py")
 
     def test_adds_ip_with_multiple_ports(self, mocker, test_config):
-        """Test that add-ip command works with multiple ports."""
+        """Test that add command works with multiple ports."""
         mocker.patch(
             "remote.sg.resolve_instance_or_exit",
             return_value=("test-instance", "i-12345"),
@@ -870,7 +848,7 @@ class TestAddIpCommand:
 
         result = runner.invoke(
             app,
-            ["add", "test-instance", "--ip", "10.0.0.1", "--port", "ssh", "--port", "syncthing"],
+            ["add", "test-instance", "--ip", "10.0.0.1", "--port", "22", "--port", "22000"],
         )
 
         assert result.exit_code == 0
@@ -1139,8 +1117,8 @@ class TestListIpsCommand:
         assert result.exit_code == 0
         assert "No inbound IP rules found" in result.stdout
 
-    def test_list_ips_with_service_name_port(self, mocker, test_config):
-        """Test list-ips with service name port filter."""
+    def test_list_ips_with_numeric_port_filter(self, mocker, test_config):
+        """Test list with numeric port filter."""
         mocker.patch(
             "remote.sg.resolve_instance_or_exit",
             return_value=("test-instance", "i-12345"),
@@ -1161,7 +1139,7 @@ class TestListIpsCommand:
             ],
         )
 
-        result = runner.invoke(app, ["list", "test-instance", "--port", "https"])
+        result = runner.invoke(app, ["list", "test-instance", "--port", "443"])
 
         assert result.exit_code == 0
         assert "0.0.0.0/0" in result.stdout
