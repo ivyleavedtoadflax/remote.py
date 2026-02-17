@@ -563,7 +563,7 @@ def find_or_create_remotepy_sg(instance_name: str, instance_id: str) -> str:
     attached_sgs = get_instance_security_groups(instance_id)
     for sg in attached_sgs:
         if sg["GroupName"] == sg_name:
-            return sg["GroupId"]
+            return str(sg["GroupId"])
 
     # Not found — create, attach, and return
     vpc_id = get_instance_vpc_id(instance_id)

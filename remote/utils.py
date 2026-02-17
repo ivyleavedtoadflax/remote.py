@@ -596,7 +596,7 @@ def create_table(
     return table
 
 
-def extract_tags_dict(tags_list: list[dict[str, str]] | None) -> dict[str, str]:
+def extract_tags_dict(tags_list: list[Any] | None) -> dict[str, str]:
     """Convert AWS Tags list format to a dictionary.
 
     AWS resources return tags in the format [{"Key": "k", "Value": "v"}, ...].
