@@ -414,13 +414,39 @@ class TestFindOrCreateRemotepySg:
         assert result == "sg-rpy"
         mock_create.assert_not_called()
 
-    def test_creates_and_attaches_when_missing(self, mocker):
-        """Test that a new SG is created and attached when not found."""
+    def test_finds_existing_unattached_sg_in_vpc(self, mocker):
+        """Test that an existing unattached SG in the VPC is found and attached."""
         mocker.patch(
             "remote.sg.get_instance_security_groups",
             return_value=[{"GroupId": "sg-existing", "GroupName": "default"}],
         )
         mocker.patch("remote.sg.get_instance_vpc_id", return_value="vpc-12345")
+        mock_ec2 = mocker.patch("remote.sg.get_ec2_client")
+        mock_ec2.return_value.describe_security_groups.return_value = {
+            "SecurityGroups": [
+                {"GroupId": "sg-orphan", "GroupName": "remotepy-my-instance"}
+            ]
+        }
+        mock_create = mocker.patch("remote.sg.create_instance_security_group")
+        mock_attach = mocker.patch("remote.sg.attach_security_group_to_instance")
+
+        result = find_or_create_remotepy_sg("my-instance", "i-12345")
+
+        assert result == "sg-orphan"
+        mock_attach.assert_called_once_with("i-12345", "sg-orphan")
+        mock_create.assert_not_called()
+
+    def test_creates_and_attaches_when_missing(self, mocker):
+        """Test that a new SG is created and attached when not found anywhere."""
+        mocker.patch(
+            "remote.sg.get_instance_security_groups",
+            return_value=[{"GroupId": "sg-existing", "GroupName": "default"}],
+        )
+        mocker.patch("remote.sg.get_instance_vpc_id", return_value="vpc-12345")
+        mock_ec2 = mocker.patch("remote.sg.get_ec2_client")
+        mock_ec2.return_value.describe_security_groups.return_value = {
+            "SecurityGroups": []
+        }
         mocker.patch("remote.sg.create_instance_security_group", return_value="sg-new123")
         mock_attach = mocker.patch("remote.sg.attach_security_group_to_instance")
 

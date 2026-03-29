@@ -550,6 +550,12 @@ def detach_security_group_from_instance(instance_id: str, sg_id: str) -> None:
 def find_or_create_remotepy_sg(instance_name: str, instance_id: str) -> str:
     """Find the remotepy-managed SG for an instance, or create and attach one.
 
+    Checks three places in order:
+    1. Security groups already attached to the instance
+    2. Unattached security groups in the same VPC (e.g. left over from a
+       previous instance with the same name)
+    3. Creates a new security group if none exists
+
     Args:
         instance_name: The instance name
         instance_id: The EC2 instance ID
@@ -565,8 +571,25 @@ def find_or_create_remotepy_sg(instance_name: str, instance_id: str) -> str:
         if sg["GroupName"] == sg_name:
             return str(sg["GroupId"])
 
-    # Not found — create, attach, and return
     vpc_id = get_instance_vpc_id(instance_id)
+
+    # Check if it exists in the VPC but isn't attached (e.g. from a replaced instance)
+    with handle_aws_errors("EC2", "describe_security_groups"):
+        response = get_ec2_client().describe_security_groups(
+            Filters=[
+                {"Name": "group-name", "Values": [sg_name]},
+                {"Name": "vpc-id", "Values": [vpc_id]},
+            ]
+        )
+
+    existing_sgs = response.get("SecurityGroups", [])
+    if existing_sgs:
+        sg_id = existing_sgs[0]["GroupId"]
+        attach_security_group_to_instance(instance_id, sg_id)
+        print_info(f"Attached existing managed security group {sg_name} ({sg_id})")
+        return sg_id
+
+    # Not found anywhere — create, attach, and return
     sg_id = create_instance_security_group(instance_name, vpc_id)
     attach_security_group_to_instance(instance_id, sg_id)
     print_info(f"Created managed security group {sg_name} ({sg_id})")
