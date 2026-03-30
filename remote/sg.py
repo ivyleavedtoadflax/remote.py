@@ -584,13 +584,43 @@ def find_or_create_remotepy_sg(instance_name: str, instance_id: str) -> str:
 
     existing_sgs = response.get("SecurityGroups", [])
     if existing_sgs:
+        if len(existing_sgs) > 1:
+            print_warning(
+                f"Found {len(existing_sgs)} security groups named {sg_name} "
+                f"in VPC {vpc_id}; using {existing_sgs[0]['GroupId']}"
+            )
         sg_id = existing_sgs[0]["GroupId"]
+        # Clear stale inbound rules from the orphaned SG so it behaves
+        # the same as a freshly created one
+        stale_rules = get_security_group_rules(sg_id)
+        if stale_rules:
+            with handle_aws_errors("EC2", "revoke_security_group_ingress"):
+                get_ec2_client().revoke_security_group_ingress(
+                    GroupId=sg_id, IpPermissions=stale_rules
+                )
+            print_warning(
+                f"Cleared {len(stale_rules)} stale rule(s) from orphaned SG {sg_id}"
+            )
         attach_security_group_to_instance(instance_id, sg_id)
         print_info(f"Attached existing managed security group {sg_name} ({sg_id})")
         return sg_id
 
     # Not found anywhere — create, attach, and return
-    sg_id = create_instance_security_group(instance_name, vpc_id)
+    try:
+        sg_id = create_instance_security_group(instance_name, vpc_id)
+    except AWSServiceError as e:
+        if getattr(e, "aws_error_code", "") != "InvalidGroup.Duplicate":
+            raise
+        # Race condition: another process created the SG between our check and
+        # create. Look it up and attach the one that won the race.
+        with handle_aws_errors("EC2", "describe_security_groups"):
+            retry = get_ec2_client().describe_security_groups(
+                Filters=[
+                    {"Name": "group-name", "Values": [sg_name]},
+                    {"Name": "vpc-id", "Values": [vpc_id]},
+                ]
+            )
+        sg_id = retry["SecurityGroups"][0]["GroupId"]
     attach_security_group_to_instance(instance_id, sg_id)
     print_info(f"Created managed security group {sg_name} ({sg_id})")
     return sg_id
