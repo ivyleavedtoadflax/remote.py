@@ -425,9 +425,7 @@ class TestFindOrCreateRemotepySg:
         mocker.patch("remote.sg.get_instance_vpc_id", return_value="vpc-12345")
         mock_ec2 = mocker.patch("remote.sg.get_ec2_client")
         mock_ec2.return_value.describe_security_groups.return_value = {
-            "SecurityGroups": [
-                {"GroupId": "sg-orphan", "GroupName": "remotepy-my-instance"}
-            ]
+            "SecurityGroups": [{"GroupId": "sg-orphan", "GroupName": "remotepy-my-instance"}]
         }
         mocker.patch("remote.sg.get_security_group_rules", return_value=[])
         mock_create = mocker.patch("remote.sg.create_instance_security_group")
@@ -452,9 +450,7 @@ class TestFindOrCreateRemotepySg:
         mocker.patch("remote.sg.get_instance_vpc_id", return_value="vpc-12345")
         mock_ec2 = mocker.patch("remote.sg.get_ec2_client")
         mock_ec2.return_value.describe_security_groups.return_value = {
-            "SecurityGroups": [
-                {"GroupId": "sg-orphan", "GroupName": "remotepy-my-instance"}
-            ]
+            "SecurityGroups": [{"GroupId": "sg-orphan", "GroupName": "remotepy-my-instance"}]
         }
         stale_rules = [
             {
@@ -474,9 +470,7 @@ class TestFindOrCreateRemotepySg:
         mock_ec2.return_value.revoke_security_group_ingress.assert_called_once_with(
             GroupId="sg-orphan", IpPermissions=stale_rules
         )
-        mock_warning.assert_called_once_with(
-            "Cleared 1 stale rule(s) from orphaned SG sg-orphan"
-        )
+        mock_warning.assert_called_once_with("Cleared 1 stale rule(s) from orphaned SG sg-orphan")
 
     def test_warns_on_multiple_matching_sgs(self, mocker):
         """Test warning when multiple SGs with same name exist in VPC."""
@@ -500,8 +494,7 @@ class TestFindOrCreateRemotepySg:
 
         assert result == "sg-first"
         mock_warning.assert_any_call(
-            "Found 2 security groups named remotepy-my-instance "
-            "in VPC vpc-12345; using sg-first"
+            "Found 2 security groups named remotepy-my-instance in VPC vpc-12345; using sg-first"
         )
 
     def test_handles_duplicate_race_condition(self, mocker):
@@ -521,7 +514,9 @@ class TestFindOrCreateRemotepySg:
         mocker.patch(
             "remote.sg.create_instance_security_group",
             side_effect=AWSServiceError(
-                "EC2", "create_security_group", "InvalidGroup.Duplicate",
+                "EC2",
+                "create_security_group",
+                "InvalidGroup.Duplicate",
                 "The security group already exists",
             ),
         )
@@ -540,9 +535,7 @@ class TestFindOrCreateRemotepySg:
         )
         mocker.patch("remote.sg.get_instance_vpc_id", return_value="vpc-12345")
         mock_ec2 = mocker.patch("remote.sg.get_ec2_client")
-        mock_ec2.return_value.describe_security_groups.return_value = {
-            "SecurityGroups": []
-        }
+        mock_ec2.return_value.describe_security_groups.return_value = {"SecurityGroups": []}
         mocker.patch("remote.sg.create_instance_security_group", return_value="sg-new123")
         mock_attach = mocker.patch("remote.sg.attach_security_group_to_instance")
 

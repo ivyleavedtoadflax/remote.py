@@ -598,9 +598,7 @@ def find_or_create_remotepy_sg(instance_name: str, instance_id: str) -> str:
                 get_ec2_client().revoke_security_group_ingress(
                     GroupId=sg_id, IpPermissions=stale_rules
                 )
-            print_warning(
-                f"Cleared {len(stale_rules)} stale rule(s) from orphaned SG {sg_id}"
-            )
+            print_warning(f"Cleared {len(stale_rules)} stale rule(s) from orphaned SG {sg_id}")
         attach_security_group_to_instance(instance_id, sg_id)
         print_info(f"Attached existing managed security group {sg_name} ({sg_id})")
         return sg_id
