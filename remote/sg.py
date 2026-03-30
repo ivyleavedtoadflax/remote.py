@@ -596,7 +596,8 @@ def find_or_create_remotepy_sg(instance_name: str, instance_id: str) -> str:
         if stale_rules:
             with handle_aws_errors("EC2", "revoke_security_group_ingress"):
                 get_ec2_client().revoke_security_group_ingress(
-                    GroupId=sg_id, IpPermissions=stale_rules
+                    GroupId=sg_id,
+                    IpPermissions=stale_rules,  # type: ignore[arg-type]
                 )
             print_warning(f"Cleared {len(stale_rules)} stale rule(s) from orphaned SG {sg_id}")
         attach_security_group_to_instance(instance_id, sg_id)
