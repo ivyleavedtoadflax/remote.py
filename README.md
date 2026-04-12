@@ -281,10 +281,22 @@ Resize an EBS volume:
 remote volume resize my-instance --size 100
 ```
 
-Create a snapshot:
+Create snapshots for all volumes attached to an instance:
 
 ```bash
-remote snapshot create vol-12345678
+remote snapshot create my-instance -n my-snapshot
+```
+
+Snapshot a specific device:
+
+```bash
+remote snapshot create my-instance --device /dev/sdf -n my-snapshot
+```
+
+Snapshot a specific volume by ID:
+
+```bash
+remote snapshot create -v vol-12345678 -n my-snapshot
 ```
 
 List snapshots:

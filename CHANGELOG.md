@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-04-12
+
+### Added
+- **Snapshot from instance**: `snapshot create` now accepts an instance name to auto-detect and snapshot all attached volumes, with optional `--device` filter to target a specific volume
+- **Partial failure handling**: Multi-volume snapshot creation continues on per-volume errors and reports a summary of successes and failures
+
+### Changed
+- `snapshot create` now accepts instance name as a positional argument (alternative to `--volume-id`)
+- `get_volume_ids` refactored to delegate to new `get_volumes_for_instance` utility
+
 ## [1.4.0] - 2026-01-26
 
 ### Added
