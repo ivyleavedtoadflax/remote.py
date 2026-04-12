@@ -127,14 +127,13 @@ def test_create_snapshot_with_yes_flag(mocker):
     assert "Snapshot snap-0123456789abcdef0 created" in result.stdout
 
 
-def test_create_snapshot_missing_volume_id():
-    """Should fail with helpful error when volume-id is missing."""
+def test_create_snapshot_no_instance_or_volume():
+    """Should fail when neither instance name nor --volume-id is provided."""
     result = runner.invoke(app, ["create", "--name", "test-snapshot"])
 
     assert result.exit_code != 0
-    # Typer shows missing required options in output (includes stderr)
     output = (result.output or result.stdout).lower()
-    assert "volume-id" in output or "missing" in output or "required" in output
+    assert "volume-id" in output or "instance" in output or "required" in output
 
 
 def test_create_snapshot_missing_name():
@@ -315,7 +314,7 @@ def test_list_snapshots_no_snapshots(mocker):
 
 
 def test_create_snapshot_from_instance_single_volume(mocker):
-    """Test creating a snapshot using --instance with a single attached volume."""
+    """Test creating a snapshot with instance name and a single attached volume."""
     mock_ec2 = mocker.patch("remote.snapshot.get_ec2_client")
     mock_ec2_client = mock_ec2.return_value
     mocker.patch(
@@ -337,7 +336,7 @@ def test_create_snapshot_from_instance_single_volume(mocker):
 
     result = runner.invoke(
         app,
-        ["create", "--instance", "my-instance", "--name", "my-snapshot", "--yes"],
+        ["create", "my-instance", "--name", "my-snapshot", "--yes"],
     )
 
     assert result.exit_code == 0
@@ -384,7 +383,7 @@ def test_create_snapshot_from_instance_multiple_volumes(mocker):
 
     result = runner.invoke(
         app,
-        ["create", "--instance", "my-instance", "--name", "backup", "--yes"],
+        ["create", "my-instance", "--name", "backup", "--yes"],
     )
 
     assert result.exit_code == 0
@@ -433,16 +432,7 @@ def test_create_snapshot_from_instance_with_device_filter(mocker):
 
     result = runner.invoke(
         app,
-        [
-            "create",
-            "--instance",
-            "my-instance",
-            "--device",
-            "/dev/sdf",
-            "--name",
-            "data-snapshot",
-            "--yes",
-        ],
+        ["create", "my-instance", "--device", "/dev/sdf", "--name", "data-snapshot", "--yes"],
     )
 
     assert result.exit_code == 0
@@ -480,7 +470,7 @@ def test_create_snapshot_from_instance_with_confirmation(mocker):
 
     result = runner.invoke(
         app,
-        ["create", "--instance", "my-instance", "--name", "my-snap"],
+        ["create", "my-instance", "--name", "my-snap"],
         input="y\n",
     )
 
@@ -510,7 +500,7 @@ def test_create_snapshot_from_instance_cancelled(mocker):
 
     result = runner.invoke(
         app,
-        ["create", "--instance", "my-instance", "--name", "my-snap"],
+        ["create", "my-instance", "--name", "my-snap"],
         input="n\n",
     )
 
@@ -529,7 +519,7 @@ def test_create_snapshot_no_volumes_for_instance(mocker):
 
     result = runner.invoke(
         app,
-        ["create", "--instance", "my-instance", "--name", "my-snap", "--yes"],
+        ["create", "my-instance", "--name", "my-snap", "--yes"],
     )
 
     assert result.exit_code == 1
@@ -557,36 +547,20 @@ def test_create_snapshot_device_not_found(mocker):
 
     result = runner.invoke(
         app,
-        [
-            "create",
-            "--instance",
-            "my-instance",
-            "--device",
-            "/dev/sdf",
-            "--name",
-            "my-snap",
-            "--yes",
-        ],
+        ["create", "my-instance", "--device", "/dev/sdf", "--name", "my-snap", "--yes"],
     )
 
     assert result.exit_code == 1
     assert "No volume with device /dev/sdf" in result.stdout
 
 
-def test_create_snapshot_mutually_exclusive_options():
-    """Test error when both --volume-id and --instance are provided."""
+def test_create_snapshot_mutually_exclusive_options(mocker):
+    """Test error when both --volume-id and instance name are provided."""
+    mocker.patch("remote.snapshot.get_ec2_client")
+
     result = runner.invoke(
         app,
-        [
-            "create",
-            "--volume-id",
-            "vol-123",
-            "--instance",
-            "my-instance",
-            "--name",
-            "my-snap",
-            "--yes",
-        ],
+        ["create", "my-instance", "--volume-id", "vol-123", "--name", "my-snap", "--yes"],
     )
 
     assert result.exit_code == 1
@@ -594,25 +568,25 @@ def test_create_snapshot_mutually_exclusive_options():
 
 
 def test_create_snapshot_neither_volume_nor_instance():
-    """Test error when neither --volume-id nor --instance is provided."""
+    """Test error when neither instance name nor --volume-id is provided."""
     result = runner.invoke(
         app,
         ["create", "--name", "my-snap", "--yes"],
     )
 
     assert result.exit_code == 1
-    assert "Either --volume-id or --instance is required" in result.stdout
+    assert "Either" in result.stdout and "required" in result.stdout
 
 
 def test_create_snapshot_device_without_instance():
-    """Test error when --device is used without --instance."""
+    """Test error when --device is used without an instance name."""
     result = runner.invoke(
         app,
         ["create", "--volume-id", "vol-123", "--device", "/dev/sdf", "--name", "my-snap", "--yes"],
     )
 
     assert result.exit_code == 1
-    assert "--device can only be used with --instance" in result.stdout
+    assert "--device can only be used with" in result.stdout
 
 
 def test_create_snapshot_from_instance_with_description(mocker):
@@ -640,7 +614,6 @@ def test_create_snapshot_from_instance_with_description(mocker):
         app,
         [
             "create",
-            "--instance",
             "my-instance",
             "--name",
             "my-snap",
@@ -658,3 +631,79 @@ def test_create_snapshot_from_instance_with_description(mocker):
             {"ResourceType": "snapshot", "Tags": [{"Key": "Name", "Value": "my-snap"}]}
         ],
     )
+
+
+def test_create_snapshot_instance_resolution_error(mocker):
+    """Test that instance resolution errors exit with code 1 during create."""
+    import typer
+
+    mocker.patch("remote.snapshot.get_ec2_client")
+    mocker.patch(
+        "remote.snapshot.resolve_instance_or_exit",
+        side_effect=typer.Exit(1),
+    )
+
+    result = runner.invoke(
+        app,
+        ["create", "nonexistent-instance", "--name", "my-snap", "--yes"],
+    )
+
+    assert result.exit_code == 1
+
+
+def test_create_snapshot_partial_failure(mocker):
+    """Test that partial failure reports successes and failures."""
+    from remote.exceptions import AWSServiceError
+
+    mock_ec2 = mocker.patch("remote.snapshot.get_ec2_client")
+    mock_ec2_client = mock_ec2.return_value
+    mocker.patch(
+        "remote.snapshot.resolve_instance_or_exit",
+        return_value=("my-instance", "i-abc123"),
+    )
+    mocker.patch(
+        "remote.snapshot.get_volumes_for_instance",
+        return_value=[
+            {
+                "VolumeId": "vol-111",
+                "Attachments": [
+                    {"InstanceId": "i-abc123", "Device": "/dev/sda1", "State": "attached"}
+                ],
+            },
+            {
+                "VolumeId": "vol-222",
+                "Attachments": [
+                    {"InstanceId": "i-abc123", "Device": "/dev/sdf", "State": "attached"}
+                ],
+            },
+            {
+                "VolumeId": "vol-333",
+                "Attachments": [
+                    {"InstanceId": "i-abc123", "Device": "/dev/sdg", "State": "attached"}
+                ],
+            },
+        ],
+    )
+
+    # First succeeds, second fails, third succeeds
+    mock_ec2_client.create_snapshot.side_effect = [
+        {"SnapshotId": "snap-ok1"},
+        AWSServiceError("EC2", "create_snapshot", "InternalError", "Something went wrong"),
+        {"SnapshotId": "snap-ok3"},
+    ]
+
+    result = runner.invoke(
+        app,
+        ["create", "my-instance", "--name", "backup", "--yes"],
+    )
+
+    assert result.exit_code == 1
+    # First and third should succeed
+    assert "snap-ok1" in result.stdout
+    assert "snap-ok3" in result.stdout
+    # Should report the failure
+    assert "Failed" in result.stdout
+    assert "vol-222" in result.stdout
+    # Should show summary
+    assert "2 snapshot(s) created" in result.stdout
+    assert "1 failed" in result.stdout

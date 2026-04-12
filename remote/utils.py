@@ -963,43 +963,11 @@ def get_instance_type(instance_id: str) -> str:
         raise
 
 
-def get_volume_ids(instance_id: str) -> list[str]:
-    """Returns a list of volume ids attached to the instance.
-
-    Args:
-        instance_id: The instance ID to get volumes for
-
-    Returns:
-        List of volume IDs attached to the instance
-
-    Raises:
-        AWSServiceError: If AWS API call fails
-    """
-    # Validate input
-    instance_id = validate_instance_id(instance_id)
-
-    with handle_aws_errors("EC2", "describe_volumes"):
-        response = get_ec2_client().describe_volumes(
-            Filters=[{"Name": "attachment.instance-id", "Values": [instance_id]}]
-        )
-
-        # Validate response structure
-        validate_aws_response_structure(response, ["Volumes"], "describe_volumes")
-
-        # Safely extract volume IDs
-        volume_ids = []
-        for volume in response["Volumes"]:
-            if "VolumeId" in volume:
-                volume_ids.append(volume["VolumeId"])
-
-        return volume_ids
-
-
 def get_volumes_for_instance(instance_id: str) -> list[dict[str, Any]]:
     """Returns volumes attached to the instance with full metadata.
 
-    Unlike get_volume_ids which returns only IDs, this returns the full volume
-    dictionaries including attachment info (device names, state, etc.).
+    Returns the full volume dictionaries including attachment info
+    (device names, state, etc.).
 
     Args:
         instance_id: The instance ID to get volumes for
@@ -1018,6 +986,21 @@ def get_volumes_for_instance(instance_id: str) -> list[dict[str, Any]]:
         )
         validate_aws_response_structure(response, ["Volumes"], "describe_volumes")
         return list(response["Volumes"])
+
+
+def get_volume_ids(instance_id: str) -> list[str]:
+    """Returns a list of volume ids attached to the instance.
+
+    Args:
+        instance_id: The instance ID to get volumes for
+
+    Returns:
+        List of volume IDs attached to the instance
+
+    Raises:
+        AWSServiceError: If AWS API call fails
+    """
+    return [v["VolumeId"] for v in get_volumes_for_instance(instance_id) if "VolumeId" in v]
 
 
 def get_volume_name(volume_id: str) -> str:
