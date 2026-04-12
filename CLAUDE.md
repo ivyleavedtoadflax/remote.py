@@ -77,7 +77,7 @@ instance_name: str | None = typer.Argument(None, help="Instance name")
 ```
 Then resolve with: `resolve_instance_or_exit(instance_name)` which falls back to the configured default instance.
 
-**Used in**: `instance.py` (status, start, stop, connect, exec, type, terminate), `ami.py` (create), `snapshot.py` (list), `volume.py` (list)
+**Used in**: `instance.py` (status, start, stop, connect, exec, type, terminate), `ami.py` (create), `snapshot.py` (create, list), `volume.py` (list)
 
 #### 2. Required Arguments
 For commands where a value must always be provided:
@@ -89,13 +89,12 @@ The `...` makes the argument required with no default.
 **Used in**: `ami.py` (template-versions, template-info)
 
 #### 3. Required Options
-For commands needing multiple required values that aren't positional:
+For commands needing required values that aren't positional:
 ```python
-volume_id: str = typer.Option(..., "--volume-id", "-v", help="Volume ID (required)")
 name: str = typer.Option(..., "--name", "-n", help="Snapshot name (required)")
 ```
 
-**Used in**: `snapshot.py` (create)
+**Used in**: `snapshot.py` (create: `--name`)
 
 #### 4. Optional Arguments with Interactive Prompts
 For commands where selection from available resources is needed:
