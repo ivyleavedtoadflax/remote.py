@@ -307,3 +307,354 @@ def test_list_snapshots_no_snapshots(mocker):
     assert "SnapshotId" in result.stdout
     assert "VolumeId" in result.stdout
     assert "State" in result.stdout
+
+
+# ============================================================================
+# Instance-based snapshot creation tests
+# ============================================================================
+
+
+def test_create_snapshot_from_instance_single_volume(mocker):
+    """Test creating a snapshot using --instance with a single attached volume."""
+    mock_ec2 = mocker.patch("remote.snapshot.get_ec2_client")
+    mock_ec2_client = mock_ec2.return_value
+    mocker.patch(
+        "remote.snapshot.resolve_instance_or_exit",
+        return_value=("my-instance", "i-abc123"),
+    )
+    mocker.patch(
+        "remote.snapshot.get_volumes_for_instance",
+        return_value=[
+            {
+                "VolumeId": "vol-111",
+                "Attachments": [
+                    {"InstanceId": "i-abc123", "Device": "/dev/sda1", "State": "attached"}
+                ],
+            }
+        ],
+    )
+    mock_ec2_client.create_snapshot.return_value = {"SnapshotId": "snap-new1"}
+
+    result = runner.invoke(
+        app,
+        ["create", "--instance", "my-instance", "--name", "my-snapshot", "--yes"],
+    )
+
+    assert result.exit_code == 0
+    mock_ec2_client.create_snapshot.assert_called_once_with(
+        VolumeId="vol-111",
+        Description="",
+        TagSpecifications=[
+            {"ResourceType": "snapshot", "Tags": [{"Key": "Name", "Value": "my-snapshot"}]}
+        ],
+    )
+    assert "snap-new1" in result.stdout
+    assert "vol-111" in result.stdout
+
+
+def test_create_snapshot_from_instance_multiple_volumes(mocker):
+    """Test creating snapshots for all volumes attached to an instance."""
+    mock_ec2 = mocker.patch("remote.snapshot.get_ec2_client")
+    mock_ec2_client = mock_ec2.return_value
+    mocker.patch(
+        "remote.snapshot.resolve_instance_or_exit",
+        return_value=("my-instance", "i-abc123"),
+    )
+    mocker.patch(
+        "remote.snapshot.get_volumes_for_instance",
+        return_value=[
+            {
+                "VolumeId": "vol-111",
+                "Attachments": [
+                    {"InstanceId": "i-abc123", "Device": "/dev/sda1", "State": "attached"}
+                ],
+            },
+            {
+                "VolumeId": "vol-222",
+                "Attachments": [
+                    {"InstanceId": "i-abc123", "Device": "/dev/sdf", "State": "attached"}
+                ],
+            },
+        ],
+    )
+    mock_ec2_client.create_snapshot.side_effect = [
+        {"SnapshotId": "snap-new1"},
+        {"SnapshotId": "snap-new2"},
+    ]
+
+    result = runner.invoke(
+        app,
+        ["create", "--instance", "my-instance", "--name", "backup", "--yes"],
+    )
+
+    assert result.exit_code == 0
+    assert mock_ec2_client.create_snapshot.call_count == 2
+
+    # First call: root volume gets name with device suffix
+    first_call = mock_ec2_client.create_snapshot.call_args_list[0]
+    assert first_call.kwargs["VolumeId"] == "vol-111"
+    assert first_call.kwargs["TagSpecifications"][0]["Tags"][0]["Value"] == "backup-sda1"
+
+    # Second call: data volume gets name with device suffix
+    second_call = mock_ec2_client.create_snapshot.call_args_list[1]
+    assert second_call.kwargs["VolumeId"] == "vol-222"
+    assert second_call.kwargs["TagSpecifications"][0]["Tags"][0]["Value"] == "backup-sdf"
+
+    assert "snap-new1" in result.stdout
+    assert "snap-new2" in result.stdout
+
+
+def test_create_snapshot_from_instance_with_device_filter(mocker):
+    """Test --device filters to only the matching volume."""
+    mock_ec2 = mocker.patch("remote.snapshot.get_ec2_client")
+    mock_ec2_client = mock_ec2.return_value
+    mocker.patch(
+        "remote.snapshot.resolve_instance_or_exit",
+        return_value=("my-instance", "i-abc123"),
+    )
+    mocker.patch(
+        "remote.snapshot.get_volumes_for_instance",
+        return_value=[
+            {
+                "VolumeId": "vol-111",
+                "Attachments": [
+                    {"InstanceId": "i-abc123", "Device": "/dev/sda1", "State": "attached"}
+                ],
+            },
+            {
+                "VolumeId": "vol-222",
+                "Attachments": [
+                    {"InstanceId": "i-abc123", "Device": "/dev/sdf", "State": "attached"}
+                ],
+            },
+        ],
+    )
+    mock_ec2_client.create_snapshot.return_value = {"SnapshotId": "snap-data"}
+
+    result = runner.invoke(
+        app,
+        [
+            "create",
+            "--instance",
+            "my-instance",
+            "--device",
+            "/dev/sdf",
+            "--name",
+            "data-snapshot",
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0
+    # Only the matching volume should be snapshotted
+    mock_ec2_client.create_snapshot.assert_called_once_with(
+        VolumeId="vol-222",
+        Description="",
+        TagSpecifications=[
+            {"ResourceType": "snapshot", "Tags": [{"Key": "Name", "Value": "data-snapshot"}]}
+        ],
+    )
+    assert "snap-data" in result.stdout
+
+
+def test_create_snapshot_from_instance_with_confirmation(mocker):
+    """Test that instance-based snapshot creation prompts for confirmation."""
+    mock_ec2 = mocker.patch("remote.snapshot.get_ec2_client")
+    mock_ec2_client = mock_ec2.return_value
+    mocker.patch(
+        "remote.snapshot.resolve_instance_or_exit",
+        return_value=("my-instance", "i-abc123"),
+    )
+    mocker.patch(
+        "remote.snapshot.get_volumes_for_instance",
+        return_value=[
+            {
+                "VolumeId": "vol-111",
+                "Attachments": [
+                    {"InstanceId": "i-abc123", "Device": "/dev/sda1", "State": "attached"}
+                ],
+            },
+        ],
+    )
+    mock_ec2_client.create_snapshot.return_value = {"SnapshotId": "snap-confirmed"}
+
+    result = runner.invoke(
+        app,
+        ["create", "--instance", "my-instance", "--name", "my-snap"],
+        input="y\n",
+    )
+
+    assert result.exit_code == 0
+    mock_ec2_client.create_snapshot.assert_called_once()
+    assert "snap-confirmed" in result.stdout
+
+
+def test_create_snapshot_from_instance_cancelled(mocker):
+    """Test that declining confirmation cancels instance-based snapshot creation."""
+    mocker.patch("remote.snapshot.get_ec2_client")
+    mocker.patch(
+        "remote.snapshot.resolve_instance_or_exit",
+        return_value=("my-instance", "i-abc123"),
+    )
+    mocker.patch(
+        "remote.snapshot.get_volumes_for_instance",
+        return_value=[
+            {
+                "VolumeId": "vol-111",
+                "Attachments": [
+                    {"InstanceId": "i-abc123", "Device": "/dev/sda1", "State": "attached"}
+                ],
+            },
+        ],
+    )
+
+    result = runner.invoke(
+        app,
+        ["create", "--instance", "my-instance", "--name", "my-snap"],
+        input="n\n",
+    )
+
+    assert result.exit_code == 0
+    assert "cancelled" in result.stdout
+
+
+def test_create_snapshot_no_volumes_for_instance(mocker):
+    """Test error when instance has no attached volumes."""
+    mocker.patch("remote.snapshot.get_ec2_client")
+    mocker.patch(
+        "remote.snapshot.resolve_instance_or_exit",
+        return_value=("my-instance", "i-abc123"),
+    )
+    mocker.patch("remote.snapshot.get_volumes_for_instance", return_value=[])
+
+    result = runner.invoke(
+        app,
+        ["create", "--instance", "my-instance", "--name", "my-snap", "--yes"],
+    )
+
+    assert result.exit_code == 1
+    assert "No volumes" in result.stdout
+
+
+def test_create_snapshot_device_not_found(mocker):
+    """Test error when --device doesn't match any attached volume."""
+    mocker.patch("remote.snapshot.get_ec2_client")
+    mocker.patch(
+        "remote.snapshot.resolve_instance_or_exit",
+        return_value=("my-instance", "i-abc123"),
+    )
+    mocker.patch(
+        "remote.snapshot.get_volumes_for_instance",
+        return_value=[
+            {
+                "VolumeId": "vol-111",
+                "Attachments": [
+                    {"InstanceId": "i-abc123", "Device": "/dev/sda1", "State": "attached"}
+                ],
+            },
+        ],
+    )
+
+    result = runner.invoke(
+        app,
+        [
+            "create",
+            "--instance",
+            "my-instance",
+            "--device",
+            "/dev/sdf",
+            "--name",
+            "my-snap",
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "No volume with device /dev/sdf" in result.stdout
+
+
+def test_create_snapshot_mutually_exclusive_options():
+    """Test error when both --volume-id and --instance are provided."""
+    result = runner.invoke(
+        app,
+        [
+            "create",
+            "--volume-id",
+            "vol-123",
+            "--instance",
+            "my-instance",
+            "--name",
+            "my-snap",
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "mutually exclusive" in result.stdout
+
+
+def test_create_snapshot_neither_volume_nor_instance():
+    """Test error when neither --volume-id nor --instance is provided."""
+    result = runner.invoke(
+        app,
+        ["create", "--name", "my-snap", "--yes"],
+    )
+
+    assert result.exit_code == 1
+    assert "Either --volume-id or --instance is required" in result.stdout
+
+
+def test_create_snapshot_device_without_instance():
+    """Test error when --device is used without --instance."""
+    result = runner.invoke(
+        app,
+        ["create", "--volume-id", "vol-123", "--device", "/dev/sdf", "--name", "my-snap", "--yes"],
+    )
+
+    assert result.exit_code == 1
+    assert "--device can only be used with --instance" in result.stdout
+
+
+def test_create_snapshot_from_instance_with_description(mocker):
+    """Test that --description is passed through for instance-based snapshots."""
+    mock_ec2 = mocker.patch("remote.snapshot.get_ec2_client")
+    mock_ec2_client = mock_ec2.return_value
+    mocker.patch(
+        "remote.snapshot.resolve_instance_or_exit",
+        return_value=("my-instance", "i-abc123"),
+    )
+    mocker.patch(
+        "remote.snapshot.get_volumes_for_instance",
+        return_value=[
+            {
+                "VolumeId": "vol-111",
+                "Attachments": [
+                    {"InstanceId": "i-abc123", "Device": "/dev/sda1", "State": "attached"}
+                ],
+            },
+        ],
+    )
+    mock_ec2_client.create_snapshot.return_value = {"SnapshotId": "snap-desc"}
+
+    result = runner.invoke(
+        app,
+        [
+            "create",
+            "--instance",
+            "my-instance",
+            "--name",
+            "my-snap",
+            "--description",
+            "Baseline snapshot",
+            "--yes",
+        ],
+    )
+
+    assert result.exit_code == 0
+    mock_ec2_client.create_snapshot.assert_called_once_with(
+        VolumeId="vol-111",
+        Description="Baseline snapshot",
+        TagSpecifications=[
+            {"ResourceType": "snapshot", "Tags": [{"Key": "Name", "Value": "my-snap"}]}
+        ],
+    )

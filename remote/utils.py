@@ -995,6 +995,31 @@ def get_volume_ids(instance_id: str) -> list[str]:
         return volume_ids
 
 
+def get_volumes_for_instance(instance_id: str) -> list[dict[str, Any]]:
+    """Returns volumes attached to the instance with full metadata.
+
+    Unlike get_volume_ids which returns only IDs, this returns the full volume
+    dictionaries including attachment info (device names, state, etc.).
+
+    Args:
+        instance_id: The instance ID to get volumes for
+
+    Returns:
+        List of volume dictionaries from describe_volumes
+
+    Raises:
+        AWSServiceError: If AWS API call fails
+    """
+    instance_id = validate_instance_id(instance_id)
+
+    with handle_aws_errors("EC2", "describe_volumes"):
+        response = get_ec2_client().describe_volumes(
+            Filters=[{"Name": "attachment.instance-id", "Values": [instance_id]}]
+        )
+        validate_aws_response_structure(response, ["Volumes"], "describe_volumes")
+        return list(response["Volumes"])
+
+
 def get_volume_name(volume_id: str) -> str:
     """Returns the name of the volume.
 
