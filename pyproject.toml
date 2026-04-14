@@ -31,7 +31,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.4.0",
+    "pytest>=9.0.3",
     "pytest-mock>=3.14.0",
     "pytest-cov>=6.0.0",
     "ruff>=0.9.0",
@@ -101,7 +101,7 @@ dev = [
     "mypy-boto3-scheduler>=1.42.3",
     "pip-audit>=2.10.0",
     "pre-commit>=4.0.0",
-    "pytest>=8.4.1",
+    "pytest>=9.0.3",
     "pytest-cov>=6.2.1",
     "pytest-mock>=3.14.1",
     "ruff>=0.12.0",
