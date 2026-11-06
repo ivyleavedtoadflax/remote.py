@@ -552,6 +552,73 @@ class TestCreateTemplateCommand:
             ],
         )
 
+    def test_should_add_user_data_and_root_disk(self, mocker, tmp_path):
+        """Should base64 user data and size the AMI's root device."""
+        import base64
+
+        script = tmp_path / "setup.sh"
+        script.write_text("#!/bin/bash\necho hi\n")
+        mock_ec2 = mocker.patch("remote.ami.get_ec2_client")
+        mock_ec2.return_value.describe_images.return_value = {
+            "Images": [{"RootDeviceName": "/dev/sda1"}]
+        }
+        mock_ec2.return_value.create_launch_template.return_value = {
+            "LaunchTemplate": {"LaunchTemplateId": "lt-1"}
+        }
+
+        result = runner.invoke(
+            app,
+            [
+                "create-template",
+                "claude",
+                "-a",
+                "ami-123",
+                "-t",
+                "t3.medium",
+                "-k",
+                "my-key",
+                "--user-data",
+                str(script),
+                "--disk-size",
+                "30",
+                "--yes",
+            ],
+        )
+
+        assert result.exit_code == 0, result.stdout
+        data = mock_ec2.return_value.create_launch_template.call_args.kwargs["LaunchTemplateData"]
+        assert base64.b64decode(data["UserData"]) == b"#!/bin/bash\necho hi\n"
+        assert data["BlockDeviceMappings"] == [
+            {
+                "DeviceName": "/dev/sda1",
+                "Ebs": {"VolumeSize": 30, "VolumeType": "gp3", "Encrypted": True},
+            }
+        ]
+
+    def test_should_reject_missing_user_data_file(self, mocker):
+        """Should fail before calling AWS when the user-data file is missing."""
+        mock_ec2 = mocker.patch("remote.ami.get_ec2_client")
+
+        result = runner.invoke(
+            app,
+            [
+                "create-template",
+                "claude",
+                "-a",
+                "ami-123",
+                "-t",
+                "t3.medium",
+                "-k",
+                "my-key",
+                "--user-data",
+                "/nonexistent/setup.sh",
+                "--yes",
+            ],
+        )
+
+        assert result.exit_code != 0
+        mock_ec2.return_value.create_launch_template.assert_not_called()
+
     def test_should_require_ami_option(self):
         """Should require --ami option."""
         result = runner.invoke(

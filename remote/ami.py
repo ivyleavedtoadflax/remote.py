@@ -1,3 +1,5 @@
+import base64
+from pathlib import Path
 from typing import Any, cast
 
 import typer
@@ -315,6 +317,18 @@ def create_template(
     ami: str = typer.Option(..., "--ami", "-a", help="AMI ID"),
     instance_type: str = typer.Option(..., "--instance-type", "-t", help="Instance type"),
     key_name: str = typer.Option(..., "--key-name", "-k", help="SSH key pair name"),
+    user_data: Path | None = typer.Option(
+        None,
+        "--user-data",
+        "-u",
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        help="File to run at first boot (cloud-init / shell script)",
+    ),
+    disk_size: int | None = typer.Option(
+        None, "--disk-size", "-d", min=1, help="Root volume size in GB (gp3, encrypted)"
+    ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ) -> None:
     """
@@ -326,6 +340,7 @@ def create_template(
     Examples:
         remote ami create-template my-template --ami ami-123 --instance-type t3.small --key-name my-key
         remote ami create-template my-template -a ami-123 -t t3.micro -k my-key --yes
+        remote ami create-template claude -a ami-123 -t t3.medium -k my-key -u setup.sh -d 30
     """
     # Validate instance type
     validate_instance_type(instance_type)
@@ -333,19 +348,39 @@ def create_template(
     # Confirm
     if not yes:
         details = f"AMI: {ami}, Type: {instance_type}, Key: {key_name}"
+        if disk_size:
+            details += f", Disk: {disk_size} GB"
+        if user_data:
+            details += f", User data: {user_data}"
         if not confirm_action("create launch template", "template", name, details=details):
             print_warning("Cancelled.")
             return
+
+    template_data: dict[str, Any] = {
+        "ImageId": ami,
+        "InstanceType": instance_type,
+        "KeyName": key_name,
+    }
+    if user_data:
+        template_data["UserData"] = base64.b64encode(user_data.read_bytes()).decode()
+    if disk_size:
+        # Root device name varies by AMI (/dev/sda1 on Ubuntu, /dev/xvda on Amazon Linux)
+        with handle_aws_errors("EC2", "describe_images"):
+            images = get_ec2_client().describe_images(ImageIds=[ami])["Images"]
+        if not images:
+            raise ResourceNotFoundError("AMI", ami)
+        template_data["BlockDeviceMappings"] = [
+            {
+                "DeviceName": images[0]["RootDeviceName"],
+                "Ebs": {"VolumeSize": disk_size, "VolumeType": "gp3", "Encrypted": True},
+            }
+        ]
 
     # Create template
     with handle_aws_errors("EC2", "create_launch_template"):
         response = get_ec2_client().create_launch_template(
             LaunchTemplateName=name,
-            LaunchTemplateData={
-                "ImageId": ami,
-                "InstanceType": instance_type,  # type: ignore[typeddict-item]
-                "KeyName": key_name,
-            },
+            LaunchTemplateData=template_data,  # type: ignore[arg-type]
             TagSpecifications=[
                 {
                     "ResourceType": "launch-template",
